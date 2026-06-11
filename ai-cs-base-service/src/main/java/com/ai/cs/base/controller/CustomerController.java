@@ -10,7 +10,7 @@ import com.ai.cs.base.entity.Customer;
 import com.ai.cs.base.service.CustomerService;
 import com.ai.cs.common.result.Result;
 import org.springframework.web.bind.annotation.*;
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 @RestController

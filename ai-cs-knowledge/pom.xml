@@ -26,9 +26,15 @@
         </dependency>
         <!-- Milvus Java SDK -->
         <dependency>
-            <groupId>io.github.milvus-io</groupId>
+            <groupId>io.milvus</groupId>
             <artifactId>milvus-sdk-java</artifactId>
             <version>${milvus.version}</version>
+        </dependency>
+        <!-- MyBatis-Plus -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>${mybatis.plus.version}</version>
         </dependency>
     </dependencies>
 </project>

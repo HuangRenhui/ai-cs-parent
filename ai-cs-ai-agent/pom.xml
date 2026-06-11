@@ -24,6 +24,10 @@
             <groupId>com.ai.cs</groupId>
             <artifactId>ai-cs-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.ai.cs</groupId>
+            <artifactId>ai-cs-api</artifactId>
+        </dependency>
         <!-- HTTP调用大模型 -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>

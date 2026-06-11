@@ -14,7 +14,7 @@ import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.dto.WorkOrderDTO;
 import org.springframework.stereotype.Service;
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 @Service
 public class AiAgentService {
