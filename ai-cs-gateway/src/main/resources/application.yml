@@ -1,0 +1,35 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: ai-cs-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: false
+      routes:
+        # WebSocket聊天路由
+        - id: websocket-route
+          uri: lb:ws://ai-cs-websocket
+          predicates:
+            - Path=/ws/**
+        # AI智能体路由
+        - id: ai-agent-route
+          uri: lb://ai-cs-ai-agent
+          predicates:
+            - Path=/ai/**
+        # 知识库路由
+        - id: knowledge-route
+          uri: lb://ai-cs-knowledge
+          predicates:
+            - Path=/knowledge/**

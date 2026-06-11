@@ -1,0 +1,9 @@
+﻿<archetype>
+  <id>ai-cs-common</id>
+  <sources>
+    <source>src/main/java/com/ai/cs/common/App.java</source>
+  </sources>
+  <testSources>
+    <source>src/test/java/com/ai/cs/common/AppTest.java</source>
+  </testSources>
+</archetype>

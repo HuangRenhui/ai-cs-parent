@@ -1,0 +1,13 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: ai-cs-websocket
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  redis:
+    host: localhost
+    port: 6379
+    password: ""

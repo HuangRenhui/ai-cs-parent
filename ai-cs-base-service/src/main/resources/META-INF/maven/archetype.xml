@@ -1,0 +1,9 @@
+﻿<archetype>
+  <id>ai-cs-base-service</id>
+  <sources>
+    <source>src/main/java/com/ai/cs/base/service/App.java</source>
+  </sources>
+  <testSources>
+    <source>src/test/java/com/ai/cs/base/service/AppTest.java</source>
+  </testSources>
+</archetype>

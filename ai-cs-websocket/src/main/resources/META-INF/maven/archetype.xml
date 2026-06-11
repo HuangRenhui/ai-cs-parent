@@ -1,0 +1,9 @@
+﻿<archetype>
+  <id>ai-cs-websocket</id>
+  <sources>
+    <source>src/main/java/com/ai/cs/websocket/App.java</source>
+  </sources>
+  <testSources>
+    <source>src/test/java/com/ai/cs/websocket/AppTest.java</source>
+  </testSources>
+</archetype>

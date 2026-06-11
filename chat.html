@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI智能客服测试</title>
+</head>
+<body>
+<div style="width: 500px;margin: 20px auto;">
+    <h3>AI智能客服</h3>
+    <div id="content" style="border:1px solid #ccc;height:400px;padding:10px;overflow-y:auto;"></div>
+    <br/>
+    <input id="msg" type="text" style="width: 400px;height:30px;" placeholder="输入消息">
+    <button onclick="send()" style="height:34px;">发送</button>
+</div>
+
+<script>
+    let sessionId = "sess_" + new Date().getTime();
+    let ws = new WebSocket("ws://localhost:8080/ws/" + sessionId);
+    let contentDom = document.getElementById("content");
+
+    ws.onmessage = function(e) {
+        contentDom.innerHTML += "<p style='color:#0066cc'>客服：" + e.data + "</p>";
+        contentDom.scrollTop = contentDom.scrollHeight;
+    };
+
+    function send() {
+        let msg = document.getElementById("msg").value.trim();
+        if(!msg) return;
+        contentDom.innerHTML += "<p style='color:#333'>我：" + msg + "</p>";
+        ws.send(msg);
+        document.getElementById("msg").value = "";
+    }
+</script>
+</body>
+</html>

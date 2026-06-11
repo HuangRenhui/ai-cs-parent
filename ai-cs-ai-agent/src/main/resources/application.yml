@@ -1,0 +1,16 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: ai-cs-ai-agent
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+# 通义千问配置
+ai:
+  llm:
+    api-key: 替换为你的通义API-KEY
+    api-secret: 替换为你的通义API-SECRET
+    model: qwen-turbo
+    url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation

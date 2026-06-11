@@ -1,0 +1,9 @@
+﻿<archetype>
+  <id>ai-cs-knowledge</id>
+  <sources>
+    <source>src/main/java/com/ai/cs/knowledge/App.java</source>
+  </sources>
+  <testSources>
+    <source>src/test/java/com/ai/cs/knowledge/AppTest.java</source>
+  </testSources>
+</archetype>
