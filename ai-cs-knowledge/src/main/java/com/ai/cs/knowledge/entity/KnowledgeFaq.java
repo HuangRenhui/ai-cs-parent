@@ -21,6 +21,7 @@ public class KnowledgeFaq extends BaseEntity {
     private String category;
     private Integer sortNum;
     private Integer status;
+    private String milvusId; // Milvus中的向量ID
     @TableLogic
     private Integer delFlag;
 }

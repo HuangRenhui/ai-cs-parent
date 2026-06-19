@@ -18,3 +18,10 @@ mybatis-plus:
 milvus:
   host: localhost
   port: 19530
+embedding:
+  url: http://127.0.0.1:8000/embedding
+llm:
+  url: http://127.0.0.1:8000/v1/chat/completions
+  api-key: xxx
+  model: qwen-7b
+  temperature: 0.2
