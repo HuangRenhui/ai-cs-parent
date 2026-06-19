@@ -1,0 +1,87 @@
+# ============================================
+# AI 智能客服系统 - 配置模板
+# 复制此文件为 application.yml 并修改对应配置
+# ============================================
+
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: ${SERVICE_NAME:ai-cs-service}
+  
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:your_password}
+  
+  # Redis 配置
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+
+# MyBatis Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.ai.cs.**.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# LLM 配置（仅在 ai-cs-ai-agent 模块使用）
+llm:
+  url: ${LLM_URL:http://127.0.0.1:8000/v1/chat/completions}
+  api-key: ${LLM_API_KEY:xxx}
+  model: ${LLM_MODEL:qwen-7b}
+  temperature: ${LLM_TEMPERATURE:0.2}
+  max-tokens: ${LLM_MAX_TOKENS:2048}
+
+# Embedding 配置（仅在 ai-cs-knowledge 模块使用）
+embedding:
+  url: ${EMBEDDING_URL:http://127.0.0.1:8000/embedding}
+  dimension: ${EMBEDDING_DIMENSION:768}
+
+# Milvus 配置（仅在 ai-cs-knowledge 模块使用）
+milvus:
+  host: ${MILVUS_HOST:localhost}
+  port: ${MILVUS_PORT:19530}
+  collection-name: ${MILVUS_COLLECTION:faq_vectors}
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.ai.cs: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/${spring.application.name}.log
+    max-size: 10MB
+    max-history: 30
+
+# Actuator 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized

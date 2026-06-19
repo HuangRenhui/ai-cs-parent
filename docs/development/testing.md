@@ -1,0 +1,765 @@
+# 测试指南
+
+本文档详细说明项目的测试策略、测试框架和最佳实践。
+
+## 📋 测试概览
+
+### 测试金字塔
+
+```
+        /\
+       /  \
+      / E2E \          端到端测试 (少量)
+     /______\
+    /        \
+   / Integration\      集成测试 (适量)
+  /______________\
+ /                \
+/    Unit Tests    \   单元测试 (大量)
+---------------------
+```
+
+### 测试类型
+
+| 测试类型 | 位置 | 说明 | 覆盖率目标 |
+|---------|------|------|-----------|
+| 单元测试 | src/test/java | 测试单个类/方法 | 80%+ |
+| 集成测试 | src/test/java | 测试模块间交互 | 60%+ |
+| 端到端测试 | e2e/ | 测试完整业务流程 | 关键路径 |
+
+---
+
+## 🛠️ 测试框架
+
+### 依赖配置
+
+```xml
+<!-- pom.xml -->
+<dependencies>
+    <!-- Spring Boot Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- JUnit 5 -->
+    <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- Mockito -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- H2 Database (测试用) -->
+    <dependency>
+        <groupId>com.h2database</groupId>
+        <artifactId>h2</artifactId>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- TestContainers (容器化测试) -->
+    <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+
+---
+
+## ✅ 单元测试
+
+### 1. Service 层测试
+
+**示例**: CustomerService 测试
+
+```java
+package com.ai.cs.base.service;
+
+import com.ai.cs.base.entity.Customer;
+import com.ai.cs.base.mapper.CustomerMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class CustomerServiceTest {
+
+    @Mock
+    private CustomerMapper customerMapper;
+
+    @InjectMocks
+    private CustomerService customerService;
+
+    private Customer testCustomer;
+
+    @BeforeEach
+    void setUp() {
+        testCustomer = new Customer();
+        testCustomer.setId(1L);
+        testCustomer.setName("测试客户");
+        testCustomer.setPhone("13800138000");
+    }
+
+    @Test
+    void testGetCustomerById_Success() {
+        // Given
+        when(customerMapper.selectById(1L)).thenReturn(testCustomer);
+
+        // When
+        Customer result = customerService.getCustomerById(1L);
+
+        // Then
+        assertNotNull(result);
+        assertEquals("测试客户", result.getName());
+        verify(customerMapper, times(1)).selectById(1L);
+    }
+
+    @Test
+    void testGetCustomerById_NotFound() {
+        // Given
+        when(customerMapper.selectById(999L)).thenReturn(null);
+
+        // When & Then
+        assertThrows(RuntimeException.class, () -> {
+            customerService.getCustomerById(999L);
+        });
+    }
+
+    @Test
+    void testCreateCustomer_Success() {
+        // Given
+        when(customerMapper.insert(any(Customer.class))).thenReturn(1);
+
+        // When
+        boolean result = customerService.createCustomer(testCustomer);
+
+        // Then
+        assertTrue(result);
+        verify(customerMapper, times(1)).insert(testCustomer);
+    }
+
+    @Test
+    void testListCustomers_WithPagination() {
+        // Given
+        List<Customer> customers = Arrays.asList(testCustomer);
+        when(customerMapper.selectList(any())).thenReturn(customers);
+
+        // When
+        List<Customer> result = customerService.listCustomers(1, 10);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(1, result.size());
+    }
+}
+```
+
+### 2. Controller 层测试
+
+**示例**: CustomerController 测试
+
+```java
+package com.ai.cs.base.controller;
+
+import com.ai.cs.base.entity.Customer;
+import com.ai.cs.base.service.CustomerService;
+import com.ai.cs.common.result.Result;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(CustomerController.class)
+class CustomerControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private CustomerService customerService;
+
+    @Test
+    void testGetCustomer_Success() throws Exception {
+        // Given
+        Customer customer = new Customer();
+        customer.setId(1L);
+        customer.setName("测试客户");
+        
+        when(customerService.getCustomerById(1L)).thenReturn(customer);
+
+        // When & Then
+        mockMvc.perform(get("/api/customer/1")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.name").value("测试客户"));
+    }
+
+    @Test
+    void testCreateCustomer_Success() throws Exception {
+        // Given
+        String customerJson = "{\"name\":\"新客户\",\"phone\":\"13800138000\"}";
+        when(customerService.createCustomer(any(Customer.class))).thenReturn(true);
+
+        // When & Then
+        mockMvc.perform(post("/api/customer")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(customerJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+}
+```
+
+### 3. Util 工具类测试
+
+**示例**: EmbeddingUtil 测试
+
+```java
+package com.ai.cs.knowledge.util;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class EmbeddingUtilTest {
+
+    @Test
+    void testEmbed_TextToVector() {
+        // Given
+        String text = "这是一个测试文本";
+        EmbeddingUtil util = new EmbeddingUtil("http://localhost:8000/embedding");
+
+        // When
+        List<Float> vector = util.embed(text);
+
+        // Then
+        assertNotNull(vector);
+        assertEquals(768, vector.size()); // 假设向量维度为 768
+    }
+
+    @Test
+    void testEmbed_EmptyText_ThrowsException() {
+        // Given
+        EmbeddingUtil util = new EmbeddingUtil("http://localhost:8000/embedding");
+
+        // When & Then
+        assertThrows(IllegalArgumentException.class, () -> {
+            util.embed("");
+        });
+    }
+}
+```
+
+---
+
+## 🔗 集成测试
+
+### 1. Repository 层测试
+
+```java
+package com.ai.cs.base.mapper;
+
+import com.ai.cs.base.entity.Customer;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+class CustomerMapperTest {
+
+    @Autowired
+    private CustomerMapper customerMapper;
+
+    @Test
+    void testInsertAndSelect() {
+        // Given
+        Customer customer = new Customer();
+        customer.setName("集成测试客户");
+        customer.setPhone("13900139000");
+
+        // When
+        int rows = customerMapper.insert(customer);
+
+        // Then
+        assertEquals(1, rows);
+        assertNotNull(customer.getId());
+        
+        Customer found = customerMapper.selectById(customer.getId());
+        assertNotNull(found);
+        assertEquals("集成测试客户", found.getName());
+    }
+
+    @Test
+    void testSelectWithCondition() {
+        // Given
+        Customer customer1 = new Customer();
+        customer1.setName("客户A");
+        customer1.setCompany("公司A");
+        customerMapper.insert(customer1);
+
+        Customer customer2 = new Customer();
+        customer2.setName("客户B");
+        customer2.setCompany("公司B");
+        customerMapper.insert(customer2);
+
+        // When
+        List<Customer> results = customerMapper.selectList(
+            new LambdaQueryWrapper<Customer>()
+                .eq(Customer::getCompany, "公司A")
+        );
+
+        // Then
+        assertEquals(1, results.size());
+        assertEquals("客户A", results.get(0).getName());
+    }
+}
+```
+
+### 2. Service 层集成测试
+
+```java
+package com.ai.cs.base.service;
+
+import com.ai.cs.base.entity.Customer;
+import com.ai.cs.base.mapper.CustomerMapper;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+class CustomerServiceIntegrationTest {
+
+    @Autowired
+    private CustomerService customerService;
+
+    @Autowired
+    private CustomerMapper customerMapper;
+
+    @Test
+    void testCreateAndRetrieveCustomer() {
+        // Given
+        Customer customer = new Customer();
+        customer.setName("完整流程测试客户");
+        customer.setPhone("13700137000");
+
+        // When
+        boolean created = customerService.createCustomer(customer);
+        Customer retrieved = customerService.getCustomerById(customer.getId());
+
+        // Then
+        assertTrue(created);
+        assertNotNull(retrieved);
+        assertEquals("完整流程测试客户", retrieved.getName());
+    }
+}
+```
+
+### 3. Controller 集成测试
+
+```java
+package com.ai.cs.base.controller;
+
+import com.ai.cs.base.entity.Customer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+@Transactional
+class CustomerControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Test
+    void testFullCustomerCrudFlow() throws Exception {
+        // Create
+        Customer customer = new Customer();
+        customer.setName("CRUD 测试客户");
+        customer.setPhone("13600136000");
+
+        String createResponse = mockMvc.perform(post("/api/customer")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // Extract ID from response (简化示例)
+        Long customerId = 1L; // 实际需要从响应中解析
+
+        // Read
+        mockMvc.perform(get("/api/customer/" + customerId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("CRUD 测试客户"));
+
+        // Update
+        customer.setName("更新后的名称");
+        mockMvc.perform(put("/api/customer/" + customerId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer)))
+                .andExpect(status().isOk());
+
+        // Delete
+        mockMvc.perform(delete("/api/customer/" + customerId))
+                .andExpect(status().isOk());
+    }
+}
+```
+
+---
+
+## 🌐 端到端测试
+
+### 使用 TestContainers
+
+```java
+package com.ai.cs.e2e;
+
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+@Testcontainers
+@SpringBootTest
+class WorkOrderE2ETest {
+
+    @Container
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
+            .withDatabaseName("ai_cs_db_test")
+            .withUsername("test")
+            .withPassword("test");
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", mysql::getJdbcUrl);
+        registry.add("spring.datasource.username", mysql::getUsername);
+        registry.add("spring.datasource.password", mysql::getPassword);
+    }
+
+    @Test
+    void testCompleteWorkOrderFlow() {
+        // 完整的工单创建、分配、处理、关闭流程测试
+        // ...
+    }
+}
+```
+
+---
+
+## 🧪 测试数据管理
+
+### 1. 使用 @Sql 注解
+
+```java
+@SpringBootTest
+@Sql(scripts = "/test-data/customer-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(scripts = "/test-data/cleanup.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+class CustomerDataTest {
+    
+    @Test
+    void testWithData() {
+        // 测试会自动加载 test-data/customer-test-data.sql
+    }
+}
+```
+
+**test-data/customer-test-data.sql**:
+```sql
+INSERT INTO cs_customer (id, name, phone, company) VALUES
+(1, '测试客户1', '13800138001', '公司A'),
+(2, '测试客户2', '13800138002', '公司B'),
+(3, '测试客户3', '13800138003', '公司C');
+```
+
+### 2. 使用 Test Data Builder 模式
+
+```java
+public class CustomerTestDataBuilder {
+    
+    private Customer customer = new Customer();
+    
+    public static CustomerTestDataBuilder aCustomer() {
+        return new CustomerTestDataBuilder();
+    }
+    
+    public CustomerTestDataBuilder withName(String name) {
+        customer.setName(name);
+        return this;
+    }
+    
+    public CustomerTestDataBuilder withPhone(String phone) {
+        customer.setPhone(phone);
+        return this;
+    }
+    
+    public Customer build() {
+        return customer;
+    }
+}
+
+// 使用
+Customer customer = CustomerTestDataBuilder.aCustomer()
+    .withName("测试客户")
+    .withPhone("13800138000")
+    .build();
+```
+
+---
+
+## 📊 测试覆盖率
+
+### 配置 JaCoCo
+
+```xml
+<!-- pom.xml -->
+<plugin>
+    <groupId>org.jacoco</groupId>
+    <artifactId>jacoco-maven-plugin</artifactId>
+    <version>0.8.11</version>
+    <executions>
+        <execution>
+            <goals>
+                <goal>prepare-agent</goal>
+            </goals>
+        </execution>
+        <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+                <goal>report</goal>
+            </goals>
+        </execution>
+        <execution>
+            <id>check</id>
+            <goals>
+                <goal>check</goal>
+            </goals>
+            <configuration>
+                <rules>
+                    <rule>
+                        <element>BUNDLE</element>
+                        <limits>
+                            <limit>
+                                <counter>INSTRUCTION</counter>
+                                <value>COVEREDRATIO</value>
+                                <minimum>0.80</minimum>
+                            </limit>
+                        </limits>
+                    </rule>
+                </rules>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+### 生成覆盖率报告
+
+```bash
+mvn clean test jacoco:report
+```
+
+报告位置: `target/site/jacoco/index.html`
+
+---
+
+## 🚀 运行测试
+
+### 常用命令
+
+```bash
+# 运行所有测试
+mvn test
+
+# 运行指定类的测试
+mvn test -Dtest=CustomerServiceTest
+
+# 运行指定方法的测试
+mvn test -Dtest=CustomerServiceTest#testGetCustomerById
+
+# 跳过测试
+mvn install -DskipTests
+
+# 生成测试报告
+mvn surefire-report:report
+```
+
+### IDE 中运行
+
+- **IntelliJ IDEA**: 右键测试类或方法 → Run 'xxx'
+- **Eclipse**: 右键测试类或方法 → Run As → JUnit Test
+
+---
+
+## 💡 最佳实践
+
+### 1. 测试命名规范
+
+```java
+// 格式: test{方法名}_{场景}_{预期结果}
+@Test
+void testGetCustomerById_Success() { }
+
+@Test
+void testGetCustomerById_NotFound_ThrowsException() { }
+
+@Test
+void testCreateCustomer_InvalidData_ReturnsFalse() { }
+```
+
+### 2. AAA 模式 (Arrange-Act-Assert)
+
+```java
+@Test
+void testExample() {
+    // Arrange (准备)
+    Customer customer = new Customer();
+    customer.setName("测试");
+    when(customerMapper.selectById(1L)).thenReturn(customer);
+    
+    // Act (执行)
+    Customer result = customerService.getCustomerById(1L);
+    
+    // Assert (断言)
+    assertNotNull(result);
+    assertEquals("测试", result.getName());
+}
+```
+
+### 3. 测试隔离
+
+```java
+// 每个测试方法独立，不依赖其他测试
+@Test
+@Transactional  // 自动回滚，不影响其他测试
+void testIsolated() {
+    // ...
+}
+```
+
+### 4. Mock 外部依赖
+
+```java
+@MockBean
+private LlmClient llmClient;  // Mock 外部 LLM 服务
+
+@Test
+void testWithMockedLlm() {
+    when(llmClient.chat(any())).thenReturn("模拟回复");
+    // ...
+}
+```
+
+### 5. 避免测试实现细节
+
+```java
+// ❌ 不好 - 测试内部实现
+verify(internalHelper, times(1)).doSomething();
+
+// ✅ 好 - 测试行为结果
+assertEquals(expectedResult, actualResult);
+```
+
+---
+
+## 🔍 常见问题
+
+### Q1: 测试数据库连接失败
+
+**解决方案**:
+```yaml
+# application-test.yml
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb  # 使用 H2 内存数据库
+    driver-class-name: org.h2.Driver
+```
+
+### Q2: 测试之间相互影响
+
+**解决方案**:
+```java
+@Transactional  // 每个测试后自动回滚
+@Test
+void testIsolated() { }
+```
+
+### Q3: Mock 对象未生效
+
+**解决方案**:
+```java
+// 确保使用正确的注解
+@ExtendWith(MockitoExtension.class)  // JUnit 5
+// 或
+@RunWith(MockitoJUnitRunner.class)   // JUnit 4
+```
+
+---
+
+## 📚 相关文档
+
+- [开发指南](guide.md)
+- [代码规范](standards.md)
+- [快速开始](../QUICK_START.md)

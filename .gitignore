@@ -2,6 +2,8 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Kotlin ###
 .kotlin
 
 ### IntelliJ IDEA ###
@@ -9,6 +11,9 @@ target/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/workspace.xml
+.idea/misc.xml
+.idea/vcs.xml
 *.iws
 *.iml
 *.ipr
@@ -37,5 +42,28 @@ build/
 
 ### Mac OS ###
 .DS_Store
-/.idea/
-/.mvn/
+
+### Logs ###
+logs/
+*.log
+
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
+
+### Temporary Files ###
+*.tmp
+*.bak
+*.swp
+*~
+
+### Node Modules (Frontend) ###
+ai-cs-frontend/node_modules/
+ai-cs-frontend/dist/
+ai-cs-frontend/.vite/
+
+### Maven ###
+.mvn/
+mvnw
+mvnw.cmd
