@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
+    <file url="file://$USER_HOME$/src/main/java" charset="UTF-8" />
+    <file url="file://$USER_HOME$/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-ai-agent/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-ai-agent/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-api/src/main/java" charset="UTF-8" />
@@ -9,6 +11,8 @@
     <file url="file://$PROJECT_DIR$/ai-cs-base-service/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-common/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-common/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-cs-frontend/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-cs-frontend/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-gateway/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-gateway/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ai-cs-job/src/main/java" charset="UTF-8" />

@@ -1,5 +1,26 @@
 # AI 智能客服系统 (ai-cs-parent)
 
+## 目录
+
+- [项目简介](#项目简介)
+- [技术栈](#技术栈)
+- [项目结构](#项目结构)
+- [核心功能](#核心功能)
+- [环境要求](#环境要求)
+- [快速开始](#快速开始)
+  - [后端服务启动](#后端服务启动)
+  - [前端服务启动](#前端服务启动)
+- [配置说明](#配置说明)
+- [开发指南](#开发指南)
+- [部署](#部署)
+- [常见问题](#常见问题)
+- [贡献指南](#贡献指南)
+- [许可证](#许可证)
+- [联系方式](#联系方式)
+- [项目状态](#项目状态)
+
+---
+
 ## 项目简介
 
 AI 智能客服系统是一个基于 Spring Boot 3.x 构建的微服务架构项目，集成了大语言模型（LLM）、知识库检索、工单管理等功能，为企业提供智能化的客户服务解决方案。
@@ -125,6 +146,72 @@ mvn spring-boot:run
 - **网关地址**: http://localhost:8080
 - **WebSocket 连接**: ws://localhost:8081/ws
 
+---
+
+## 前端服务启动
+
+### 前端项目结构
+
+```
+ai-cs-frontend/
+├── package.json          # 依赖配置
+├── vite.config.js        # Vite构建配置
+├── index.html            # 入口HTML
+└── src/
+    ├── main.js           # 应用入口
+    ├── App.vue           # 主组件(侧边栏导航)
+    ├── router/
+    │   └── index.js      # 路由配置
+    ├── utils/
+    │   └── request.js    # 统一请求封装
+    └── views/
+        ├── ChatPage.vue      # AI聊天页面
+        ├── CustomerPage.vue  # 客户管理页面
+        ├── WorkOrderPage.vue # 工单管理页面
+        └── KnowledgePage.vue # 知识库管理页面
+```
+
+### 启动步骤
+
+#### 1. 进入前端目录
+
+```bash
+cd ai-cs-frontend
+```
+
+#### 2. 安装依赖
+
+```bash
+npm install
+```
+
+#### 3. 启动开发服务器
+
+```bash
+npm run dev
+```
+
+#### 4. 构建生产版本（可选）
+
+```bash
+npm run build
+```
+
+### 访问地址
+
+前端服务默认运行在 `http://localhost:8080`，通过代理配置 `/api` 前缀转发到后端服务 `http://localhost:9000`。
+
+### 页面功能
+
+| 页面 | 路径 | 功能 |
+|------|------|------|
+| AI聊天 | /chat | 与AI客服实时对话 |
+| 客户管理 | /customer | 客户列表展示、新增客户 |
+| 工单管理 | /workorder | 创建工单 |
+| 知识库管理 | /knowledge | FAQ管理、语义检索、向量化操作 |
+
+---
+
 ## 配置说明
 
 ### 可配置项
@@ -231,4 +318,4 @@ Spring Boot 3.x 已将 `javax.annotation` 改为 `jakarta.annotation`，请检�
 
 ---
 
-**注意**: 本 README 为中文版，如需查看英文文档请参考其他分支或翻译版本。
+**注意**: 本 README 为中文版，如需查看英文文档请参考 [README.md](README.md)。
