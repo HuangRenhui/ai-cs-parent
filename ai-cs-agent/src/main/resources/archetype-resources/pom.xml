@@ -2,7 +2,7 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>$com.ai.cs</groupId>
-  <artifactId>$ai-cs-ai-agent</artifactId>
+  <artifactId>$ai-cs-agent</artifactId>
   <version>$1.0.0</version>
   <dependencies>
     <dependency>
