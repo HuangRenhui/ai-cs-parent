@@ -6,8 +6,11 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.aggregator.ReRankingContentAggregator;
+import dev.langchain4j.rag.content.aggregator.ContentAggregator;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.chroma.ChromaEmbeddingStore;
@@ -53,6 +56,18 @@ public class LangChainConfig {
                 .build();
     }
 
+    /**
+     * 构建Rerank评分模型Bean
+     * 使用本地Ollama部署的BGE-Reranker模型进行文档重排序
+     */
+    @Bean
+    public ScoringModel scoringModel() {
+        return new OllamaScoringModel(
+                ragProperties.getOllama().getBaseUrl(),
+                ragProperties.getOllama().getRerankModel()
+        );
+    }
+
 
     /**
      * Chroma向量库Bean
@@ -67,13 +82,14 @@ public class LangChainConfig {
 
 
     /**
-     * 构建检索增强器
-     * 通过向量检索召回相关片段
+     * 构建检索增强器（带Rerank重排）
+     * 通过向量检索召回相关片段，再使用Rerank模型重排提升精度
      */
     @Bean
     public RetrievalAugmentor retrievalAugmentor(
             EmbeddingStore<dev.langchain4j.data.segment.TextSegment> embeddingStore,
-            EmbeddingModel embeddingModel
+            EmbeddingModel embeddingModel,
+            ScoringModel scoringModel
     ) {
         // 向量检索：从向量库召回topK个候选片段
         var contentRetriever = EmbeddingStoreContentRetriever.builder()
@@ -82,8 +98,16 @@ public class LangChainConfig {
                 .maxResults(ragProperties.getRetrieve().getTopK())
                 .build();
 
+        // 配置Rerank重排聚合器
+        ContentAggregator aggregator = ReRankingContentAggregator.builder()
+                .scoringModel(scoringModel)                    // 设置评分模型
+                .minScore(ragProperties.getRetrieve().getMinScore())  // 最低相关性阈值
+                .build();
+
+        // 构建带Rerank重排的检索增强器
         return DefaultRetrievalAugmentor.builder()
                 .contentRetriever(contentRetriever)
+                .contentAggregator(aggregator)  // 注入重排聚合器
                 .build();
     }
 

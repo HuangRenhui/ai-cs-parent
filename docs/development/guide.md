@@ -65,7 +65,7 @@ npm -v
 
 ```bash
 # 克隆项目
-git clone https://gitlab.com/WongHui/ai-cs-parent.git
+git clone https://gitee.com/huangrenhui/ai-cs-parent.git
 
 # 进入项目目录
 cd ai-cs-parent
@@ -445,4 +445,4 @@ docker-compose up -d
 
 ---
 
-**遇到问题？** 提交 [Issue](https://gitlab.com/WongHui/ai-cs-parent/-/issues) 或联系维护者。
+**遇到问题？** 提交 [Issue](https://gitee.com/huangrenhui/ai-cs-parent/issues) 或联系维护者。

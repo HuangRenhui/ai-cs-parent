@@ -92,7 +92,7 @@ V1.2.0__alter_work_order_add_priority.sql
 -- ============================================
 -- Migration: V1.1.0__add_customer_phone_index.sql
 -- Description: 为客户表手机号字段添加索引
--- Author: Wong Hui
+-- Author: huangrenhui
 -- Date: 2024-01-15
 -- ============================================
 

@@ -24,6 +24,7 @@ public class RagProperties {
         private String baseUrl;
         private String llmModel;
         private String embeddingModel;
+        private String rerankModel;  // Rerank重排模型名称
         private Double temperature;
     }
 
@@ -43,6 +44,8 @@ public class RagProperties {
     @Data
     public static class Retrieve {
         private Integer topK;
+        private Integer rerankTopK; // Rerank重排后保留的结果数量
+        private Double minScore;    // Rerank最低相关性阈值
     }
 
     @Data

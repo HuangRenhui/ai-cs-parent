@@ -620,4 +620,4 @@ curl http://localhost:8080/actuator/health
 
 ---
 
-**需要帮助？** 提交 [Issue](https://gitlab.com/WongHui/ai-cs-parent/-/issues) 或联系维护者。
+**需要帮助？** 提交 [Issue](https://gitee.com/huangrenhui/ai-cs-parent/issues) 或联系维护者。

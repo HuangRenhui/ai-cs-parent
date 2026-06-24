@@ -6,10 +6,12 @@ A microservices-based intelligent customer service platform powered by Large Lan
 
 - 🤖 **AI-Powered Chat**: Intelligent conversations using LLM with context awareness
 - 📚 **Knowledge Base (RAG)**: FAQ management with vector similarity search and advanced RAG (Retrieval-Augmented Generation)
-  - Multi-format document support (PDF, TXT, DOCX, MD)
+  - Multi-format document support (PDF, TXT, DOCX, MD, Excel, PPT via Apache Tika)
   - Vector embedding and Chroma/Milvus storage
-  - Rerank optimization for improved retrieval accuracy
+  - **Rerank optimization** using BGE-Reranker for improved retrieval accuracy (20-40% boost)
+  - Document version management with automatic versioning and rollback
   - Multi-user session isolation with Redis persistence
+  - Learn more: [RAG Usage Guide](ai-cs-knowledge/RAG_USAGE_GUIDE.md) | [ScoringModel Extension Guide](ai-cs-knowledge/SCORING_MODEL_GUIDE.md)
 - 🎫 **Work Order System**: Smart ticket creation and workflow management
 - 💬 **Real-time Communication**: WebSocket-based instant messaging
 - 👥 **Customer Management**: Comprehensive customer information management
@@ -22,7 +24,7 @@ Get up and running in minutes! Check out our [Quick Start Guide](docs/QUICK_STAR
 
 ```bash
 # Clone the repository
-git clone https://gitlab.com/WongHui/ai-cs-parent.git
+git clone https://gitee.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 
 # Build the project
@@ -100,9 +102,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## 👥 Contact
 
-- **Maintainer**: Wong Hui
-- **GitLab**: https://gitlab.com/WongHui/ai-cs-parent
-- **Issues**: Please report bugs via GitLab Issues
+- **Maintainer**: huangrenhui
+- **Gitee**: https://gitee.com/huangrenhui/ai-cs-parent
+- **Issues**: Please report bugs via Gitee Issues
 
 ## 📊 Project Status
 

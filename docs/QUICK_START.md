@@ -23,7 +23,7 @@
 ### 第一步：克隆项目
 
 ```bash
-git clone https://gitlab.com/WongHui/ai-cs-parent.git
+git clone https://gitee.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 ```
 

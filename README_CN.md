@@ -23,7 +23,7 @@
 
 ```bash
 # 克隆项目
-git clone https://gitlab.com/WongHui/ai-cs-parent.git
+git clone https://gitee.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 
 # 编译项目
@@ -101,9 +101,9 @@ ai-cs-parent/
 
 ## 👥 联系方式
 
-- **维护者**: Wong Hui
-- **GitLab**: https://gitlab.com/WongHui/ai-cs-parent
-- **问题反馈**: 请通过 GitLab Issues 提交
+- **维护者**: huangrenhui
+- **Gitee**: https://gitee.com/huangrenhui/ai-cs-parent
+- **问题反馈**: 请通过 Gitee Issues 提交
 
 ## 📊 项目状态
 

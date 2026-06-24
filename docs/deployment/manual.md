@@ -251,7 +251,7 @@ sudo systemctl enable nginx
 
 ```bash
 # 克隆代码
-git clone https://gitlab.com/WongHui/ai-cs-parent.git
+git clone https://gitee.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 
 # 编译打包
@@ -868,4 +868,4 @@ find /backup -type f -mtime +30 -delete
 
 ---
 
-**需要帮助？** 提交 [Issue](https://gitlab.com/WongHui/ai-cs-parent/-/issues) 或联系维护者。
+**需要帮助？** 提交 [Issue](https://gitee.com/huangrenhui/ai-cs-parent/issues) 或联系维护者。

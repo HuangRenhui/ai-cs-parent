@@ -49,6 +49,10 @@
 
 RAG（检索增强生成）系统相关文档。
 
+- **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** ⭐ - 完整的功能说明、API文档和Rerank重排详解
+- **[ScoringModel扩展实践](../ai-cs-knowledge/SCORING_MODEL_GUIDE.md)** ⭐ - 如何扩展自定义评分模型（Jina/Cohere/ONNX）
+- **[Rerank实现总结](../ai-cs-knowledge/RERANK_IMPLEMENTATION_SUMMARY.md)** - Rerank功能技术实现细节和待办事项
+- **[Rerank快速参考](../ai-cs-knowledge/RERANK_QUICK_REFERENCE.md)** - 快速查阅手册和故障排查
 - [RAG 系统概览](ai-rag/README.md) - RAG 功能介绍、快速开始、API 说明
 - [RAG 架构设计](ai-rag/ARCHITECTURE.md) - 技术架构、核心组件、数据流详解
 - [文档版本管理](ai-rag/DOCUMENT_VERSION.md) - 文档版本跟踪、回退、对比功能
@@ -104,8 +108,10 @@ RAG（检索增强生成）系统相关文档。
 | 配置环境 | [配置管理](deployment/configuration.md) |
 | 修改数据库 | [迁移指南](database/migration.md) |
 | 调用 API | [API 文档](api/README.md) |
-| 使用 RAG 功能 | [RAG 系统概览](ai-rag/README.md) |
-| 了解 RAG 架构 | [RAG 架构设计](ai-rag/ARCHITECTURE.md) |
+| 使用 RAG 功能 | **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** |
+| 了解 Rerank 实现 | **[Rerank实现总结](../ai-cs-knowledge/RERANK_IMPLEMENTATION_SUMMARY.md)** |
+| 扩展 ScoringModel | **[ScoringModel扩展实践](../ai-cs-knowledge/SCORING_MODEL_GUIDE.md)** |
+| Rerank 快速查阅 | **[Rerank快速参考](../ai-cs-knowledge/RERANK_QUICK_REFERENCE.md)** |
 
 ### 按角色查找
 
@@ -124,7 +130,7 @@ RAG（检索增强生成）系统相关文档。
 
 ### 更新记录
 
-- **2026-06-24**: 新增文档版本管理功能，包括版本跟踪、回退、对比等功能
+- **2026-06-24**: 完成Rerank重排功能实现，新增OllamaScoringModel、ScoringModel扩展指南、Rerank实现总结和快速参考文档；新增文档版本管理功能，包括版本跟踪、回退、对比等功能
 - **2026-06-23**: 新增 RAG 系统文档，包括 RAG 功能概览和架构设计
 - **2024-06-20**: 文档重构完成，新增快速开始、配置管理、测试指南、开发指南、Docker 部署、手动部署、API 文档等完整文档体系
 - 更多历史记录请查看 Git 提交日志
@@ -150,8 +156,8 @@ RAG（检索增强生成）系统相关文档。
 
 - [项目主页](../README_CN.md) - 中文 README
 - [Project Home](../README.md) - English README
-- [GitLab 仓库](https://gitlab.com/WongHui/ai-cs-parent)
-- [问题反馈](https://gitlab.com/WongHui/ai-cs-parent/-/issues)
+- [Gitee 仓库](https://gitee.com/huangrenhui/ai-cs-parent)
+- [问题反馈](https://gitee.com/huangrenhui/ai-cs-parent/issues)
 
 ---
 

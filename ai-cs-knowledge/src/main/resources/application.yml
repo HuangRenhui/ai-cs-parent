@@ -59,6 +59,7 @@ rag:
   retrieve:
     top-k: 5
     rerank-top-k: 3
+    min-score: 0.6  # Rerank最低相关性阈值
   chat-memory:
     # 对话记录过期时间，单位秒（7天）
     ttl: 604800
