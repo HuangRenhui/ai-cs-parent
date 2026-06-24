@@ -248,8 +248,8 @@ services:
 
   # AI 代理服务
   ai-agent:
-    image: ai-cs-ai-agent:latest
-    container_name: ai-cs-ai-agent
+    image: ai-cs-agent:latest
+    container_name: ai-cs-agent
     ports:
       - "9002:9002"
     environment:

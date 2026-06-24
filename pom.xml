@@ -15,7 +15,7 @@
         <module>ai-cs-gateway</module>
         <module>ai-cs-base-service</module>
         <module>ai-cs-knowledge</module>
-        <module>ai-cs-ai-agent</module>
+        <module>ai-cs-agent</module>
         <module>ai-cs-workorder</module>
         <module>ai-cs-websocket</module>
         <module>ai-cs-job</module>

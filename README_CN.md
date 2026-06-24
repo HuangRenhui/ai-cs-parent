@@ -76,7 +76,7 @@ ai-cs-parent/
 ├── ai-cs-api/             # API 模块 - Feign 接口定义
 ├── ai-cs-gateway/         # 网关服务 (端口 8080)
 ├── ai-cs-base-service/    # 基础服务 - 客户管理 (端口 9001)
-├── ai-cs-ai-agent/        # AI 代理服务 - 智能对话 (端口 9002)
+├── ai-cs-agent/           # AI 代理服务 - 智能对话 (端口 9002)
 ├── ai-cs-knowledge/       # 知识库服务 - 向量检索 (端口 9003)
 ├── ai-cs-workorder/       # 工单服务 - 工单管理 (端口 9004)
 ├── ai-cs-websocket/       # WebSocket 服务 - 实时通信 (端口 9005)

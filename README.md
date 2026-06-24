@@ -77,7 +77,7 @@ ai-cs-parent/
 ├── ai-cs-api/             # Feign client interfaces
 ├── ai-cs-gateway/         # API Gateway (port 8080)
 ├── ai-cs-base-service/    # Customer & session management (port 9001)
-├── ai-cs-ai-agent/        # AI chat service (port 9002)
+├── ai-cs-agent/           # AI agent service (port 9002)
 ├── ai-cs-knowledge/       # Knowledge base & vector search (port 9003)
 ├── ai-cs-workorder/       # Work order management (port 9004)
 ├── ai-cs-websocket/       # Real-time communication (port 9005)

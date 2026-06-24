@@ -79,7 +79,7 @@ ai-cs-parent/
 ├── ai-cs-api/             # Feign 客户端接口
 ├── ai-cs-gateway/         # API 网关
 ├── ai-cs-base-service/    # 基础服务
-├── ai-cs-ai-agent/        # AI 代理服务
+├── ai-cs-agent/           # AI 代理服务
 ├── ai-cs-knowledge/       # 知识库服务
 ├── ai-cs-workorder/       # 工单服务
 ├── ai-cs-websocket/       # WebSocket 服务
@@ -124,7 +124,7 @@ mysql -u root -p ai_cs < docs/database/init.sql
 # 为每个服务复制配置模板
 cp docs/config/application-template.yml ai-cs-gateway/src/main/resources/application.yml
 cp docs/config/application-template.yml ai-cs-base-service/src/main/resources/application.yml
-cp docs/config/application-template.yml ai-cs-ai-agent/src/main/resources/application.yml
+cp docs/config/application-template.yml ai-cs-agent/src/main/resources/application.yml
 cp docs/config/application-template.yml ai-cs-knowledge/src/main/resources/application.yml
 cp docs/config/application-template.yml ai-cs-workorder/src/main/resources/application.yml
 cp docs/config/application-template.yml ai-cs-websocket/src/main/resources/application.yml
@@ -170,7 +170,7 @@ mvn clean install -DskipTests
 
 1. **ai-cs-gateway** (端口 8080) - API 网关
 2. **ai-cs-base-service** (端口 9001) - 基础服务
-3. **ai-cs-ai-agent** (端口 9002) - AI 代理服务
+3. **ai-cs-agent** (端口 9002) - AI 代理服务
 4. **ai-cs-knowledge** (端口 9003) - 知识库服务
 5. **ai-cs-workorder** (端口 9004) - 工单服务
 6. **ai-cs-websocket** (端口 9005) - WebSocket 服务

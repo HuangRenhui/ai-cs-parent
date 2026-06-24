@@ -13,7 +13,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient("ai-cs-ai-agent")
+@FeignClient("ai-cs-agent")
 public interface AiAgentFeign {
 
     @PostMapping("/ai/chat/send")

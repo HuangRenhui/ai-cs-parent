@@ -63,7 +63,7 @@ server:
 |------|------|------|
 | ai-cs-gateway | 8080 | 网关服务 |
 | ai-cs-base-service | 9001 | 基础服务 |
-| ai-cs-ai-agent | 9002 | AI 代理服务 |
+| ai-cs-agent | 9002 | AI 代理服务 |
 | ai-cs-knowledge | 9003 | 知识库服务 |
 | ai-cs-workorder | 9004 | 工单服务 |
 | ai-cs-websocket | 9005 | WebSocket 服务 |
@@ -126,7 +126,7 @@ spring:
 
 ### 4. LLM 模型配置
 
-**适用模块**: ai-cs-ai-agent
+**适用模块**: ai-cs-agent
 
 ```yaml
 llm:

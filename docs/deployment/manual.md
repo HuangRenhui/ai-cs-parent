@@ -264,7 +264,7 @@ mvn clean package -DskipTests
 # 使用 scp 上传
 scp target/ai-cs-gateway-1.0.0.jar user@server:/opt/ai-cs/gateway/
 scp target/ai-cs-base-service-1.0.0.jar user@server:/opt/ai-cs/base-service/
-scp target/ai-cs-ai-agent-1.0.0.jar user@server:/opt/ai-cs/ai-agent/
+scp target/ai-cs-agent-1.0.0.jar user@server:/opt/ai-cs/agent/
 scp target/ai-cs-knowledge-1.0.0.jar user@server:/opt/ai-cs/knowledge/
 scp target/ai-cs-workorder-1.0.0.jar user@server:/opt/ai-cs/workorder/
 scp target/ai-cs-websocket-1.0.0.jar user@server:/opt/ai-cs/websocket/
@@ -463,7 +463,7 @@ sudo journalctl -u ai-cs-gateway -f
 sudo systemctl start ai-cs-base-service
 
 # 2. AI 代理服务
-sudo systemctl start ai-cs-ai-agent
+sudo systemctl start ai-cs-agent
 
 # 3. 知识库服务
 sudo systemctl start ai-cs-knowledge

@@ -82,9 +82,9 @@ redis-server
 
 ### 第三步：配置环境变量
 
-#### 3.1 配置 AI 模型服务（ai-cs-ai-agent）
+#### 3.1 配置 AI 模型服务（ai-cs-agent）
 
-编辑 `ai-cs-ai-agent/src/main/resources/application.yml`：
+编辑 `ai-cs-agent/src/main/resources/application.yml`：
 
 ```yaml
 llm:
@@ -182,7 +182,7 @@ mvn spring-boot:run
 
 #### 3. AI 代理服务 (端口: 9002)
 ```bash
-cd ai-cs-ai-agent
+cd ai-cs-agent
 mvn spring-boot:run
 ```
 

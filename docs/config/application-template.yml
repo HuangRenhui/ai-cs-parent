@@ -45,7 +45,7 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# LLM 配置（仅在 ai-cs-ai-agent 模块使用）
+# LLM 配置（仅在 ai-cs-agent 模块使用）
 llm:
   url: ${LLM_URL:http://127.0.0.1:8000/v1/chat/completions}
   api-key: ${LLM_API_KEY:xxx}

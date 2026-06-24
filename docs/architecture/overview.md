@@ -80,7 +80,7 @@
 |------|------|------|
 | ai-cs-gateway | 8080 | API 网关、路由转发、鉴权 |
 | ai-cs-base-service | 9001 | 客户管理、会话管理 |
-| ai-cs-ai-agent | 9002 | AI 对话、意图识别 |
+| ai-cs-agent | 9002 | AI Agent、意图识别 |
 | ai-cs-knowledge | 9003 | 知识库、向量检索 |
 | ai-cs-workorder | 9004 | 工单管理 |
 | ai-cs-websocket | 9005 | 实时通信 |

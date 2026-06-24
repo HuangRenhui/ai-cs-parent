@@ -20,6 +20,8 @@
 - [系统架构概览](architecture/overview.md) - 架构图、技术栈、部署架构
 - [模块详细说明](architecture/modules.md) - 各模块职责、接口定义
 - [数据流向与业务场景](architecture/data-flow.md) - 核心业务流程
+- **[RAG技术决策](architecture/RAG_TECHNICAL_DECISION.md)** ⭐⭐ - 两套RAG方案对比、优缺点分析及演进方向
+- **[Agent vs Knowledge对比](architecture/AGENT_VS_KNOWLEDGE_COMPARISON.md)** ⭐⭐ - ai-cs-agent与ai-cs-knowledge功能边界、技术差异及协作方式
 
 ### 💻 开发文档 (Development)
 
@@ -51,11 +53,6 @@ RAG（检索增强生成）系统相关文档。
 
 - **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** ⭐ - 完整的功能说明、API文档和Rerank重排详解
 - **[ScoringModel扩展实践](../ai-cs-knowledge/SCORING_MODEL_GUIDE.md)** ⭐ - 如何扩展自定义评分模型（Jina/Cohere/ONNX）
-- **[Rerank实现总结](../ai-cs-knowledge/RERANK_IMPLEMENTATION_SUMMARY.md)** - Rerank功能技术实现细节和待办事项
-- **[Rerank快速参考](../ai-cs-knowledge/RERANK_QUICK_REFERENCE.md)** - 快速查阅手册和故障排查
-- [RAG 系统概览](ai-rag/README.md) - RAG 功能介绍、快速开始、API 说明
-- [RAG 架构设计](ai-rag/ARCHITECTURE.md) - 技术架构、核心组件、数据流详解
-- [文档版本管理](ai-rag/DOCUMENT_VERSION.md) - 文档版本跟踪、回退、对比功能
 
 ### 🔌 API 文档 (API)
 
@@ -76,8 +73,8 @@ RAG（检索增强生成）系统相关文档。
 
 ### AI/RAG 开发者
 
-1. [RAG 系统概览](ai-rag/README.md) - RAG 功能介绍
-2. [RAG 架构设计](ai-rag/ARCHITECTURE.md) - 技术实现详解
+1. [RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md) - RAG功能介绍和API文档
+2. [RAG技术决策](architecture/RAG_TECHNICAL_DECISION.md) - 两套RAG方案对比
 3. [快速开始指南](QUICK_START.md) - 启动前置服务
 4. [模块详细说明](architecture/modules.md) - ai-cs-knowledge 模块
 
@@ -103,26 +100,26 @@ RAG（检索增强生成）系统相关文档。
 |---------|----------|
 | 快速运行项目 | [快速开始指南](QUICK_START.md) |
 | 了解系统架构 | [架构概览](architecture/overview.md) |
+| 了解RAG技术方案 | **[RAG技术决策](architecture/RAG_TECHNICAL_DECISION.md)** |
+| 了解Agent和Knowledge区别 | **[Agent vs Knowledge对比](architecture/AGENT_VS_KNOWLEDGE_COMPARISON.md)** |
 | 添加新功能 | [开发指南](development/guide.md) |
 | 编写测试 | [测试指南](development/testing.md) |
 | 配置环境 | [配置管理](deployment/configuration.md) |
 | 修改数据库 | [迁移指南](database/migration.md) |
 | 调用 API | [API 文档](api/README.md) |
 | 使用 RAG 功能 | **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** |
-| 了解 Rerank 实现 | **[Rerank实现总结](../ai-cs-knowledge/RERANK_IMPLEMENTATION_SUMMARY.md)** |
 | 扩展 ScoringModel | **[ScoringModel扩展实践](../ai-cs-knowledge/SCORING_MODEL_GUIDE.md)** |
-| Rerank 快速查阅 | **[Rerank快速参考](../ai-cs-knowledge/RERANK_QUICK_REFERENCE.md)** |
 
 ### 按角色查找
 
 | 角色 | 重点文档 |
 |------|----------|
-| 前端开发 | API 文档、架构模块说明 |
-| 后端开发 | 开发指南、测试指南、数据库文档 |
+| 前端开发 | API 文档、架构模块说明、Agent vs Knowledge对比 |
+| 后端开发 | 开发指南、测试指南、数据库文档、Agent vs Knowledge对比 |
 | 测试工程师 | 测试指南、API 文档 |
 | 运维工程师 | 配置管理、部署文档、数据库迁移 |
-| 产品经理 | 架构概览、数据流向、功能说明 |
-| AI 工程师 | RAG 系统概览、RAG 架构设计 |
+| 产品经理 | 架构概览、数据流向、功能说明、Agent vs Knowledge对比 |
+| AI 工程师 | RAG使用指南、RAG技术决策、Agent vs Knowledge对比 |
 
 ---
 
@@ -130,7 +127,7 @@ RAG（检索增强生成）系统相关文档。
 
 ### 更新记录
 
-- **2026-06-24**: 完成Rerank重排功能实现，新增OllamaScoringModel、ScoringModel扩展指南、Rerank实现总结和快速参考文档；新增文档版本管理功能，包括版本跟踪、回退、对比等功能
+- **2026-06-24**: 新增RAG技术决策文档，详细记录两套RAG方案（Milvus传统RAG vs LangChain4j RAG）的对比分析、优缺点、使用场景及融合优化方案；完成Rerank重排功能实现，新增OllamaScoringModel、ScoringModel扩展指南、Rerank实现总结和快速参考文档；新增文档版本管理功能，包括版本跟踪、回退、对比等功能；**模块重命名：ai-cs-ai-agent → ai-cs-agent**，修复所有引用；新增Agent与Knowledge功能对比文档，明确两个模块的职责边界和协作方式
 - **2026-06-23**: 新增 RAG 系统文档，包括 RAG 功能概览和架构设计
 - **2024-06-20**: 文档重构完成，新增快速开始、配置管理、测试指南、开发指南、Docker 部署、手动部署、API 文档等完整文档体系
 - 更多历史记录请查看 Git 提交日志
