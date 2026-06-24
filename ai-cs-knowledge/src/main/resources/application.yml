@@ -1,5 +1,9 @@
 server:
   port: 8083
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
 spring:
   application:
     name: ai-cs-knowledge
@@ -12,6 +16,17 @@ spring:
     url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: root
     password: 你的数据库密码
+  # Redis配置
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password:
+    database: 0
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 2
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -25,3 +40,46 @@ llm:
   api-key: xxx
   model: qwen-7b
   temperature: 0.2
+
+# RAG私有化配置（LangChain4j + Ollama + Chroma）
+rag:
+  ollama:
+    base-url: http://localhost:11434
+    llm-model: qwen:7b
+    embedding-model: nomic-embed-text
+    rerank-model: bge-reranker:latest
+    temperature: 0.1
+  chroma:
+    base-url: http://localhost:8000
+    collection-name: private_knowledge_base
+    persist-path: ./chroma-db
+  split:
+    chunk-size: 500
+    chunk-overlap: 80
+  retrieve:
+    top-k: 5
+    rerank-top-k: 3
+  chat-memory:
+    # 对话记录过期时间，单位秒（7天）
+    ttl: 604800
+
+# 临时上传文件存放目录
+upload:
+  temp-path: ./upload-tmp
+
+# knife4j文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: 私有化RAG知识库系统接口文档
+    description: SpringBoot+LangChain4j+Ollama+Chroma
+    email: xxx@xxx.com
+    concat: developer
+    version: 1.0.0
+    terms-of-service-url: http://localhost:8083
+    group:
+      default:
+        group-name: 默认分组
+        api-rule: package
+        api-rule-resources:
+          - com.ai.cs.knowledge.controller

@@ -13,7 +13,9 @@
 - **npm**: 8+ (前端开发)
 
 ### 可选环境
-- **Milvus**: 2.x (用于向量检索功能)
+- **Milvus**: 2.x (用于向量检索功能，生产环境推荐)
+- **Chroma**: latest (用于向量检索功能，本地开发推荐)
+- **Ollama**: latest (本地大模型服务，RAG 功能必需)
 - **Docker & Docker Compose**: (容器化部署)
 
 ## 🚀 快速启动
@@ -37,6 +39,47 @@ CREATE DATABASE ai_cs_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 mysql -u root -p ai_cs_db < docs/database/init.sql
 ```
 
+### 第二步半：启动 RAG 前置服务（可选，如需使用 RAG 功能）
+
+如果您需要使用知识库的 RAG（检索增强生成）功能，需要先启动以下服务：
+
+#### 1. 安装并启动 Ollama
+
+```bash
+# 访问 https://ollama.com/ 下载安装
+
+# 拉取所需模型
+ollama pull qwen:7b                    # 大语言模型
+ollama pull nomic-embed-text           # 向量嵌入模型
+ollama pull bge-reranker:latest        # 重排模型
+
+# Ollama 默认运行在 http://localhost:11434
+```
+
+#### 2. 启动 Chroma 向量数据库
+
+```bash
+# 安装 chromadb
+pip install chromadb
+
+# 启动持久化向量库
+chroma run --path ./chroma-db
+
+# Chroma 默认运行在 http://localhost:8000
+```
+
+#### 3. 启动 Redis
+
+```bash
+# Windows: 下载 Redis for Windows
+# Linux: sudo apt-get install redis-server
+
+# 启动 Redis（默认端口 6379）
+redis-server
+```
+
+> **提示**: 如果不需要 RAG 功能，可以跳过此步骤。传统 FAQ 管理功能仍然可用。
+
 ### 第三步：配置环境变量
 
 #### 3.1 配置 AI 模型服务（ai-cs-ai-agent）
@@ -55,9 +98,37 @@ llm:
 
 编辑 `ai-cs-knowledge/src/main/resources/application.yml`：
 
+**传统 Embedding 配置**（如果使用外部 Embedding 服务）：
 ```yaml
 embedding:
   url: http://127.0.0.1:8000/embedding  # Embedding 服务地址
+```
+
+**RAG 配置**（如果使用 LangChain4j + Ollama）：
+```yaml
+rag:
+  ollama:
+    base-url: http://localhost:11434     # Ollama 服务地址
+    llm-model: qwen:7b                   # 对话模型
+    embedding-model: nomic-embed-text    # 向量模型
+    rerank-model: bge-reranker:latest    # 重排模型
+    temperature: 0.1                     # 温度参数
+  chroma:
+    base-url: http://localhost:8000      # Chroma 服务地址
+    collection-name: private_knowledge_base
+  split:
+    chunk-size: 500                      # 文本切片大小
+    chunk-overlap: 80                    # 切片重叠字符数
+  retrieve:
+    top-k: 5                             # 初次检索返回数量
+    rerank-top-k: 3                      # 重排后保留数量
+  chat-memory:
+    ttl: 604800                          # 对话记忆过期时间（秒，7天）
+
+spring:
+  redis:
+    host: 127.0.0.1
+    port: 6379
 ```
 
 #### 3.3 配置数据库连接（所有服务模块）

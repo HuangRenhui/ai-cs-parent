@@ -133,6 +133,39 @@ CREATE TABLE `cs_work_order` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工单表';
 
 -- ============================================
+-- 7. 文档版本管理表 (cs_document_version)
+-- ============================================
+DROP TABLE IF EXISTS `cs_document_version`;
+CREATE TABLE `cs_document_version` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `document_id` VARCHAR(64) NOT NULL COMMENT '文档唯一标识（文件名或文档ID）',
+    `document_name` VARCHAR(256) NOT NULL COMMENT '文档名称',
+    `version` INT NOT NULL COMMENT '版本号',
+    `file_path` VARCHAR(512) NOT NULL COMMENT '文件路径',
+    `file_size` BIGINT DEFAULT 0 COMMENT '文件大小（字节）',
+    `file_type` VARCHAR(32) DEFAULT NULL COMMENT '文件类型（PDF/TXT/DOCX/MD等）',
+    `file_md5` VARCHAR(64) DEFAULT NULL COMMENT '文件MD5哈希值，用于内容去重',
+    `milvus_collection_id` VARCHAR(128) DEFAULT NULL COMMENT 'Milvus向量集合ID',
+    `segment_count` INT DEFAULT 0 COMMENT '文档片段数量',
+    `version_description` VARCHAR(512) DEFAULT NULL COMMENT '版本描述',
+    `is_current` TINYINT DEFAULT 0 COMMENT '是否为当前版本: 0-否, 1-是',
+    `status` TINYINT DEFAULT 1 COMMENT '状态: 0-草稿, 1-已发布, 2-已归档',
+    `uploader_id` BIGINT DEFAULT NULL COMMENT '上传人ID',
+    `uploader_name` VARCHAR(64) DEFAULT NULL COMMENT '上传人姓名',
+    `del_flag` TINYINT DEFAULT 0 COMMENT '删除标记: 0-未删除, 1-已删除',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_document_version` (`document_id`, `version`),
+    KEY `idx_document_id` (`document_id`),
+    KEY `idx_is_current` (`is_current`),
+    KEY `idx_file_md5` (`file_md5`),
+    KEY `idx_status` (`status`),
+    KEY `idx_del_flag` (`del_flag`),
+    KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档版本管理表';
+
+-- ============================================
 -- 插入测试数据（可选）
 -- ============================================
 

@@ -288,20 +288,79 @@ llm:
 ### 4.3 ai-cs-knowledge (知识库服务)
 **类型**: Spring Boot 应用  
 **端口**: 9003  
-**依赖**: ai-cs-common, Milvus SDK  
+**依赖**: ai-cs-common, LangChain4j, Chroma/Milvus SDK
 
 **核心功能**:
-- FAQ 知识库管理
-- 文本向量化 (Embedding)
-- Milvus 向量检索
-- RAG 知识增强
+- FAQ 知识库管理（传统 CRUD）
+- **RAG 检索增强生成系统**（新增）
+  - 多格式文档上传与解析（PDF、TXT、DOCX、MD）
+  - 智能文本切片（可配置 chunkSize 和 overlap）
+  - 向量化存储到 Chroma/Milvus
+  - 两阶段检索：向量召回 + Rerank 重排
+  - 基于 Ollama 本地大模型的智能问答
+  - 多用户会话隔离（Redis 持久化）
+  - 自定义 Prompt 模板，防幻觉机制
+- **文档版本管理**（新增）
+  - 文档版本跟踪与记录
+  - 版本回退功能
+  - 版本对比（基于MD5和文件大小）
+  - 内容去重（MD5检测）
+  - 版本状态管理（草稿、已发布、已归档）
 
 **数据表**:
 - cs_knowledge_faq
+- cs_document_version
 
 **外部依赖**:
-- Embedding 服务
-- Milvus 向量数据库
+- Ollama 服务（提供 LLM、Embedding、Rerank 模型）
+- Chroma 向量数据库（本地开发推荐）
+- Milvus 向量数据库（生产环境推荐）
+- Redis（对话记忆持久化）
+
+**关键组件**:
+- `RagController`: RAG 相关 API 接口
+- `FaqController`: 传统 FAQ 管理接口
+- `DocumentVersionController`: 文档版本管理接口
+- `DocumentLoadService`: 文档加载与切片服务
+- `FileUploadService`: 文件上传服务
+- `DocumentVersionService`: 文档版本管理服务
+- `RagChatService`: RAG 聊天服务
+- `RedisChatMemoryStore`: Redis 对话记忆存储
+- `LangChainConfig`: LangChain4j 核心配置
+- `RagProperties`: RAG 配置属性
+
+**配置项**:
+```yaml
+rag:
+  ollama:
+    base-url: http://localhost:11434
+    llm-model: qwen:7b
+    embedding-model: nomic-embed-text
+    rerank-model: bge-reranker:latest
+    temperature: 0.1
+  chroma:
+    base-url: http://localhost:8000
+    collection-name: private_knowledge_base
+  split:
+    chunk-size: 500
+    chunk-overlap: 80
+  retrieve:
+    top-k: 5
+    rerank-top-k: 3
+  chat-memory:
+    ttl: 604800  # 7天
+```
+
+**API 接口**:
+- `POST /api/rag/upload/pdf` - 上传 PDF 文档入库
+- `POST /api/rag/upload/file` - 上传普通文件入库
+- `POST /api/rag/upload/pdf/versioned` - 上传 PDF 文档入库（带版本管理）
+- `POST /api/rag/upload/file/versioned` - 上传普通文件入库（带版本管理）
+- `POST /api/rag/chat` - 智能问答（支持多轮对话）
+- `POST /api/rag/memory/clear/user` - 清空单用户记忆
+- `POST /api/rag/memory/clear/all` - 清空全部记忆
+- `GET /api/document/version/*` - 文档版本管理接口
+- `GET /api/faq/*` - 传统 FAQ CRUD 接口
 
 ---
 

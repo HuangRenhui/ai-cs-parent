@@ -1,26 +1,26 @@
 package com.ai.cs.knowledge.controller;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 17:59
- * @description TODO
- */
-
-
 import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.entity.KnowledgeFaq;
 import com.ai.cs.knowledge.service.KnowledgeFaqService;
 import com.ai.cs.knowledge.service.RagSearchService;
 import com.ai.cs.knowledge.util.MilvusUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * FAQ知识库控制器
+ * 提供FAQ的增删改查和语义检索功能
+ */
 @RestController
 @RequestMapping("/knowledge")
+@Tag(name = "FAQ知识库管理", description = "FAQ知识的增删改查和向量化检索")
 public class FaqController {
 
     @Resource
@@ -31,11 +31,13 @@ public class FaqController {
     private MilvusUtil milvusUtil;
 
     @GetMapping("/list")
+    @Operation(summary = "查询FAQ列表", description = "获取所有启用的FAQ知识列表")
     public Result<List<KnowledgeFaq>> list() {
         return Result.success(faqService.getEnableFaqList());
     }
 
     @PostMapping("/save")
+    @Operation(summary = "新增FAQ", description = "创建新的FAQ并自动向量化存入Milvus")
     public Result<String> save(@RequestBody KnowledgeFaq faq) {
         faqService.save(faq);
         
@@ -54,6 +56,7 @@ public class FaqController {
     }
 
     @PutMapping("/update")
+    @Operation(summary = "更新FAQ", description = "修改FAQ信息并增量更新Milvus向量")
     public Result<String> update(@RequestBody KnowledgeFaq faq) {
         // 查询旧数据获取milvusId
         KnowledgeFaq oldFaq = faqService.getById(faq.getId());
@@ -81,6 +84,7 @@ public class FaqController {
     }
 
     @DeleteMapping("/delete/{id}")
+    @Operation(summary = "删除FAQ", description = "删除FAQ及其在Milvus中的向量数据")
     public Result<String> delete(@PathVariable Long id) {
         // 查询FAQ获取milvusId
         KnowledgeFaq faq = faqService.getById(id);
@@ -95,7 +99,8 @@ public class FaqController {
 
     // 语义检索接口（对接Milvus）
     @GetMapping("/search")
-    public Result<String> search(@RequestParam String question) {
+    @Operation(summary = "语义检索问答", description = "基于Milvus向量数据库的语义检索和RAG问答")
+    public Result<String> search(@Parameter(description = "用户问题") @RequestParam String question) {
         try {
             String answer = ragSearchService.semanticChat(question);
             return Result.success(answer);
@@ -112,7 +117,8 @@ public class FaqController {
      * @return 插入结果
      */
     @PostMapping("/vectorize/{id}")
-    public Result<String> vectorizeAndInsert(@PathVariable Long id) {
+    @Operation(summary = "单个FAQ向量化", description = "将指定FAQ向量化并插入Milvus向量数据库")
+    public Result<String> vectorizeAndInsert(@Parameter(description = "FAQ的ID") @PathVariable Long id) {
         try {
             // 查询FAQ
             KnowledgeFaq faq = faqService.getById(id);
@@ -136,6 +142,7 @@ public class FaqController {
      * @return 插入结果
      */
     @PostMapping("/vectorize/batch")
+    @Operation(summary = "批量FAQ向量化", description = "将所有启用的FAQ批量向量化并存入Milvus")
     public Result<String> batchVectorizeAndInsert() {
         try {
             // 查询所有启用的FAQ
@@ -162,6 +169,7 @@ public class FaqController {
      * @return 更新结果
      */
     @PostMapping("/vectorize/increment")
+    @Operation(summary = "批量增量更新向量", description = "增量更新所有FAQ的Milvus向量数据")
     public Result<String> batchIncrementUpdate() {
         try {
             // 查询所有启用的FAQ

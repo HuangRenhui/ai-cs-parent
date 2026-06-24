@@ -45,6 +45,14 @@
 - [初始化脚本](database/init.sql) - 完整建表脚本
 - [迁移指南](database/migration.md) - Schema 变更管理
 
+### 🤖 AI & RAG 文档 (AI & RAG)
+
+RAG（检索增强生成）系统相关文档。
+
+- [RAG 系统概览](ai-rag/README.md) - RAG 功能介绍、快速开始、API 说明
+- [RAG 架构设计](ai-rag/ARCHITECTURE.md) - 技术架构、核心组件、数据流详解
+- [文档版本管理](ai-rag/DOCUMENT_VERSION.md) - 文档版本跟踪、回退、对比功能
+
 ### 🔌 API 文档 (API)
 
 接口文档。
@@ -61,6 +69,13 @@
 2. [系统架构概览](architecture/overview.md) - 了解整体设计
 3. [模块详细说明](architecture/modules.md) - 熟悉各模块功能
 4. [代码规范](development/standards.md) - 开始编码
+
+### AI/RAG 开发者
+
+1. [RAG 系统概览](ai-rag/README.md) - RAG 功能介绍
+2. [RAG 架构设计](ai-rag/ARCHITECTURE.md) - 技术实现详解
+3. [快速开始指南](QUICK_START.md) - 启动前置服务
+4. [模块详细说明](architecture/modules.md) - ai-cs-knowledge 模块
 
 ### 运维工程师
 
@@ -89,6 +104,8 @@
 | 配置环境 | [配置管理](deployment/configuration.md) |
 | 修改数据库 | [迁移指南](database/migration.md) |
 | 调用 API | [API 文档](api/README.md) |
+| 使用 RAG 功能 | [RAG 系统概览](ai-rag/README.md) |
+| 了解 RAG 架构 | [RAG 架构设计](ai-rag/ARCHITECTURE.md) |
 
 ### 按角色查找
 
@@ -99,6 +116,7 @@
 | 测试工程师 | 测试指南、API 文档 |
 | 运维工程师 | 配置管理、部署文档、数据库迁移 |
 | 产品经理 | 架构概览、数据流向、功能说明 |
+| AI 工程师 | RAG 系统概览、RAG 架构设计 |
 
 ---
 
@@ -106,6 +124,8 @@
 
 ### 更新记录
 
+- **2026-06-24**: 新增文档版本管理功能，包括版本跟踪、回退、对比等功能
+- **2026-06-23**: 新增 RAG 系统文档，包括 RAG 功能概览和架构设计
 - **2024-06-20**: 文档重构完成，新增快速开始、配置管理、测试指南、开发指南、Docker 部署、手动部署、API 文档等完整文档体系
 - 更多历史记录请查看 Git 提交日志
 

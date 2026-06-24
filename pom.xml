@@ -29,10 +29,16 @@
         <spring.boot.version>3.2.0</spring.boot.version>
         <spring.cloud.version>2023.0.0</spring.cloud.version>
         <spring.cloud.alibaba.version>2023.0.1.0</spring.cloud.alibaba.version>
-        <mybatis.plus.version>3.5.5</mybatis.plus.version>
+        <mybatis.plus.version>3.5.7</mybatis.plus.version>
         <hutool.version>5.8.22</hutool.version>
         <milvus.version>2.4.0</milvus.version>
         <mysql.version>8.0.33</mysql.version>
+        <!-- LangChain4j RAG框架版本 -->
+        <langchain4j.version>0.32.0</langchain4j.version>
+        <!-- Commons IO工具类 -->
+        <commons-io.version>2.16.1</commons-io.version>
+        <!-- Knife4j接口文档版本 -->
+        <knife4j.version>4.5.0</knife4j.version>
     </properties>
 
     <!-- 构建配置 -->
@@ -99,6 +105,63 @@
                 <groupId>com.ai.cs</groupId>
                 <artifactId>ai-cs-api</artifactId>
                 <version>1.0.0</version>
+            </dependency>
+            
+            <!-- LangChain4j核心框架 -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <!-- Ollama集成（本地大模型+Embedding） -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-ollama</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <!-- Chroma向量库 -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-chroma</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <!-- PDF文档解析 -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-document-parser-apache-pdfbox</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <!-- Tika通用文档解析(txt,word,md) -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-document-parser-apache-tika</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            
+            <!-- Redis缓存 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-redis</artifactId>
+                <version>${spring.boot.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-pool2</artifactId>
+                <version>2.12.0</version>
+            </dependency>
+            
+            <!-- Commons IO工具类 -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
+            </dependency>
+            
+            <!-- Knife4j Swagger接口文档 -->
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

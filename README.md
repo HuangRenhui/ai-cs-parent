@@ -5,7 +5,11 @@ A microservices-based intelligent customer service platform powered by Large Lan
 ## ✨ Key Features
 
 - 🤖 **AI-Powered Chat**: Intelligent conversations using LLM with context awareness
-- 📚 **Knowledge Base (RAG)**: FAQ management with vector similarity search
+- 📚 **Knowledge Base (RAG)**: FAQ management with vector similarity search and advanced RAG (Retrieval-Augmented Generation)
+  - Multi-format document support (PDF, TXT, DOCX, MD)
+  - Vector embedding and Chroma/Milvus storage
+  - Rerank optimization for improved retrieval accuracy
+  - Multi-user session isolation with Redis persistence
 - 🎫 **Work Order System**: Smart ticket creation and workflow management
 - 💬 **Real-time Communication**: WebSocket-based instant messaging
 - 👥 **Customer Management**: Comprehensive customer information management
@@ -58,8 +62,10 @@ For a complete list of documentation, see [Docs Index](docs/README.md).
 
 **AI/ML**:
 - LLM Integration (Qwen, ChatGLM, etc.)
-- RAG (Retrieval-Augmented Generation)
-- Embedding Services
+- RAG (Retrieval-Augmented Generation) with LangChain4j
+- Embedding Services (Ollama, nomic-embed-text)
+- Vector Database (Chroma, Milvus)
+- Reranking Models (BGE-Reranker)
 
 ## 📁 Project Structure
 

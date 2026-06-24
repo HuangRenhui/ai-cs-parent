@@ -5,7 +5,12 @@
 ## ✨ 核心特性
 
 - 🤖 **AI 智能对话**：基于 LLM 的智能问答，支持上下文会话管理
-- 📚 **知识库检索 (RAG)**：FAQ 管理 + 向量相似度搜索
+- 📚 **知识库检索 (RAG)**：FAQ 管理 + 向量相似度搜索 + 高级 RAG（检索增强生成）
+  - 多格式文档支持（PDF、TXT、DOCX、MD）
+  - 向量化存储与检索（Chroma/Milvus）
+  - Rerank 重排优化，提升检索精度
+  - 多用户会话隔离，Redis 持久化存储
+  - **文档版本管理**：支持文档版本跟踪、回退和对比
 - 🎫 **工单系统**：智能工单创建与流转管理
 - 💬 **实时通信**：基于 WebSocket 的即时消息推送
 - 👥 **客户管理**：完整的客户信息管理系统
@@ -58,8 +63,10 @@ mvn clean install -DskipTests
 
 **AI/ML**：
 - LLM 集成 (通义千问、ChatGLM 等)
-- RAG (检索增强生成)
-- Embedding 向量化服务
+- RAG (检索增强生成) 基于 LangChain4j
+- Embedding 向量化服务 (Ollama, nomic-embed-text)
+- 向量数据库 (Chroma, Milvus)
+- 重排模型 (BGE-Reranker)
 
 ## 📁 项目结构
 
