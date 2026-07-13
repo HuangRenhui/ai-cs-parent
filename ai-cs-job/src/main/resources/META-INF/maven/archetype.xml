@@ -1,9 +1,0 @@
-﻿<archetype>
-  <id>ai-cs-job</id>
-  <sources>
-    <source>src/main/java/com/ai/cs/job/App.java</source>
-  </sources>
-  <testSources>
-    <source>src/test/java/com/ai/cs/job/AppTest.java</source>
-  </testSources>
-</archetype>

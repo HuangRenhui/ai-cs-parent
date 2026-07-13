@@ -1,9 +1,0 @@
-﻿<archetype>
-  <id>ai-cs-workorder</id>
-  <sources>
-    <source>src/main/java/com/ai/cs/workorder/App.java</source>
-  </sources>
-  <testSources>
-    <source>src/test/java/com/ai/cs/workorder/AppTest.java</source>
-  </testSources>
-</archetype>

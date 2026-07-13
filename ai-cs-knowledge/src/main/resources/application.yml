@@ -68,6 +68,17 @@ rag:
 upload:
   temp-path: ./upload-tmp
 
+# 图片处理配置
+image:
+  storage-path: ./uploads/images
+  thumbnail-path: ./uploads/thumbnails
+  max-file-size: 10  # 最大文件大小（MB）
+  compress-threshold: 500  # 压缩阈值（KB），超过此大小自动压缩
+  compress-quality: 0.7  # 压缩质量（0.0-1.0）
+  thumbnail-width: 200  # 缩略图宽度（像素）
+  thumbnail-height: 200  # 缩略图高度（像素）
+  allowed-formats: jpg,jpeg,png,gif,webp,bmp  # 允许的图片格式
+
 # knife4j文档配置
 knife4j:
   enable: true

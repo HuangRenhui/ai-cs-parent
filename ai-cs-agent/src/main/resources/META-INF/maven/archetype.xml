@@ -1,9 +1,0 @@
-<archetype>
-  <id>ai-cs-agent</id>
-  <sources>
-    <source>src/main/java/com/ai/cs/ai/agent/App.java</source>
-  </sources>
-  <testSources>
-    <source>src/test/java/com/ai/cs/ai/agent/AppTest.java</source>
-  </testSources>
-</archetype>

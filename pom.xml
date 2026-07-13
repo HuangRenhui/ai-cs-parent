@@ -39,6 +39,10 @@
         <commons-io.version>2.16.1</commons-io.version>
         <!-- Knife4j接口文档版本 -->
         <knife4j.version>4.5.0</knife4j.version>
+        <!-- 图片处理库 Thumbnailator -->
+        <thumbnailator.version>0.4.20</thumbnailator.version>
+        <!-- Apache Commons Imaging 元数据提取 -->
+        <commons-imaging.version>1.0-alpha3</commons-imaging.version>
     </properties>
 
     <!-- 构建配置 -->
@@ -162,6 +166,20 @@
                 <groupId>com.github.xiaoymin</groupId>
                 <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
                 <version>${knife4j.version}</version>
+            </dependency>
+            
+            <!-- 图片处理库 Thumbnailator（压缩、缩放、格式转换） -->
+            <dependency>
+                <groupId>net.coobird</groupId>
+                <artifactId>thumbnailator</artifactId>
+                <version>${thumbnailator.version}</version>
+            </dependency>
+            
+            <!-- Apache Commons Imaging（EXIF元数据提取） -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-imaging</artifactId>
+                <version>${commons-imaging.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

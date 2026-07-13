@@ -25,6 +25,14 @@ public class AiAgentService {
     @Resource
     private WorkOrderFeign workOrderFeign;
 
+    /**
+     *
+     * @param dto
+     * @return
+     *
+     * @author huangrenhui
+     * @date 2026/7/13 15:03
+     * @description 机器人自动回复功能 */
     public String chat(ChatDTO dto) {
         String userMsg = dto.getMsg();
         String history = dto.getHistory();
