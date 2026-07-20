@@ -17,6 +17,13 @@ spring:
             allowed-methods: "*"
             allowed-headers: "*"
             allow-credentials: false
+      # Redis限流（需要引入 spring-boot-starter-data-redis-reactive）
+      # default-filters:
+      #   - name: RequestRateLimiter
+      #     args:
+      #       key-resolver: "#{@ipKeyResolver}"
+      #       redis-rate-limiter.replenishRate: 10
+      #       redis-rate-limiter.burstCapacity: 20
       routes:
         # WebSocket聊天路由
         - id: websocket-route

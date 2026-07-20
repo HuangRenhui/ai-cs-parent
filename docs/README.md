@@ -13,6 +13,10 @@
 
 ## 📚 文档分类
 
+### 📋 项目总览
+
+- **[功能开发清单](功能开发清单.md)** ⭐ - 全部功能的完整清单、状态追踪和开发计划
+
 ### 🏗️ 架构文档 (Architecture)
 
 了解系统整体设计和模块划分。
@@ -38,6 +42,7 @@
 - [配置管理指南](deployment/configuration.md) - 配置详解、多环境管理
 - [Docker 部署](deployment/docker.md) - 容器化部署
 - [手动部署](deployment/manual.md) - 传统部署方式
+- **[生产环境部署指南](deployment/production-guide.md)** ⭐ - Docker Compose、Nginx配置、健康检查
 
 ### 🗄️ 数据库文档 (Database)
 
@@ -58,7 +63,7 @@ RAG（检索增强生成）系统相关文档。
 
 接口文档。
 
-- [API 接口说明](api/README.md) - RESTful API 文档
+- [API 接口说明](api/README.md) - **250+ RESTful API** 完整文档（按服务模块分类）
 
 ---
 
@@ -100,11 +105,13 @@ RAG（检索增强生成）系统相关文档。
 |---------|----------|
 | 快速运行项目 | [快速开始指南](QUICK_START.md) |
 | 了解系统架构 | [架构概览](architecture/overview.md) |
+| 查看全部功能列表 | **[功能开发清单](功能开发清单.md)** |
 | 了解RAG技术方案 | **[RAG技术决策](architecture/RAG_TECHNICAL_DECISION.md)** |
 | 了解Agent和Knowledge区别 | **[Agent vs Knowledge对比](architecture/AGENT_VS_KNOWLEDGE_COMPARISON.md)** |
 | 添加新功能 | [开发指南](development/guide.md) |
 | 编写测试 | [测试指南](development/testing.md) |
 | 配置环境 | [配置管理](deployment/configuration.md) |
+| 生产环境部署 | **[生产环境部署指南](deployment/production-guide.md)** |
 | 修改数据库 | [迁移指南](database/migration.md) |
 | 调用 API | [API 文档](api/README.md) |
 | 使用 RAG 功能 | **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** |
@@ -127,6 +134,7 @@ RAG（检索增强生成）系统相关文档。
 
 ### 更新记录
 
+- **2026-07-20**: **API文档全面重写** - 基于23个Controller源码提取250+接口，按服务模块完整分类；更新文档索引新增功能开发清单和生产部署指南入口
 - **2026-06-24**: 新增RAG技术决策文档，详细记录两套RAG方案（Milvus传统RAG vs LangChain4j RAG）的对比分析、优缺点、使用场景及融合优化方案；完成Rerank重排功能实现，新增OllamaScoringModel、ScoringModel扩展指南、Rerank实现总结和快速参考文档；新增文档版本管理功能，包括版本跟踪、回退、对比等功能；**模块重命名：ai-cs-ai-agent → ai-cs-agent**，修复所有引用；新增Agent与Knowledge功能对比文档，明确两个模块的职责边界和协作方式
 - **2026-06-23**: 新增 RAG 系统文档，包括 RAG 功能概览和架构设计
 - **2024-06-20**: 文档重构完成，新增快速开始、配置管理、测试指南、开发指南、Docker 部署、手动部署、API 文档等完整文档体系

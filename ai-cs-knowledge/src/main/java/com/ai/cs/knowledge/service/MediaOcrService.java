@@ -178,16 +178,43 @@ public class MediaOcrService {
      */
     public String transcribeWithWhisper(File audioFile, String whisperApiUrl) throws IOException {
         try {
-            // 构建multipart请求上传音频文件
-            // 实际实现需要根据Whisper API格式调整
             log.info("调用Whisper API: {}", whisperApiUrl);
 
-            // TODO: 实现HTTP multipart上传并解析转录结果
-            return "[Whisper转录结果]";
+            // 构建 OkHttp multipart 请求上传音频文件
+            okhttp3.MediaType mediaType = okhttp3.MediaType.parse("audio/wav");
+            okhttp3.RequestBody fileBody = okhttp3.RequestBody.create(audioFile, mediaType);
+            okhttp3.MultipartBody body = new okhttp3.MultipartBody.Builder()
+                    .setType(okhttp3.MultipartBody.FORM)
+                    .addFormDataPart("file", audioFile.getName(), fileBody)
+                    .addFormDataPart("model", "whisper-1")
+                    .addFormDataPart("response_format", "json")
+                    .build();
+
+            okhttp3.Request request = new okhttp3.Request.Builder()
+                    .url(whisperApiUrl)
+                    .post(body)
+                    .build();
+
+            try (okhttp3.Response response = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                    .build().newCall(request).execute()) {
+
+                if (response.isSuccessful() && response.body() != null) {
+                    String responseBody = response.body().string();
+                    com.alibaba.fastjson.JSONObject json = com.alibaba.fastjson.JSON.parseObject(responseBody);
+                    String text = json.getString("text");
+                    log.info("Whisper转录成功: {} 字符", text != null ? text.length() : 0);
+                    return text != null ? text : "";
+                } else {
+                    log.warn("Whisper API返回非200: {}", response.code());
+                    return "[Whisper转录失败: HTTP " + response.code() + "]";
+                }
+            }
 
         } catch (Exception e) {
             log.error("Whisper转录失败: {}", e.getMessage());
-            return "[Whisper转录失败]";
+            return "[Whisper转录失败: " + e.getMessage() + "]";
         }
     }
 

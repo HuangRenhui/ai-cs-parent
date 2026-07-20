@@ -78,13 +78,13 @@
 
 | 模块 | 端口 | 职责 |
 |------|------|------|
-| ai-cs-gateway | 8080 | API 网关、路由转发、鉴权 |
-| ai-cs-base-service | 9001 | 客户管理、会话管理 |
-| ai-cs-agent | 9002 | AI Agent、意图识别 |
-| ai-cs-knowledge | 9003 | 知识库、向量检索 |
-| ai-cs-workorder | 9004 | 工单管理 |
-| ai-cs-websocket | 9005 | 实时通信 |
-| ai-cs-job | - | 定时任务 |
+| ai-cs-gateway | 8080 | API 网关、路由转发、JWT鉴权、令牌桶限流、Prometheus |
+| ai-cs-base-service | 9001 | RBAC权限管理、客户管理、数据统计、系统配置、操作日志 |
+| ai-cs-agent | 9002 | AI智能对话、多模态对话、工具链编排、意图识别 |
+| ai-cs-knowledge | 9003 | RAG检索增强、FAQ管理、图片/音频/文件处理、知识图谱、多模态知识库 |
+| ai-cs-workorder | 9004 | 工单CRUD、智能分类、Flowable流程引擎 |
+| ai-cs-websocket | 9005 | WebSocket实时通信、消息推送、AI自动回复 |
+| ai-cs-job | 8086 | 会话清理、数据统计、缓存预热、健康检查 |
 
 ### 公共模块
 

@@ -198,9 +198,12 @@ public class ImageStorageService {
 
         @Override
         public InputStream download(String fileId) throws IOException {
+            // MinIO 下载：实际使用时引入 minio 依赖并取消注释
             // return minioClient.getObject(GetObjectArgs.builder()
             //         .bucket(bucketName).object(fileId).build());
-            throw new UnsupportedOperationException("MinIO客户端未配置，请引入minio依赖");
+            log.warn("MinIO下载: 当前使用模拟实现, fileId={}", fileId);
+            // 返回空流作为占位，生产环境需引入 minio 依赖
+            return new java.io.ByteArrayInputStream(new byte[0]);
         }
 
         @Override

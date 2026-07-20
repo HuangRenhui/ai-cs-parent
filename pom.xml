@@ -63,6 +63,11 @@
         <neo4j.version>5.15.0</neo4j.version>
         <!-- JGraphT 图算法库 -->
         <jgrapht.version>1.5.2</jgrapht.version>
+        <!-- 测试依赖版本 -->
+        <junit-jupiter.version>5.10.1</junit-jupiter.version>
+        <mockito.version>5.8.0</mockito.version>
+        <!-- Resilience4j 熔断限流 -->
+        <resilience4j.version>2.2.0</resilience4j.version>
     </properties>
 
     <!-- 构建配置 -->
@@ -289,6 +294,35 @@
                 <groupId>io.micrometer</groupId>
                 <artifactId>micrometer-registry-prometheus</artifactId>
                 <version>1.12.0</version>
+            </dependency>
+
+            <!-- JUnit Jupiter (JUnit 5) -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit-jupiter.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Mockito -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Resilience4j 熔断限流 -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-spring-boot3</artifactId>
+                <version>${resilience4j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
