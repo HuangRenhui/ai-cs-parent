@@ -7,8 +7,8 @@
 
     <!-- 搜索栏 -->
     <div class="search-bar">
-      <el-input v-model="searchKeyword" placeholder="搜索工单号或内容" style="width: 300px;" />
-      <el-select v-model="statusFilter" placeholder="状态筛选">
+      <el-input v-model="searchKeyword" placeholder="搜索工单号或内容" class="search-input" />
+      <el-select v-model="statusFilter" placeholder="状态筛选" class="search-select">
         <el-option label="全部" value="" />
         <el-option label="待处理" value="待处理" />
         <el-option label="已完成" value="已完成" />
@@ -167,5 +167,41 @@ onMounted(loadWorkOrders)
   gap: 12px;
   margin-bottom: 16px;
   align-items: center;
+  flex-wrap: wrap;
+}
+.search-input {
+  width: 300px;
+}
+.search-select {
+  width: 140px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .workorder-container {
+    padding: 12px;
+  }
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .header h2 {
+    font-size: 18px;
+  }
+  .search-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .search-input {
+    width: 100%;
+  }
+  .search-select {
+    width: 100%;
+  }
+  /* 表格横向滚动 */
+  :deep(.el-table) {
+    font-size: 13px;
+  }
 }
 </style>

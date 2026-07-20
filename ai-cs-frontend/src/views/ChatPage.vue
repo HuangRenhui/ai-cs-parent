@@ -258,4 +258,39 @@ const createOrder = async () => {
 .chat-input input {
   flex: 1;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .chat-header {
+    padding: 12px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chat-header h2 {
+    font-size: 16px;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .header-actions .el-button {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+  .chat-messages {
+    padding: 10px;
+  }
+  .content {
+    max-width: 85%;
+    font-size: 14px;
+  }
+  .chat-input {
+    padding: 10px;
+    gap: 8px;
+  }
+  .avatar {
+    width: 32px;
+    height: 32px;
+  }
+}
 </style>
