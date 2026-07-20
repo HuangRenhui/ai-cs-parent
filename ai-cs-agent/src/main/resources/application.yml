@@ -14,3 +14,17 @@ ai:
     api-secret: 替换为你的通义API-SECRET
     model: qwen-turbo
     url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
+
+# Knife4j API文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: AI智能体服务接口文档
+    description: AI对话、多模态对话、工具链编排
+    version: 1.0.0
+    group:
+      default:
+        group-name: AI智能体
+        api-rule: package
+        api-rule-resources:
+          - com.ai.cs.aiagent.controller

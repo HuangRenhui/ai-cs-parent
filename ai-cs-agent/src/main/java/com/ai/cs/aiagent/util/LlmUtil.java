@@ -1,12 +1,5 @@
 package com.ai.cs.aiagent.util;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 17:54
- * @description TODO
- */
-
 import com.ai.cs.aiagent.config.LlmProperties;
 import com.ai.cs.common.dto.IntentDTO;
 import com.alibaba.fastjson.JSON;
@@ -28,6 +21,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 大模型调用工具类
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 17:54
+ */
 @Slf4j
 @Component
 public class LlmUtil {

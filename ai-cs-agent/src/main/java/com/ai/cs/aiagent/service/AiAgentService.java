@@ -1,21 +1,21 @@
 package com.ai.cs.aiagent.service;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 17:55
- * @description TODO
- */
-
-
 import com.ai.cs.aiagent.util.LlmUtil;
 import com.ai.cs.api.feign.WorkOrderFeign;
 import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.dto.WorkOrderDTO;
+import com.ai.cs.common.enums.IntentEnum;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
 
+/**
+ * AI智能体服务
+ * 负责意图识别、业务路由和自动回复
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 17:55
+ */
 @Service
 public class AiAgentService {
 
@@ -26,13 +26,11 @@ public class AiAgentService {
     private WorkOrderFeign workOrderFeign;
 
     /**
+     * 机器人自动回复
      *
-     * @param dto
-     * @return
-     *
-     * @author huangrenhui
-     * @date 2026/7/13 15:03
-     * @description 机器人自动回复功能 */
+     * @param dto 聊天DTO
+     * @return 回复内容
+     */
     public String chat(ChatDTO dto) {
         String userMsg = dto.getMsg();
         String history = dto.getHistory();
@@ -43,14 +41,19 @@ public class AiAgentService {
         String intent = intentDTO.getIntent();
         String entity = intentDTO.getEntity();
 
-        // 2. 业务路由
-        return switch (intent) {
-            case "转人工" -> "已为您转接人工客服，请耐心等待~";
-            case "查物流" -> handleQueryLogistics(entity);
-            case "退款" -> handleRefund(entity);
-            case "投诉" -> handleComplaint(sessionId, userMsg);
-            default -> llmUtil.chatReply(userMsg, history);
-        };
+        // 2. 业务路由（使用 IntentEnum 进行类型安全匹配）
+        if (IntentEnum.TO_AGENT.getName().equals(intent)) {
+            return "已为您转接人工客服，请耐心等待~";
+        } else if (IntentEnum.QUERY_LOGISTICS.getName().equals(intent)) {
+            return handleQueryLogistics(entity);
+        } else if (IntentEnum.REFUND.getName().equals(intent)) {
+            return handleRefund(entity);
+        } else if (IntentEnum.COMPLAINT.getName().equals(intent)) {
+            return handleComplaint(sessionId, userMsg);
+        } else if ("咨询".equals(intent) || "查知识库".equals(intent)) {
+            return handleKnowledgeQuery(userMsg, history);
+        }
+        return llmUtil.chatReply(userMsg, history);
     }
 
     // 查物流
@@ -78,5 +81,10 @@ public class AiAgentService {
         orderDTO.setCustomerId(0L);
         workOrderFeign.createOrder(orderDTO);
         return "非常抱歉给您带来不佳体验！您的投诉工单已成功提交，我们会尽快处理。";
+    }
+
+    // 知识库查询
+    private String handleKnowledgeQuery(String userMsg, String history) {
+        return llmUtil.chatReply(userMsg, history);
     }
 }
