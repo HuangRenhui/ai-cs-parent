@@ -1,18 +1,19 @@
 package com.ai.cs.base.controller;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 18:14
- * @description TODO
- */
 import com.ai.cs.base.entity.Customer;
 import com.ai.cs.base.service.CustomerService;
 import com.ai.cs.common.result.Result;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
+
 import java.util.List;
 
+/**
+ * 客户控制器
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 18:14
+ */
 @RestController
 @RequestMapping("/customer")
 public class CustomerController {
