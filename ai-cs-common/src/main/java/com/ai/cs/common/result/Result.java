@@ -1,14 +1,13 @@
 package com.ai.cs.common.result;
 
+import lombok.Data;
+
 /**
+ * 统一返回结果
  *
  * @author huangrenhui
  * @date 2026/6/11 14:56
- * @description TODO
  */
-
-import lombok.Data;
-
 @Data
 public class Result<T> {
     private Integer code;

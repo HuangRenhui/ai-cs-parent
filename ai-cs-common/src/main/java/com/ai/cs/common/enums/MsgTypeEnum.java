@@ -1,13 +1,11 @@
 package com.ai.cs.common.enums;
 
 /**
+ * 消息类型枚举
  *
  * @author huangrenhui
  * @date 2026/6/11 17:43
- * @description TODO
  */
-
-// 消息类型
 public enum MsgTypeEnum {
     USER(1, "用户消息"),
     AI(2, "AI消息"),

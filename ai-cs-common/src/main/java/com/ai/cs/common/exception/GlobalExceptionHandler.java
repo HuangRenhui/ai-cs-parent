@@ -1,17 +1,16 @@
 package com.ai.cs.common.exception;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 18:01
- * @description 全局统一异常处理
- */
-
 import com.ai.cs.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 全局统一异常处理
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 18:01
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
