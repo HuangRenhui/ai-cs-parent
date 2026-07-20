@@ -1,0 +1,37 @@
+server:
+  port: 8086
+spring:
+  application:
+    name: ai-cs-job
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 你的数据库密码
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password:
+    database: 0
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# 定时任务配置
+job:
+  # 清理过期会话（每天凌晨2点）
+  clean-expired-session: true
+  # 会话过期天数
+  session-expire-days: 7
+  # 数据统计（每小时）
+  statistics-hourly: true
+  # 每日数据统计（凌晨0:05）
+  statistics-daily: true
+  # 缓存预热（每天凌晨3点）
+  cache-warmup: true
+  # 系统健康检查（每5分钟）
+  health-check: true
