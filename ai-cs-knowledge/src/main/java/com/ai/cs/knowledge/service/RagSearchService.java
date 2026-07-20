@@ -1,22 +1,24 @@
 package com.ai.cs.knowledge.service;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/18 00:17
- * @description RAG检索增强生成服务
- */
 import com.ai.cs.knowledge.entity.KnowledgeFaq;
 import com.ai.cs.knowledge.util.EmbeddingClient;
 import com.ai.cs.knowledge.util.LlmClient;
 import com.ai.cs.knowledge.util.MilvusUtil;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * RAG检索增强生成服务
+ *
+ * @author huangrenhui
+ * @date 2026/6/18 00:17
+ */
+@Slf4j
 @Service
 public class RagSearchService {
 
@@ -77,7 +79,7 @@ public class RagSearchService {
         if (faq.getMilvusId() != null && !faq.getMilvusId().isEmpty()) {
             boolean deleted = milvusUtil.deleteById(faq.getMilvusId());
             if (!deleted) {
-                System.err.println("警告: 删除旧向量失败, milvusId=" + faq.getMilvusId());
+                log.warn("删除旧向量失败, milvusId={}", faq.getMilvusId());
             }
         }
         
@@ -109,7 +111,7 @@ public class RagSearchService {
         // 批量删除旧向量
         if (!deleteIds.isEmpty()) {
             int deletedCount = milvusUtil.batchDelete(deleteIds);
-            System.out.println("批量删除旧向量: " + deletedCount + " 条");
+            log.info("批量删除旧向量: {} 条", deletedCount);
         }
 
         // 批量向量化并插入新数据
@@ -123,7 +125,7 @@ public class RagSearchService {
                 contents.add(faq.getQuestion());
             } catch (Exception e) {
                 // 记录错误但继续处理其他FAQ
-                System.err.println("FAQ ID " + faq.getId() + " 向量化失败: " + e.getMessage());
+                log.warn("FAQ ID {} 向量化失败: {}", faq.getId(), e.getMessage());
             }
         }
 
@@ -157,7 +159,7 @@ public class RagSearchService {
                 contents.add(faq.getQuestion());
             } catch (Exception e) {
                 // 记录错误但继续处理其他FAQ
-                System.err.println("FAQ ID " + faq.getId() + " 向量化失败: " + e.getMessage());
+                log.warn("FAQ ID {} 向量化失败: {}", faq.getId(), e.getMessage());
             }
         }
 

@@ -137,4 +137,26 @@ public class ImageMetadata {
      * 压缩比例
      */
     private double compressionRatio;
+    
+    // ========== 向量化相关字段 ==========
+    
+    /**
+     * 向量库中的记录ID
+     */
+    private String vectorId;
+    
+    /**
+     * 是否已向量化
+     */
+    private boolean vectorized;
+    
+    /**
+     * 向量库集合名称
+     */
+    private String vectorCollection;
+    
+    /**
+     * 用于向量化的描述文本（基于元数据自动生成）
+     */
+    private String vectorDescription;
 }

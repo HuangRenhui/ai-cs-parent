@@ -51,4 +51,58 @@ public class ImageProperties {
      * 允许的图片格式
      */
     private String[] allowedFormats = {"jpg", "jpeg", "png", "gif", "webp", "bmp"};
+    
+    // ========== 向量化配置 ==========
+    
+    /**
+     * 是否启用上传后自动向量化
+     */
+    private boolean autoVectorize = true;
+    
+    /**
+     * 图片向量化集合名称（Chroma collection）
+     */
+    private String vectorCollection = "image_embeddings";
+    
+    /**
+     * 图片语义搜索返回的最大结果数
+     */
+    private int searchMaxResults = 5;
+    
+    /**
+     * 图片语义搜索最低相似度阈值
+     */
+    private double searchMinScore = 0.5;
+
+    // ========== 对象存储与CDN配置 ==========
+
+    /**
+     * CDN加速域名（配置后图片URL使用CDN地址）
+     */
+    private String cdnDomain = "";
+
+    /**
+     * 对象存储类型: local, minio, oss, cos
+     */
+    private String storageType = "local";
+
+    /**
+     * 对象存储Endpoint
+     */
+    private String storageEndpoint = "";
+
+    /**
+     * 对象存储AccessKey
+     */
+    private String storageAccessKey = "";
+
+    /**
+     * 对象存储SecretKey
+     */
+    private String storageSecretKey = "";
+
+    /**
+     * 对象存储Bucket名称
+     */
+    private String storageBucket = "images";
 }

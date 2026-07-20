@@ -5,7 +5,6 @@ import com.ai.cs.knowledge.mapper.DocumentVersionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +22,13 @@ import java.util.List;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, DocumentVersion> {
     
     private final DocumentVersionMapper documentVersionMapper;
+
+    public DocumentVersionService(DocumentVersionMapper documentVersionMapper) {
+        this.documentVersionMapper = documentVersionMapper;
+    }
     
     /**
      * 创建新版本

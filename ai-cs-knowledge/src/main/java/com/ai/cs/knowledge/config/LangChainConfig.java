@@ -70,13 +70,35 @@ public class LangChainConfig {
 
 
     /**
-     * Chroma向量库Bean
+     * Chroma向量库Bean（文档知识库）
      */
     @Bean
     public EmbeddingStore<dev.langchain4j.data.segment.TextSegment> embeddingStore() {
         return ChromaEmbeddingStore.builder()
                 .baseUrl(ragProperties.getChroma().getBaseUrl())
                 .collectionName(ragProperties.getChroma().getCollectionName())
+                .build();
+    }
+
+    /**
+     * 图片向量库Bean（图片资源向量化存储）
+     */
+    @Bean
+    public EmbeddingStore<dev.langchain4j.data.segment.TextSegment> imageEmbeddingStore() {
+        return ChromaEmbeddingStore.builder()
+                .baseUrl(ragProperties.getChroma().getBaseUrl())
+                .collectionName("image_embeddings")
+                .build();
+    }
+
+    /**
+     * 音频向量库Bean（音频资源向量化存储）
+     */
+    @Bean
+    public EmbeddingStore<dev.langchain4j.data.segment.TextSegment> audioEmbeddingStore() {
+        return ChromaEmbeddingStore.builder()
+                .baseUrl(ragProperties.getChroma().getBaseUrl())
+                .collectionName("audio_embeddings")
                 .build();
     }
 

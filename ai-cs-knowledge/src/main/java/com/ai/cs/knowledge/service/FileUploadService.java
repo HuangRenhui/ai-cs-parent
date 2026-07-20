@@ -1,6 +1,7 @@
 package com.ai.cs.knowledge.service;
 
 import com.ai.cs.knowledge.config.UploadProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +14,7 @@ import java.util.UUID;
  * 文件上传服务
  * 负责处理知识库文档的上传、临时存储和清理
  */
+@Slf4j
 @Service
 public class FileUploadService {
 
@@ -57,7 +59,7 @@ public class FileUploadService {
             FileUtils.forceDelete(new File(filePath));
         } catch (IOException e) {
             // 记录警告但不抛出异常，避免影响主流程
-            System.err.println("警告: 删除临时文件失败: " + filePath + ", 错误: " + e.getMessage());
+            log.warn("删除临时文件失败: {}, 错误: {}", filePath, e.getMessage());
         }
     }
 }

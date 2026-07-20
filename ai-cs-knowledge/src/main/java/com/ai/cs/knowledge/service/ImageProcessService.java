@@ -7,8 +7,6 @@ import net.coobird.thumbnailator.Thumbnails;
 import net.coobird.thumbnailator.geometry.Positions;
 import org.apache.commons.imaging.Imaging;
 import org.apache.commons.imaging.ImagingException;
-import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
-import org.apache.commons.imaging.formats.jpeg.iptc.JpegIptcRewriter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -31,9 +29,12 @@ import java.util.UUID;
 public class ImageProcessService {
 
     private final ImageProperties imageProperties;
+    private ImageVectorService imageVectorService;
 
-    public ImageProcessService(ImageProperties imageProperties) {
+    public ImageProcessService(ImageProperties imageProperties,
+                                org.springframework.beans.factory.ObjectProvider<ImageVectorService> imageVectorServiceProvider) {
         this.imageProperties = imageProperties;
+        this.imageVectorService = imageVectorServiceProvider.getIfAvailable();
         // 初始化存储目录
         initDirectories();
     }
@@ -93,6 +94,16 @@ public class ImageProcessService {
         // 7. 生成缩略图
         String thumbnailPath = generateThumbnail(storagePath.toFile(), fileId, extension);
         metadata.setThumbnailPath(thumbnailPath);
+        
+        // 8. 自动向量化入库（如果启用）
+        if (imageProperties.isAutoVectorize() && imageVectorService != null) {
+            try {
+                imageVectorService.vectorize(metadata);
+                log.info("图片自动向量化完成: fileId={}", fileId);
+            } catch (Exception e) {
+                log.warn("图片自动向量化失败（不影响上传）: fileId={}, 错误: {}", fileId, e.getMessage());
+            }
+        }
         
         return metadata;
     }

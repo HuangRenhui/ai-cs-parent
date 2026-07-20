@@ -24,6 +24,19 @@
             <groupId>com.ai.cs</groupId>
             <artifactId>ai-cs-common</artifactId>
         </dependency>
+        
+        <!-- Fastjson JSON处理（直接依赖，非仅传递依赖） -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+        </dependency>
+        
+        <!-- OkHttp HTTP客户端（直接依赖） -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+        </dependency>
+        
         <!-- Milvus Java SDK -->
         <dependency>
             <groupId>io.milvus</groupId>
@@ -96,6 +109,43 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-imaging</artifactId>
+        </dependency>
+        
+        <!-- Apache Commons Compress（压缩解压ZIP/RAR/7Z） -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+        </dependency>
+        <!-- XZ Utils（7z格式解压支持） -->
+        <dependency>
+            <groupId>org.tukaani</groupId>
+            <artifactId>xz</artifactId>
+        </dependency>
+        
+        <!-- JAVE2 音频视频处理库（基于FFmpeg） -->
+        <dependency>
+            <groupId>ws.schild</groupId>
+            <artifactId>jave-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ws.schild</groupId>
+            <artifactId>jave-nativebin-win64</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ws.schild</groupId>
+            <artifactId>jave-nativebin-linux64</artifactId>
+        </dependency>
+        
+        <!-- Neo4j 图数据库 Java驱动 -->
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+        </dependency>
+        
+        <!-- JGraphT 图算法库 -->
+        <dependency>
+            <groupId>org.jgrapht</groupId>
+            <artifactId>jgrapht-core</artifactId>
         </dependency>
     </dependencies>
 </project>

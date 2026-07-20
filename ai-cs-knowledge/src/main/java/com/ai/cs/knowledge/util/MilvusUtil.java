@@ -1,13 +1,5 @@
 package com.ai.cs.knowledge.util;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 17:58
- * @description Milvus 连接工具类 & 知识库检索
- * Milvus 提前执行集合创建,用于存储问题向量,此处提供基础增删查代码
- */
-
 import io.milvus.client.MilvusClient;
 import io.milvus.client.MilvusServiceClient;
 import io.milvus.grpc.SearchResultData;
@@ -27,6 +19,14 @@ import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+/**
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 17:58
+ * @description Milvus 连接工具类 & 知识库检索
+ * Milvus 提前执行集合创建,用于存储问题向量,此处提供基础增删查代码
+ */
 
 @Slf4j
 @Component

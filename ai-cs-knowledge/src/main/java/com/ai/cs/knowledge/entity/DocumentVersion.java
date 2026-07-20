@@ -3,6 +3,7 @@ package com.ai.cs.knowledge.entity;
 import com.ai.cs.common.entity.BaseEntity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 文档版本管理实体
@@ -12,6 +13,7 @@ import lombok.Data;
  * @date 2026/6/24
  */
 @Data
+@EqualsAndHashCode(callSuper = false)
 @TableName("cs_document_version")
 public class DocumentVersion extends BaseEntity {
     

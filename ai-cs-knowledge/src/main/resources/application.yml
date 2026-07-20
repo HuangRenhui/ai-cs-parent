@@ -68,6 +68,20 @@ rag:
 upload:
   temp-path: ./upload-tmp
 
+# 文件管理配置（查看、下载、解压）
+file:
+  root-path: ./uploads  # 文件根存储路径
+  decompress-path: ./uploads/decompressed  # 解压文件输出目录
+  package-path: ./uploads/packages  # 批量打包临时目录
+  max-download-size: 100  # 单个文件最大下载大小（MB）
+  max-decompress-size: 500  # 压缩包最大解压大小（MB），防止Zip炸弹
+  max-decompress-files: 1000  # 最大解压文件数量，防止Zip炸弹
+  previewable-types: image/,audio/,video/,application/pdf  # 允许预览的文件MIME类型前缀
+  allowed-archive-formats: zip,7z,tar,gz,bz2,tgz  # 允许解压的压缩格式
+  enable-access-control: false  # 是否启用文件访问Token验证
+  token-expire-seconds: 3600  # 文件访问Token过期时间（秒）
+  chunk-size: 1048576  # 断点续传分片大小（字节，默认1MB）
+
 # 图片处理配置
 image:
   storage-path: ./uploads/images
@@ -78,6 +92,118 @@ image:
   thumbnail-width: 200  # 缩略图宽度（像素）
   thumbnail-height: 200  # 缩略图高度（像素）
   allowed-formats: jpg,jpeg,png,gif,webp,bmp  # 允许的图片格式
+  # 图片向量化配置
+  auto-vectorize: true  # 上传后自动向量化
+  vector-collection: image_embeddings  # Chroma向量集合名称
+  search-max-results: 5  # 语义搜索最大返回结果数
+  search-min-score: 0.5  # 语义搜索最低相似度阈值
+  # 对象存储与CDN配置（增强功能）
+  cdn-domain: ""  # CDN加速域名，配置后图片访问使用CDN地址
+  storage-type: local  # 对象存储类型: local/minio/oss/cos
+  storage-endpoint: ""  # 对象存储Endpoint
+  storage-access-key: ""  # 对象存储AccessKey
+  storage-secret-key: ""  # 对象存储SecretKey
+  storage-bucket: images  # 对象存储Bucket
+
+# 音频处理配置
+audio:
+  storage-path: ./uploads/audios
+  max-file-size: 50  # 最大文件大小（MB）
+  compress-threshold: 5120  # 压缩阈值（KB），超过此大小自动压缩
+  target-bitrate: 128  # 目标比特率（kbps）
+  target-sample-rate: 44100  # 目标采样率（Hz）
+  allowed-formats: mp3,wav,aac,flac,ogg,wma,m4a  # 允许的音频格式
+  enable-waveform: true  # 是否启用波形图生成
+  waveform-width: 800  # 波形图宽度（像素）
+  waveform-height: 200  # 波形图高度（像素）
+  # 音频向量化配置
+  auto-vectorize: true  # 上传后自动向量化
+  vector-collection: audio_embeddings  # Chroma向量集合名称
+  search-max-results: 5  # 语义搜索最大返回结果数
+  search-min-score: 0.5  # 语义搜索最低相似度阈值
+  enable-transcription: false  # 是否启用音频转录（Whisper）增强向量化
+  transcription-url: http://localhost:9000/transcribe  # 转录服务地址
+
+# 多媒体增强功能配置
+media-enhance:
+  ocr:
+    enabled: true  # 是否启用OCR文字识别
+    type: local  # OCR类型: local/tesseract/remote
+    remote-url: ""  # 远程OCR API地址
+    remote-key: ""  # 远程OCR API密钥
+  moderation:
+    enabled: true  # 是否启用AI内容审核
+    auto-moderate: false  # 上传后自动审核
+    block-level: HIGH  # 自动拦截等级: SAFE/LOW/MEDIUM/HIGH/BLOCKED
+    remote-url: ""  # 远程审核API地址
+    remote-key: ""  # 远程审核API密钥
+  tagging:
+    enabled: true  # 是否启用智能标签
+    auto-tag: true  # 上传后自动打标签
+  asr:
+    enabled: true  # 是否启用语音识别
+    engine: whisper  # ASR引擎: whisper/azure/aliyun
+    whisper-url: http://localhost:9000/asr  # Whisper服务地址
+  deduplication:
+    enabled: true  # 是否启用去重检测
+    image-threshold: 10  # 图片相似度阈值（汉明距离）
+    audio-threshold: 0.85  # 音频相似度阈值（余弦相似度）
+  hotlink:
+    enabled: false  # 是否启用防盗链
+    token-expire: 3600  # Token过期时间（秒）
+    referer-whitelist: localhost,127.0.0.1  # Referer白名单（逗号分隔）
+  multimodal:
+    enabled: true  # 是否启用多模态检索
+    default-modalities: image,audio,text  # 默认检索模态
+
+# 多模态知识库配置
+multimodal-knowledge:
+  enabled: true  # 是否启用多模态知识库
+  vision-model:
+    type: ollama  # 多模态大模型类型: ollama/openai/local
+    model-name: llava:latest  # 视觉模型名称
+    base-url: http://localhost:11434  # API地址
+    api-key: ""  # API密钥
+    max-tokens: 2048
+    temperature: 0.1
+  video:
+    frame-interval: 5  # 视频帧提取间隔（秒）
+    max-frames: 20  # 每次最多提取帧数
+    frame-storage-path: ./uploads/video-frames  # 帧图片存储路径
+    max-summary-length: 500
+    analysis-model: llava:latest
+  hybrid-search:
+    text-weight: 1.0  # 文本检索权重
+    image-weight: 0.8  # 图片检索权重
+    audio-weight: 0.6  # 音频检索权重
+    video-weight: 0.5  # 视频检索权重
+    fusion-method: rrf  # 融合方法: rrf/weighted/linear
+    rrf-k: 60  # RRF参数k
+
+# 知识图谱配置
+knowledge-graph:
+  enabled: false  # 是否启用知识图谱（需要Neo4j等图数据库）
+  database-type: neo4j  # 图数据库类型: neo4j/nebula
+  neo4j:
+    uri: bolt://localhost:7687
+    username: neo4j
+    password: password
+    database: neo4j
+  nebula:
+    address: localhost:9669
+    username: root
+    password: nebula
+    space: knowledge_graph
+  build:
+    auto-build: false  # 是否自动从文档构建图谱
+    max-entities: 10000
+    max-relations: 50000
+    min-confidence: 0.6
+  extraction:
+    method: hybrid  # 抽取方式: rule/llm/hybrid
+    llm-model: qwen:7b
+    max-text-length: 2000
+    relation-types: 包含,依赖,属于,等同于,引用,相关,前置,后置
 
 # knife4j文档配置
 knife4j:

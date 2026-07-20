@@ -3,6 +3,7 @@ package com.ai.cs.knowledge.controller;
 import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.entity.ImageMetadata;
 import com.ai.cs.knowledge.service.ImageProcessService;
+import com.ai.cs.knowledge.service.ImageVectorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,9 +33,12 @@ import java.util.Map;
 public class ImageController {
 
     private final ImageProcessService imageProcessService;
+    private final ImageVectorService imageVectorService;
 
-    public ImageController(ImageProcessService imageProcessService) {
+    public ImageController(ImageProcessService imageProcessService,
+                           ImageVectorService imageVectorService) {
         this.imageProcessService = imageProcessService;
+        this.imageVectorService = imageVectorService;
     }
 
     /**
@@ -63,6 +67,10 @@ public class ImageController {
             result.put("compressed", metadata.isCompressed());
             result.put("compressionRatio", metadata.getCompressionRatio());
             result.put("uploadTime", metadata.getUploadTime());
+            result.put("vectorized", metadata.isVectorized());
+            result.put("vectorId", metadata.getVectorId());
+            result.put("vectorCollection", metadata.getVectorCollection());
+            result.put("vectorDescription", metadata.getVectorDescription());
             
             log.info("图片上传处理完成: {}", metadata.getFileId());
             return Result.success(result);
@@ -276,6 +284,89 @@ public class ImageController {
         } catch (Exception e) {
             log.error("删除图片失败", e);
             return Result.fail("删除失败: " + e.getMessage());
+        }
+    }
+
+    // ========== 图片向量化与语义搜索接口 ==========
+
+    /**
+     * 手动向量化单个图片
+     */
+    @PostMapping("/vectorize")
+    @Operation(summary = "手动向量化图片", description = "根据图片元数据手动执行向量化并存入向量库")
+    public Result<Map<String, Object>> vectorizeImage(
+            @Parameter(description = "文件ID") @RequestParam String fileId,
+            @Parameter(description = "原始文件名") @RequestParam String originalFilename,
+            @Parameter(description = "存储路径") @RequestParam String storagePath,
+            @Parameter(description = "图片格式") @RequestParam(defaultValue = "jpg") String format,
+            @Parameter(description = "图片宽度") @RequestParam(defaultValue = "0") int width,
+            @Parameter(description = "图片高度") @RequestParam(defaultValue = "0") int height,
+            @Parameter(description = "图片描述") @RequestParam(required = false) String description) {
+        try {
+            ImageMetadata metadata = new ImageMetadata();
+            metadata.setFileId(fileId);
+            metadata.setOriginalFilename(originalFilename);
+            metadata.setStoragePath(storagePath);
+            metadata.setFormat(format);
+            metadata.setWidth(width);
+            metadata.setHeight(height);
+            metadata.setDescription(description);
+            metadata.setUploadTime(java.time.LocalDateTime.now());
+
+            String vectorId = imageVectorService.vectorize(metadata);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("fileId", fileId);
+            result.put("vectorId", vectorId);
+            result.put("vectorized", true);
+            result.put("vectorCollection", metadata.getVectorCollection());
+            result.put("vectorDescription", metadata.getVectorDescription());
+
+            return Result.success(result);
+
+        } catch (Exception e) {
+            log.error("图片向量化失败", e);
+            return Result.fail("向量化失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 图片语义搜索
+     */
+    @GetMapping("/search")
+    @Operation(summary = "图片语义搜索", description = "基于自然语言描述搜索相似图片")
+    public Result<Map<String, Object>> searchImages(
+            @Parameter(description = "搜索查询文本") @RequestParam String query,
+            @Parameter(description = "最大返回结果数") @RequestParam(defaultValue = "5") int maxResults) {
+        try {
+            java.util.List<Map<String, Object>> results = imageVectorService.search(query, maxResults);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("query", query);
+            response.put("totalResults", results.size());
+            response.put("results", results);
+
+            return Result.success(response);
+
+        } catch (Exception e) {
+            log.error("图片语义搜索失败", e);
+            return Result.fail("搜索失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除图片向量
+     */
+    @DeleteMapping("/vector/{vectorId}")
+    @Operation(summary = "删除图片向量", description = "根据向量ID从向量库中删除图片向量")
+    public Result<Void> deleteImageVector(
+            @Parameter(description = "向量记录ID") @PathVariable String vectorId) {
+        try {
+            imageVectorService.deleteByVectorId(vectorId);
+            return Result.success(null);
+        } catch (Exception e) {
+            log.error("删除图片向量失败", e);
+            return Result.fail("删除向量失败: " + e.getMessage());
         }
     }
 }

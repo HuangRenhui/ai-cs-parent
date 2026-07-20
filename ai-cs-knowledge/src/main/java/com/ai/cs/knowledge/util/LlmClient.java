@@ -1,11 +1,5 @@
 package com.ai.cs.knowledge.util;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/18 00:20
- * @description 大语言模型客户端
- */
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +11,13 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+
+/**
+ *
+ * @author huangrenhui
+ * @date 2026/6/18 00:20
+ * @description 大语言模型客户端
+ */
 
 @Slf4j
 @Component

@@ -12,7 +12,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  * @author huangrenhui
  * @date 2026/6/11 17:57
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.ai.cs")
 @EnableDiscoveryClient
 @EnableConfigurationProperties
 public class KnowledgeApplication {
