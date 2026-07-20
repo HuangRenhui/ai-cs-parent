@@ -1,16 +1,16 @@
 package com.ai.cs.workorder;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 18:15
- * @description TODO
- */
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
-@SpringBootApplication
+/**
+ * 工单服务启动类
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 18:15
+ */
+@SpringBootApplication(scanBasePackages = "com.ai.cs")
 @EnableDiscoveryClient
 public class WorkOrderApplication {
     public static void main(String[] args) {
