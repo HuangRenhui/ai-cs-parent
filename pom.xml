@@ -43,6 +43,26 @@
         <thumbnailator.version>0.4.20</thumbnailator.version>
         <!-- Apache Commons Imaging 元数据提取 -->
         <commons-imaging.version>1.0-alpha3</commons-imaging.version>
+        <!-- Apache Commons Compress 压缩解压 -->
+        <commons-compress.version>1.26.1</commons-compress.version>
+        <!-- XZ Utils（7z解压支持） -->
+        <xz.version>1.9</xz.version>
+        <!-- JAVE2 音频视频处理库 -->
+        <jave.version>3.3.1</jave.version>
+        <!-- Fastjson JSON处理库 -->
+        <fastjson.version>1.2.83</fastjson.version>
+        <!-- OkHttp HTTP客户端 -->
+        <okhttp.version>4.12.0</okhttp.version>
+        <!-- Apache Commons Pool2 -->
+        <commons-pool2.version>2.12.0</commons-pool2.version>
+        <!-- JWT -->
+        <jjwt.version>0.12.3</jjwt.version>
+        <!-- Flowable 工作流引擎 -->
+        <flowable.version>7.0.0</flowable.version>
+        <!-- Neo4j 图数据库驱动 -->
+        <neo4j.version>5.15.0</neo4j.version>
+        <!-- JGraphT 图算法库 -->
+        <jgrapht.version>1.5.2</jgrapht.version>
     </properties>
 
     <!-- 构建配置 -->
@@ -151,7 +171,7 @@
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-pool2</artifactId>
-                <version>2.12.0</version>
+                <version>${commons-pool2.version}</version>
             </dependency>
             
             <!-- Commons IO工具类 -->
@@ -180,6 +200,95 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-imaging</artifactId>
                 <version>${commons-imaging.version}</version>
+            </dependency>
+            
+            <!-- Apache Commons Compress（压缩解压ZIP/RAR/7Z） -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
+            </dependency>
+            <!-- XZ Utils（7z格式解压支持） -->
+            <dependency>
+                <groupId>org.tukaani</groupId>
+                <artifactId>xz</artifactId>
+                <version>${xz.version}</version>
+            </dependency>
+            
+            <!-- Fastjson JSON处理库 -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>fastjson</artifactId>
+                <version>${fastjson.version}</version>
+            </dependency>
+            
+            <!-- OkHttp HTTP客户端 -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+            
+            <!-- JAVE2 音频视频处理库 -->
+            <dependency>
+                <groupId>ws.schild</groupId>
+                <artifactId>jave-core</artifactId>
+                <version>${jave.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ws.schild</groupId>
+                <artifactId>jave-nativebin-win64</artifactId>
+                <version>${jave.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ws.schild</groupId>
+                <artifactId>jave-nativebin-linux64</artifactId>
+                <version>${jave.version}</version>
+            </dependency>
+            
+            <!-- JWT -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            
+            <!-- Flowable 工作流引擎 -->
+            <dependency>
+                <groupId>org.flowable</groupId>
+                <artifactId>flowable-spring-boot-starter</artifactId>
+                <version>${flowable.version}</version>
+            </dependency>
+            
+            <!-- Neo4j 图数据库 Java驱动 -->
+            <dependency>
+                <groupId>org.neo4j.driver</groupId>
+                <artifactId>neo4j-java-driver</artifactId>
+                <version>${neo4j.version}</version>
+            </dependency>
+            
+            <!-- JGraphT 图算法库 -->
+            <dependency>
+                <groupId>org.jgrapht</groupId>
+                <artifactId>jgrapht-core</artifactId>
+                <version>${jgrapht.version}</version>
+            </dependency>
+            
+            <!-- Micrometer Prometheus 监控指标 -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>1.12.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
