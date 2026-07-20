@@ -1,12 +1,5 @@
 package com.ai.cs.websocket.endpoint;
 
-/**
- *
- * @author huangrenhui
- * @date 2026/6/11 16:47
- * @description TODO
- */
-
 import com.ai.cs.api.feign.AiAgentFeign;
 import com.ai.cs.common.constant.RedisKeyConst;
 import com.ai.cs.common.dto.ChatDTO;
@@ -22,6 +15,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * WebSocket 聊天端点
+ *
+ * @author huangrenhui
+ * @date 2026/6/11 16:47
+ */
 @Component
 @ServerEndpoint("/ws/{sessionId}")
 public class ChatWebSocket {

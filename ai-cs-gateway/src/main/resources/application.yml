@@ -33,3 +33,49 @@ spring:
           uri: lb://ai-cs-knowledge
           predicates:
             - Path=/knowledge/**
+        # 客户管理路由
+        - id: customer-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/customer/**
+        # 工单路由
+        - id: workorder-route
+          uri: lb://ai-cs-workorder
+          predicates:
+            - Path=/workorder/**
+        # 认证路由
+        - id: auth-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/auth/**
+        # 统计路由
+        - id: statistics-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/statistics/**
+        # 系统管理路由
+        - id: system-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/system/**
+        # 会话管理路由
+        - id: session-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/session/**
+        # Actuator 监控路由
+        - id: actuator-route
+          uri: lb://ai-cs-base-service
+          predicates:
+            - Path=/actuator/**
+
+# Actuator 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
