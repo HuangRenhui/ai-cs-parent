@@ -4,6 +4,7 @@ import com.ai.cs.api.feign.AiAgentFeign;
 import com.ai.cs.common.constant.RedisKeyConst;
 import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.result.Result;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,7 @@ import java.util.concurrent.TimeUnit;
  * @author huangrenhui
  * @date 2026/6/11 16:47
  */
+@Slf4j
 @Component
 @ServerEndpoint("/ws/{sessionId}")
 public class ChatWebSocket {
@@ -77,7 +79,8 @@ public class ChatWebSocket {
 
     @OnError
     public void onError(Session session, Throwable throwable) {
-        throwable.printStackTrace();
+        log.error("WebSocket会话异常: sessionId={}", 
+                session != null ? session.getId() : "unknown", throwable);
     }
 
     /** 推送消息 */
@@ -87,7 +90,7 @@ public class ChatWebSocket {
             try {
                 session.getBasicRemote().sendText(content);
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("WebSocket推送消息失败: sessionId={}", sessionId, e);
             }
         }
     }

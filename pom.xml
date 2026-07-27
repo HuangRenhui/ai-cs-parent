@@ -79,12 +79,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.11.0</version>
                     <configuration>
-                        <source>17</source>
-                        <target>17</target>
+                        <release>17</release>
                         <encoding>UTF-8</encoding>
-                        <compilerArgs>
-                            <arg>-Xlint:-options</arg>
-                        </compilerArgs>
                     </configuration>
                 </plugin>
             </plugins>
@@ -120,8 +116,8 @@
             </dependency>
             <!-- MySQL -->
             <dependency>
-                <groupId>mysql</groupId>
-                <artifactId>mysql-connector-java</artifactId>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
                 <version>${mysql.version}</version>
             </dependency>
             <!-- 子模块依赖 -->

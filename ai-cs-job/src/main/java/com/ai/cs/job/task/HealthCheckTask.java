@@ -2,6 +2,7 @@ package com.ai.cs.job.task;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,7 @@ import jakarta.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 系统健康检查定时任务
@@ -24,6 +26,9 @@ public class HealthCheckTask {
 
     @Resource
     private JdbcTemplate jdbcTemplate;
+
+    @Resource
+    private RedisTemplate<String, String> redisTemplate;
 
     @Value("${job.health-check:true}")
     private boolean healthCheckEnabled;
@@ -78,14 +83,14 @@ public class HealthCheckTask {
     }
 
     /**
-     * 检查Redis连接（通过尝试获取统计缓存）
+     * 检查Redis连接（通过尝试读写来验证连接）
      */
     private boolean checkRedis() {
         try {
-            // 尝试读写Redis来验证连接
             String testKey = "health:check:" + System.currentTimeMillis();
-            // Redis检查依赖RedisTemplate，如果没有配置则跳过
-            return true;
+            redisTemplate.opsForValue().set(testKey, "1", 10, TimeUnit.SECONDS);
+            String value = redisTemplate.opsForValue().get(testKey);
+            return "1".equals(value);
         } catch (Exception e) {
             log.error("[健康检查] Redis连接异常: {}", e.getMessage());
             return false;
