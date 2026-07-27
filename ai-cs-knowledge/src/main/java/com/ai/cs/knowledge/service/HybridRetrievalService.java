@@ -45,6 +45,8 @@ public class HybridRetrievalService {
     private final MultimodalKnowledgeProperties multimodalProperties;
     private final LlmClient llmClient;
     private final RagProperties ragProperties;
+    private final RetrievalOptimizerService retrievalOptimizer;
+    private final PromptTemplateService promptTemplateService;
 
     /**
      * 混合检索结果条目
@@ -71,11 +73,13 @@ public class HybridRetrievalService {
     // ========== 混合检索核心方法 ==========
 
     /**
-     * 混合多模态检索
+     * 混合多模态检索（优化版）
+     * 集成质量过滤、相似度阈值过滤、召回数量限制、上下文压缩
+     *
      * @param query 查询文本
      * @param modalities 需要检索的模态列表: TEXT, IMAGE, AUDIO, VIDEO
      * @param topK 每种模态返回的结果数
-     * @return 融合排序后的结果列表
+     * @return 融合排序+优化过滤后的结果列表
      */
     public List<HybridSearchResult> hybridSearch(String query, List<String> modalities, int topK) {
         List<HybridSearchResult> allResults = new ArrayList<>();
@@ -100,8 +104,41 @@ public class HybridRetrievalService {
             }
         }
 
-        // 多模态结果融合排序
-        return fusionSort(allResults, query);
+        // ===== 优化流程 =====
+        // Step 1: 多模态结果融合排序
+        List<HybridSearchResult> fused = fusionSort(allResults, query);
+
+        // Step 2: 转换为 RetrievalItem 进行质量过滤
+        List<RetrievalOptimizerService.RetrievalItem> items = fused.stream()
+                .map(r -> {
+                    var item = new RetrievalOptimizerService.RetrievalItem(r.id, r.content, r.score);
+                    item.sourceType = r.sourceType;
+                    item.metadata = r.metadata;
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        // Step 3: 文档质量过滤（移除低质、重复文档）
+        items = retrievalOptimizer.filterByQuality(items);
+
+        // Step 4: 相似度阈值过滤（移除不相关文档）
+        items = retrievalOptimizer.filterBySimilarity(items);
+
+        // Step 5: 限制召回数量（控制上下文长度）
+        items = retrievalOptimizer.limitRecallCount(items);
+
+        // Step 6: 上下文压缩（对过长上下文截取关键信息）
+        items = retrievalOptimizer.compressContext(items);
+
+        // 转换回 HybridSearchResult
+        return items.stream()
+                .map(item -> {
+                    HybridSearchResult r = new HybridSearchResult(item.id, item.content, "TEXT", item.combinedScore);
+                    r.sourceType = item.sourceType;
+                    r.metadata = item.metadata;
+                    return r;
+                })
+                .collect(Collectors.toList());
     }
 
     /**
@@ -124,26 +161,26 @@ public class HybridRetrievalService {
                 return "未找到与您问题相关的知识。";
             }
 
-            // 构建综合Prompt
-            StringBuilder context = new StringBuilder("【多模态知识库综合检索】\n\n");
+            // 构建多模态上下文文档列表
             Map<String, List<HybridSearchResult>> grouped = results.stream()
                     .collect(Collectors.groupingBy(r -> r.modality));
 
+            List<String> contextDocs = new ArrayList<>();
             for (Map.Entry<String, List<HybridSearchResult>> entry : grouped.entrySet()) {
                 String modalityName = getModalityName(entry.getKey());
-                context.append(String.format("## %s知识\n", modalityName));
                 for (HybridSearchResult r : entry.getValue()) {
-                    context.append(String.format("- [来源:%s] %s\n", r.sourceTitle != null ? r.sourceTitle : "未知", r.content));
+                    contextDocs.add(String.format("[%s/%s] %s",
+                            modalityName,
+                            r.sourceTitle != null ? r.sourceTitle : "未知",
+                            r.content));
                 }
-                context.append("\n");
             }
 
-            String prompt = String.format(
-                    "基于以下多模态知识库信息回答用户问题。请综合运用文本、图片、音频等多种信息源。\n\n%s\n用户问题: %s\n\n回答:",
-                    context.toString(), question
-            );
+            // 使用 PromptTemplateService 构建增强 Prompt
+            String systemPrompt = promptTemplateService.buildSystemPrompt();
+            String userPrompt = promptTemplateService.buildUserPrompt(question, contextDocs);
 
-            return llmClient.call(prompt);
+            return llmClient.callWithSystem(systemPrompt, userPrompt);
         } catch (Exception e) {
             log.error("多模态混合问答失败", e);
             return "多模态问答出错: " + e.getMessage();

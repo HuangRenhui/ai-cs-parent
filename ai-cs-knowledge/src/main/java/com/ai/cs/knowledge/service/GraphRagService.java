@@ -22,13 +22,16 @@ public class GraphRagService {
     private final KnowledgeGraphService graphService;
     private final HybridRetrievalService hybridRetrievalService;
     private final LlmClient llmClient;
+    private final PromptTemplateService promptTemplateService;
 
     public GraphRagService(KnowledgeGraphService graphService,
                             HybridRetrievalService hybridRetrievalService,
-                            LlmClient llmClient) {
+                            LlmClient llmClient,
+                            PromptTemplateService promptTemplateService) {
         this.graphService = graphService;
         this.hybridRetrievalService = hybridRetrievalService;
         this.llmClient = llmClient;
+        this.promptTemplateService = promptTemplateService;
     }
 
     // ========== GraphRAG 核心问答 ==========
@@ -54,8 +57,9 @@ public class GraphRagService {
             // 3. 融合两种上下文构建增强Prompt
             String enhancedPrompt = buildEnhancedPrompt(question, graphContext, vectorResults);
 
-            // 4. 调用LLM生成最终回答
-            String answer = llmClient.call(enhancedPrompt);
+            // 4. 调用LLM生成最终回答（使用增强Prompt模板）
+            String systemPrompt = promptTemplateService.buildSystemPrompt();
+            String answer = llmClient.callWithSystem(systemPrompt, enhancedPrompt);
             result.put("answer", answer);
 
             // 5. 提取引用来源

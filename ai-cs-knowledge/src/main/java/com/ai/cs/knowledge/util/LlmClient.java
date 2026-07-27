@@ -44,17 +44,57 @@ public class LlmClient {
     }
 
     /**
-     * 基础调用大模型方法
+     * 基础调用大模型方法（兼容旧接口，单 user 消息）
      * @param prompt 完整提示词（可携带约束/检索文档上下文）
      * @return 模型返回回答
      */
     public String call(String prompt) throws IOException {
-        // 组装请求体，通用OpenAI兼容格式
         Map<String, Object> userMsg = Map.of("role", "user", "content", prompt);
+        return callWithMessages(List.of(userMsg));
+    }
+
+    /**
+     * 带 System Prompt 的调用方法（推荐）
+     * <p>
+     * 支持 system + user 双消息模式，充分利用模型的角色理解能力
+     *
+     * @param systemPrompt 系统提示词（角色限定、格式约束、边界约束）
+     * @param userPrompt   用户提示词（问题、上下文、CoT、Few-shot）
+     * @return 模型返回回答
+     */
+    public String callWithSystem(String systemPrompt, String userPrompt) throws IOException {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+        }
+        messages.add(Map.of("role", "user", "content", userPrompt));
+        return callWithMessages(messages);
+    }
+
+    /**
+     * 通用多消息调用方法
+     * <p>
+     * 支持任意 roles 组合：system + user + assistant 多轮对话
+     *
+     * @param messages 消息列表，每项包含 "role" 和 "content"
+     * @return 模型返回回答
+     */
+    @SuppressWarnings("unchecked")
+    public String callWithMessages(List<Map<String, Object>> messages) throws IOException {
+        // 组装请求体，通用OpenAI兼容格式
         JSONObject reqBody = new JSONObject();
         reqBody.put("model", model);
         reqBody.put("temperature", temperature); // 降低随机性，减少幻觉
-        reqBody.put("messages", List.of(userMsg));
+
+        // 转换消息格式
+        List<JSONObject> msgList = new ArrayList<>();
+        for (Map<String, Object> msg : messages) {
+            JSONObject jsonMsg = new JSONObject();
+            jsonMsg.put("role", msg.get("role"));
+            jsonMsg.put("content", msg.get("content"));
+            msgList.add(jsonMsg);
+        }
+        reqBody.put("messages", msgList);
 
         RequestBody body = RequestBody.create(
                 JSON.toJSONString(reqBody),

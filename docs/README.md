@@ -58,6 +58,7 @@ RAG（检索增强生成）系统相关文档。
 
 - **[RAG使用指南](../ai-cs-knowledge/RAG_USAGE_GUIDE.md)** ⭐ - 完整的功能说明、API文档和Rerank重排详解
 - **[ScoringModel扩展实践](../ai-cs-knowledge/SCORING_MODEL_GUIDE.md)** ⭐ - 如何扩展自定义评分模型（Jina/Cohere/ONNX）
+- **[Prompt调试指南](../ai-cs-knowledge/PROMPT_DEBUG_GUIDE.md)** ⭐ - 六大策略Prompt调试、8种预设模板、运行时API
 
 ### 🔌 API 文档 (API)
 
@@ -134,6 +135,7 @@ RAG（检索增强生成）系统相关文档。
 
 ### 更新记录
 
+- **2026-07-27**: **Prompt调试增强+RAG检索优化** - 新增语义分层切片、检索召回优化、六大策略Prompt调试功能；功能开发清单新增2项至59项；API文档新增Prompt调试API章节（258+接口）
 - **2026-07-20**: **API文档全面重写** - 基于23个Controller源码提取250+接口，按服务模块完整分类；更新文档索引新增功能开发清单和生产部署指南入口
 - **2026-06-24**: 新增RAG技术决策文档，详细记录两套RAG方案（Milvus传统RAG vs LangChain4j RAG）的对比分析、优缺点、使用场景及融合优化方案；完成Rerank重排功能实现，新增OllamaScoringModel、ScoringModel扩展指南、Rerank实现总结和快速参考文档；新增文档版本管理功能，包括版本跟踪、回退、对比等功能；**模块重命名：ai-cs-ai-agent → ai-cs-agent**，修复所有引用；新增Agent与Knowledge功能对比文档，明确两个模块的职责边界和协作方式
 - **2026-06-23**: 新增 RAG 系统文档，包括 RAG 功能概览和架构设计

@@ -191,8 +191,9 @@ llm:
 - **FAQ 知识库管理**：传统 CRUD + 自动向量化 + Milvus/Chroma 语义检索 + 批量向量化
 - **RAG 检索增强生成**：
   - 多格式文档上传与解析（PDF、TXT、DOCX、MD）
-  - 智能文本切片（可配置 chunkSize 和 overlap）
+  - 语义分层切片（SemanticSplitService）：按段落/标题自然语义边界切分，支持语义切片和分层切片两种模式
   - 向量化存储 + 两阶段检索（向量召回 + Rerank 重排）
+  - 检索召回优化（RetrievalOptimizerService）：文档质量过滤、相似度阈值过滤、召回数量限制、上下文摘要压缩
   - 基于 Ollama 本地大模型的智能问答
   - 多用户会话隔离（Redis 持久化）、防幻觉 Prompt 模板
 - **文档版本管理**：版本跟踪、回退、对比（MD5/大小）、去重检测、状态管理
@@ -204,8 +205,17 @@ llm:
 - **多模态知识库**：图片/音频/视频知识入库和问答、混合模态检索（RRF/加权/线性融合）、跨模态语义搜索
 - **知识图谱**：节点/关系管理、LLM实体关系自动抽取、图谱可视化（ECharts格式）、图谱问答、子图谱查询、Neo4j/NebulaGraph双数据库支持
 - **知识库增强**：3D模型支持、Neo4j集成（Cypher查询/社区检测/PageRank）、图谱推理引擎、时序知识图谱、多语言图谱融合、Graph Embedding（链接预测/节点聚类）、GraphRAG、图谱演化
+- **Prompt 调试增强**（六大策略）：
+  - 角色限定：指定身份（Java后端工程师、业务面试官等），System Prompt角色定义
+  - 格式约束：支持 text/json/table/bullet/strict 五种输出格式
+  - CoT思维链：分步推理指令，提升数学/逻辑准确率
+  - Few-shot少样本：附带1-3个标准答案示例，复刻格式逻辑
+  - 边界约束：禁止编造数据、无数据兜底回复
+  - 上下文约束：可配置窗口大小、自动截断、仅基于上下文回答
+  - 8种预设模板：java-engineer / interviewer / json-output / cot-reasoning / few-shot / strict-boundary / table-output / full-combo
+  - 运行时调试API：查看/切换预设、预览Prompt、动态修改配置
 
-**Controller层（12个）**:
+**Controller层（13个）**:
 - `FaqController` (`/knowledge`)：FAQ CRUD + 向量化 + 语义检索
 - `RagController` (`/api/rag`)：RAG对话 + 文档上传 + 会话记忆管理
 - `DocumentVersionController` (`/api/document/version`)：版本管理
@@ -218,6 +228,12 @@ llm:
 - `MultimodalKnowledgeController` (`/api/multimodal-knowledge`)：多模态知识库
 - `MultimodalSearchController` (`/api/multimodal`)：多模态检索
 - `KnowledgeEnhancedController` (`/api/knowledge-enhanced`)：增强功能（3D/Neo4j/推理/GraphRAG等）
+- `PromptDebugController` (`/api/prompt`)：Prompt调试（查看配置/切换预设/预览Prompt/动态修改）
+
+**核心Service层（新增）**:
+- `PromptTemplateService`：Prompt模板构建，实现六大策略组装，8种预设模板
+- `SemanticSplitService`：语义分层切片，按段落/句子自然边界切分
+- `RetrievalOptimizerService`：检索召回优化，质量过滤/相似度过滤/数量限制/上下文压缩
 
 **数据表**:
 - cs_knowledge_faq、cs_document_version
@@ -342,7 +358,7 @@ ai-cs-common (基础依赖 - JWT工具、统一结果、异常处理、DTO)
     │     └─ ai-cs-base-service (调用 KnowledgeFeign)
     │
     ├─ ai-cs-gateway    (JWT过滤器 + 路由配置)
-    ├─ ai-cs-knowledge  (12个Controller, 最大模块)
+    ├─ ai-cs-knowledge  (13个Controller, 最大模块)
     ├─ ai-cs-websocket  (独立服务, 无Feign依赖)
     ├─ ai-cs-job        (独立服务, JdbcTemplate + RedisTemplate)
     └─ ai-cs-frontend   (独立构建, 通过网关访问后端)

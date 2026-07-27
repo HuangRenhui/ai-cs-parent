@@ -33,6 +33,7 @@ public class DocumentLoadService {
     private final EmbeddingModel embeddingModel;
     private final RagProperties ragProperties;
     private final DocumentVersionService documentVersionService;
+    private final SemanticSplitService semanticSplitService;
 
     /**
      * 加载PDF文件入库
@@ -104,12 +105,8 @@ public class DocumentLoadService {
             Path path = Paths.get(filePath);
             Document document = FileSystemDocumentLoader.loadDocument(path, parser);
 
-            // 递归分割文本块
-            var splitter = DocumentSplitters.recursive(
-                    ragProperties.getSplit().getChunkSize(),
-                    ragProperties.getSplit().getChunkOverlap()
-            );
-            var segments = splitter.split(document);
+            // 使用语义分层切片（替代单一的递归分割）
+            var segments = semanticSplitService.split(document);
 
             if (segments == null || segments.isEmpty()) {
                 return "文档内容为空或无法解析";

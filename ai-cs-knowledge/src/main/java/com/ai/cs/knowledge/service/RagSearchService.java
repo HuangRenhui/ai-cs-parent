@@ -13,7 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * RAG检索增强生成服务
+ * RAG检索增强生成服务（优化版）
+ * 集成文档质量过滤、相似度阈值过滤、上下文压缩、Prompt模板增强等优化
  *
  * @author huangrenhui
  * @date 2026/6/18 00:17
@@ -24,37 +25,55 @@ public class RagSearchService {
 
     @Resource
     private MilvusUtil milvusUtil;
-    
+
     @Resource
     private EmbeddingClient embeddingClient;
-    
+
     @Resource
     private LlmClient llmClient;
 
-    // 构建带防幻觉约束的Prompt
-    private String buildRagPrompt(String question, List<String> docs) {
-        StringBuilder context = new StringBuilder();
-        context.append("【参考真实业务文档】\n");
-        docs.forEach(d -> context.append(d).append("\n"));
-        // Prompt约束，禁止编造数据
-        String rule = """
-                严格遵守规则：
-                1. 仅使用上面参考文档内容回答，禁止编造文档编号、接口、业务数据；
-                2. 无相关信息直接回复「暂无相关资料」，禁止猜测。
-                """;
-        return context + rule + "\n用户问题：" + question;
-    }
+    @Resource
+    private RetrievalOptimizerService retrievalOptimizer;
 
-    // 完整语义检索+大模型问答
+    @Resource
+    private PromptTemplateService promptTemplateService;
+
+    /**
+     * 完整语义检索+大模型问答（优化版）
+     * 集成质量过滤、召回限制、上下文压缩、Prompt模板增强
+     */
     public String semanticChat(String question) throws IOException {
         // 1. 问题向量化
         List<Float> vec = embeddingClient.getVector(question);
-        // 2. Milvus语义检索真实文档
-        List<String> relatedDocs = milvusUtil.search(vec, 3);
-        // 3. 拼接约束Prompt
-        String fullPrompt = buildRagPrompt(question, relatedDocs);
-        // 4. 调用大模型生成答案
-        return llmClient.call(fullPrompt);
+        // 2. Milvus语义检索真实文档（召回更多候选，后续过滤）
+        List<String> rawDocs = milvusUtil.search(vec, 10);
+
+        // 3. 转换为 RetrievalItem 进行质量过滤
+        List<RetrievalOptimizerService.RetrievalItem> items = new ArrayList<>();
+        for (int i = 0; i < rawDocs.size(); i++) {
+            String doc = rawDocs.get(i);
+            if (doc == null || doc.isBlank()) continue;
+            double score = 1.0 - (i * 0.05); // 向量检索排名越前分数越高
+            items.add(new RetrievalOptimizerService.RetrievalItem("doc_" + i, doc, score));
+        }
+
+        // 4. 质量过滤 + 相似度过滤 + 数量限制 + 上下文压缩
+        items = retrievalOptimizer.filterByQuality(items);
+        items = retrievalOptimizer.filterBySimilarity(items);
+        items = retrievalOptimizer.limitRecallCount(items);
+        items = retrievalOptimizer.compressContext(items);
+
+        // 5. 提取最终文档内容
+        List<String> relatedDocs = items.stream()
+                .map(item -> item.content)
+                .toList();
+
+        // 6. 使用 PromptTemplateService 构建增强 Prompt（角色+格式+CoT+Few-shot+边界+上下文）
+        String systemPrompt = promptTemplateService.buildSystemPrompt();
+        String userPrompt = promptTemplateService.buildUserPrompt(question, relatedDocs);
+
+        // 7. 调用大模型生成答案（支持 system + user 双消息）
+        return llmClient.callWithSystem(systemPrompt, userPrompt);
     }
 
     /**

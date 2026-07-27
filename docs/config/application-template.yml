@@ -64,6 +64,76 @@ milvus:
   port: ${MILVUS_PORT:19530}
   collection-name: ${MILVUS_COLLECTION:faq_vectors}
 
+# ===== RAG 私有化配置（LangChain4j + Ollama + Chroma）=====
+rag:
+  ollama:
+    base-url: ${OLLAMA_URL:http://localhost:11434}
+    llm-model: ${OLLAMA_LLM:qwen:7b}
+    embedding-model: ${OLLAMA_EMBEDDING:nomic-embed-text}
+    rerank-model: ${OLLAMA_RERANK:bge-reranker:latest}
+    temperature: ${OLLAMA_TEMPERATURE:0.1}
+  chroma:
+    base-url: ${CHROMA_URL:http://localhost:8000}
+    collection-name: private_knowledge_base
+    persist-path: ./chroma-db
+  split:
+    chunk-size: 500
+    chunk-overlap: 80
+    # === 语义切片 ===
+    semantic-split-enabled: true
+    semantic-separators: "\n\n,。,；;！!？?,.，"
+    # === 分层切片 ===
+    hierarchical-split-enabled: true
+    paragraph-max-length: 2000
+    sentence-max-length: 500
+    min-chunk-length: 50
+  retrieve:
+    top-k: 5
+    rerank-top-k: 3
+    min-score: 0.6
+    # === 召回过滤 ===
+    vector-min-score: 0.5
+    bm25-min-score: 0.3
+    max-recall-docs: 10
+    # === 文档质量过滤 ===
+    quality-filter-enabled: true
+    min-content-length: 20
+    max-duplicate-ratio: 0.8
+    # === 上下文压缩 ===
+    summary-compress-enabled: true
+    max-context-length: 4000
+    compress-target-length: 2000
+  chat-memory:
+    ttl: 604800
+  # ===== Prompt 调试配置（六大策略） =====
+  prompt:
+    enabled: true
+    debug-log: ${PROMPT_DEBUG_LOG:false}
+    # === 1. 角色限定 ===
+    system-role: ${PROMPT_SYSTEM_ROLE:Java后端工程师}
+    role-description: ${PROMPT_ROLE_DESC:你是一名经验丰富的Java后端工程师，精通Spring Boot、微服务架构、数据库设计和系统优化。}
+    role-domain: ${PROMPT_ROLE_DOMAIN:Java后端开发、Spring生态、微服务、分布式系统}
+    # === 2. 格式约束 ===
+    output-format: ${PROMPT_OUTPUT_FORMAT:text}
+    strict-output: ${PROMPT_STRICT_OUTPUT:false}
+    # === 3. CoT 思维链 ===
+    cot-enabled: ${PROMPT_COT_ENABLED:false}
+    cot-instruction: ${PROMPT_COT_INSTRUCTION:请一步步思考，先分析问题，再逐步推理，最后给出答案。}
+    # === 4. Few-shot 少样本 ===
+    few-shot-enabled: ${PROMPT_FEWSHOT_ENABLED:false}
+    # === 5. 边界约束 ===
+    boundary-enabled: ${PROMPT_BOUNDARY_ENABLED:true}
+    no-data-reply: ${PROMPT_NO_DATA_REPLY:暂无相关数据，无法回答此问题。}
+    no-fabrication: ${PROMPT_NO_FABRICATION:true}
+    # === 6. 上下文约束 ===
+    context-window-size: ${PROMPT_CONTEXT_WINDOW:4000}
+    context-only-reply: ${PROMPT_CONTEXT_ONLY:true}
+    context-prefix: ${PROMPT_CONTEXT_PREFIX:【参考文档】}
+    system-prefix: ${PROMPT_SYSTEM_PREFIX:【系统指令】}
+    user-prefix: ${PROMPT_USER_PREFIX:【用户问题】}
+    # === 预设模板 ===
+    preset: ${PROMPT_PRESET:}
+
 # 日志配置
 logging:
   level:

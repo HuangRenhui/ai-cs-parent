@@ -19,13 +19,16 @@ public class MixedModalityChatService {
     private final VisionLLMClient visionLLMClient;
     private final MultimodalKnowledgeService knowledgeService;
     private final HybridRetrievalService hybridRetrievalService;
+    private final PromptTemplateService promptTemplateService;
 
     public MixedModalityChatService(VisionLLMClient visionLLMClient,
                                      MultimodalKnowledgeService knowledgeService,
-                                     HybridRetrievalService hybridRetrievalService) {
+                                     HybridRetrievalService hybridRetrievalService,
+                                     PromptTemplateService promptTemplateService) {
         this.visionLLMClient = visionLLMClient;
         this.knowledgeService = knowledgeService;
         this.hybridRetrievalService = hybridRetrievalService;
+        this.promptTemplateService = promptTemplateService;
     }
 
     /**
@@ -120,18 +123,14 @@ public class MixedModalityChatService {
                 response.responseType = "MULTIMODAL";
             }
 
-            // 5. 构建综合Prompt
-            String prompt = String.format(
-                    "你是一个智能客服系统，能够理解文字、图片、音频、视频等多模态信息。\n" +
-                    "请基于以下综合信息回答用户问题。如果信息来自多个模态，请综合运用。\n\n" +
-                    "%s\n【用户问题】%s\n\n" +
-                    "请提供全面、准确的回答。如果涉及到图片或音频内容，请明确提及。",
-                    contextBuilder.toString(),
-                    request.textInput != null ? request.textInput : "请分析提供的多媒体内容"
+            // 5. 构建综合Prompt（使用增强Prompt模板）
+            String userPrompt = promptTemplateService.buildUserPrompt(
+                    request.textInput != null ? request.textInput : "请分析提供的多媒体内容",
+                    List.of(contextBuilder.toString())
             );
 
-            // 6. 生成回答（使用LLM）
-            response.textAnswer = prompt; // 实际调用LLM生成
+            // 6. 生成回答（使用LLM + System Prompt）
+            response.textAnswer = userPrompt; // 实际调用LLM生成
             response.referencedImages = referencedImages;
             response.referencedAudios = referencedAudios;
             response.knowledgeSources = sources;

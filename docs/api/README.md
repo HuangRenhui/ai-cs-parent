@@ -22,19 +22,20 @@
 - [12. 工单流程（Flowable）](#12-工单流程flowable)
 - [13. 知识库 FAQ](#13-知识库-faq)
 - [14. RAG 检索增强生成](#14-rag-检索增强生成)
-- [15. 文档版本管理](#15-文档版本管理)
-- [16. 图片管理](#16-图片管理)
-- [17. 图片增强功能](#17-图片增强功能)
-- [18. 音频管理](#18-音频管理)
-- [19. 音频增强功能](#19-音频增强功能)
-- [20. 文件管理](#20-文件管理)
-- [21. 知识图谱](#21-知识图谱)
-- [22. 多模态知识库](#22-多模态知识库)
-- [23. 多模态检索](#23-多模态检索)
-- [24. 知识库增强功能](#24-知识库增强功能)
-- [25. Feign 服务间调用接口](#25-feign-服务间调用接口)
-- [26. WebSocket 实时通信](#26-websocket-实时通信)
-- [27. 错误码说明](#27-错误码说明)
+- [15. Prompt 调试（六大策略）](#15-prompt-调试六大策略)
+- [16. 文档版本管理](#16-文档版本管理)
+- [17. 图片管理](#17-图片管理)
+- [18. 图片增强功能](#18-图片增强功能)
+- [19. 音频管理](#19-音频管理)
+- [20. 音频增强功能](#20-音频增强功能)
+- [21. 文件管理](#21-文件管理)
+- [22. 知识图谱](#22-知识图谱)
+- [23. 多模态知识库](#23-多模态知识库)
+- [24. 多模态检索](#24-多模态检索)
+- [25. 知识库增强功能](#25-知识库增强功能)
+- [26. Feign 服务间调用接口](#26-feign-服务间调用接口)
+- [27. WebSocket 实时通信](#27-websocket-实时通信)
+- [28. 错误码说明](#28-错误码说明)
 
 ---
 
@@ -873,53 +874,169 @@ POST /api/rag/memory/clear/all
 
 ---
 
-## 15. 文档版本管理
+## 15. Prompt 调试（六大策略）
+
+**Controller**: `PromptDebugController` | **路径前缀**: `/api/prompt`
+
+### 15.1 获取当前 Prompt 配置
+
+```http
+GET /api/prompt/config
+```
+
+**响应**：返回完整的6大策略配置（角色/格式/CoT/Few-shot/边界/上下文），含当前预设名称
+
+### 15.2 获取所有可用预设模板
+
+```http
+GET /api/prompt/presets
+```
+
+**响应**：
+```json
+{
+  "availablePresets": ["java-engineer", "interviewer", "json-output", "cot-reasoning", "few-shot", "strict-boundary", "table-output", "full-combo"],
+  "currentPreset": "java-engineer"
+}
+```
+
+### 15.3 获取指定预设模板详情
+
+```http
+GET /api/prompt/presets/{name}
+```
+
+| 参数 | 说明 |
+|------|------|
+| name | 预设名称：java-engineer / interviewer / json-output / cot-reasoning / few-shot / strict-boundary / table-output / full-combo |
+
+### 15.4 预览 System Prompt
+
+```http
+GET /api/prompt/preview/system
+```
+
+**响应**：返回当前配置生成的 System Prompt 全文及长度
+
+### 15.5 预览完整 Prompt
+
+```http
+POST /api/prompt/preview/full
+Content-Type: application/json
+
+{
+  "question": "如何优化数据库查询性能？",
+  "contextDocs": [
+    "参考文档1：索引优化是提升查询性能的关键手段...",
+    "参考文档2：慢查询日志可以帮助定位性能瓶颈..."
+  ]
+}
+```
+
+**响应**：返回 systemPrompt、userPrompt、fullPrompt、totalLength、contextDocCount
+
+### 15.6 预览 OpenAI Messages 格式
+
+```http
+POST /api/prompt/preview/messages
+Content-Type: application/json
+
+{
+  "question": "什么是微服务？",
+  "contextDocs": ["微服务是一种架构风格..."]
+}
+```
+
+**响应**：返回完整的 messages 数组（OpenAI兼容格式），含 messageCount 和 totalLength
+
+### 15.7 动态更新 Prompt 配置
+
+```http
+POST /api/prompt/config
+Content-Type: application/json
+
+{
+  "preset": "java-engineer",
+  "outputFormat": "bullet",
+  "cotEnabled": true,
+  "debugLog": true
+}
+```
+
+**支持动态修改的字段**：enabled, debugLog, preset, systemRole, roleDescription, roleDomain, outputFormat, strictOutput, cotEnabled, cotInstruction, fewShotEnabled, boundaryEnabled, noDataReply, noFabrication, additionalConstraints, contextWindowSize, contextOnlyReply
+
+> **注意**：动态修改仅在当前运行时生效，重启后恢复为 `application.yml` 中的值
+
+### 15.8 重置 Prompt 配置
+
+```http
+POST /api/prompt/reset
+```
+
+**响应**：取消预设模板，恢复为 `application.yml` 中的默认配置
+
+### 8 种预设模板说明
+
+| 预设名 | 系统角色 | 输出格式 | CoT | Few-shot | 适用场景 |
+|--------|----------|----------|-----|----------|----------|
+| java-engineer | Java后端工程师 | bullet | - | - | 技术问答 |
+| interviewer | 业务面试官 | text | - | - | 面试评估 |
+| json-output | 数据分析助手 | json | - | - | 结构化输出 |
+| cot-reasoning | 逻辑推理专家 | text | ✓ | - | 数学/逻辑推理 |
+| few-shot | 智能客服助手 | text | - | ✓ | 示例驱动客服 |
+| strict-boundary | 知识库问答助手 | text | - | - | 严格防幻觉 |
+| table-output | 数据分析师 | table | - | - | 表格展示 |
+| full-combo | 资深技术顾问 | bullet | ✓ | ✓ | 全功能组合 |
+
+---
+
+## 16. 文档版本管理
 
 **Controller**: `DocumentVersionController` | **路径前缀**: `/api/document/version`
 
-### 15.1 获取所有文档列表（当前版本）
+### 16.1 获取所有文档列表（当前版本）
 
 ```http
 GET /api/document/version/list
 ```
 
-### 15.2 获取文档所有版本
+### 16.2 获取文档所有版本
 
 ```http
 GET /api/document/version/versions/{documentId}
 ```
 
-### 15.3 获取文档当前版本
+### 16.3 获取文档当前版本
 
 ```http
 GET /api/document/version/current/{documentId}
 ```
 
-### 15.4 回退到指定版本
+### 16.4 回退到指定版本
 
 ```http
 POST /api/document/version/rollback?documentId=doc_001&targetVersion=2
 ```
 
-### 15.5 删除指定版本
+### 16.5 删除指定版本
 
 ```http
 DELETE /api/document/version/delete/{id}
 ```
 
-### 15.6 比较两个版本
+### 16.6 比较两个版本
 
 ```http
 GET /api/document/version/compare?version1Id=1&version2Id=3
 ```
 
-### 15.7 检查文件是否已存在（MD5去重）
+### 16.7 检查文件是否已存在（MD5去重）
 
 ```http
 GET /api/document/version/exists?fileMd5=d41d8cd98f00b204e9800998ecf8427e
 ```
 
-### 15.8 获取版本详情
+### 16.8 获取版本详情
 
 ```http
 GET /api/document/version/detail/{id}
@@ -927,7 +1044,7 @@ GET /api/document/version/detail/{id}
 
 ---
 
-## 16. 图片管理
+## 17. 图片管理
 
 **Controller**: `ImageController` | **路径前缀**: `/api/image`
 
@@ -1029,7 +1146,7 @@ DELETE /api/image/vector/{vectorId}
 
 ---
 
-## 17. 图片增强功能
+## 18. 图片增强功能
 
 **Controller**: `ImageEnhanceController` | **路径前缀**: `/api/image/enhance`
 
@@ -1110,7 +1227,7 @@ POST   /api/image/enhance/watermark/add        # 添加水印（支持位置、�
 
 ---
 
-## 18. 音频管理
+## 19. 音频管理
 
 **Controller**: `AudioController` | **路径前缀**: `/api/audio`
 
@@ -1211,7 +1328,7 @@ DELETE /api/audio/vector/{vectorId}
 
 ---
 
-## 19. 音频增强功能
+## 20. 音频增强功能
 
 **Controller**: `AudioEnhanceController` | **路径前缀**: `/api/audio/enhance`
 
@@ -1275,7 +1392,7 @@ GET    /api/audio/enhance/stats/summary/{fileId}    # 音频统计摘要
 
 ---
 
-## 20. 文件管理
+## 21. 文件管理
 
 **Controller**: `FileController` | **路径前缀**: `/api/file`
 
@@ -1387,7 +1504,7 @@ GET /api/file/decompressed/list/{taskId}
 
 ---
 
-## 21. 知识图谱
+## 22. 知识图谱
 
 **Controller**: `KnowledgeGraphController` | **路径前缀**: `/api/knowledge-graph`
 
@@ -1465,7 +1582,7 @@ GET /api/knowledge-graph/statistics
 
 ---
 
-## 22. 多模态知识库
+## 23. 多模态知识库
 
 **Controller**: `MultimodalKnowledgeController` | **路径前缀**: `/api/multimodal-knowledge`
 
@@ -1540,7 +1657,7 @@ GET /api/multimodal-knowledge/statistics
 
 ---
 
-## 23. 多模态检索
+## 24. 多模态检索
 
 **Controller**: `MultimodalSearchController` | **路径前缀**: `/api/multimodal`
 
@@ -1576,7 +1693,7 @@ GET /api/multimodal/stats
 
 ---
 
-## 24. 知识库增强功能
+## 25. 知识库增强功能
 
 **Controller**: `KnowledgeEnhancedController` | **路径前缀**: `/api/knowledge-enhanced`
 
@@ -1685,7 +1802,7 @@ POST   /api/knowledge-enhanced/evolution/trigger-full            # 手动触发�
 
 ---
 
-## 25. Feign 服务间调用接口
+## 26. Feign 服务间调用接口
 
 ### 25.1 AiAgentFeign
 
@@ -1721,7 +1838,7 @@ POST /workorder/create       // 创建工单
 
 ---
 
-## 26. WebSocket 实时通信
+## 27. WebSocket 实时通信
 
 **服务端口**: `9005`
 
@@ -1768,7 +1885,7 @@ ws.send(JSON.stringify({
 
 ---
 
-## 27. 错误码说明
+## 28. 错误码说明
 
 ### HTTP 状态码
 
@@ -1827,6 +1944,7 @@ ws.send(JSON.stringify({
 | 工单流程（Flowable） | 7 | ai-cs-workorder |
 | 知识库 FAQ | 8 | ai-cs-knowledge |
 | RAG 检索增强生成 | 7 | ai-cs-knowledge |
+| Prompt 调试（六大策略） | 8 | ai-cs-knowledge |
 | 文档版本管理 | 8 | ai-cs-knowledge |
 | 图片管理 | 10 | ai-cs-knowledge |
 | 图片增强 | 30+ | ai-cs-knowledge |
@@ -1839,7 +1957,7 @@ ws.send(JSON.stringify({
 | 知识库增强 | 40+ | ai-cs-knowledge |
 | Feign 接口 | 6 | ai-cs-api |
 | WebSocket | 1 | ai-cs-websocket |
-| **合计** | **250+** | - |
+| **合计** | **258+** | - |
 
 ---
 

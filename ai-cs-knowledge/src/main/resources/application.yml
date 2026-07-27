@@ -56,13 +56,77 @@ rag:
   split:
     chunk-size: 500
     chunk-overlap: 80
+    # === 语义切片 ===
+    semantic-split-enabled: true       # 启用语义切片（按段落/标题边界分割）
+    semantic-separators: "\n\n,。,；;！!？?,.，"  # 语义分隔符
+    # === 分层切片 ===
+    hierarchical-split-enabled: true   # 启用分层切片（文档→段落→句子→词语）
+    paragraph-max-length: 2000         # 段落最大长度（字符）
+    sentence-max-length: 500           # 句子最大长度（字符）
+    min-chunk-length: 50               # 最小分块长度（太短的丢弃）
   retrieve:
     top-k: 5
     rerank-top-k: 3
-    min-score: 0.6  # Rerank最低相关性阈值
+    min-score: 0.6                     # Rerank最低相关性阈值
+    # === 召回过滤 ===
+    vector-min-score: 0.5              # 向量检索最低相似度阈值（初筛）
+    bm25-min-score: 0.3                # BM25关键词最低分数阈值
+    max-recall-docs: 10                # 最大召回文档数量（控制上下文长度）
+    # === 文档质量过滤 ===
+    quality-filter-enabled: true       # 启用品质量过滤
+    min-content-length: 20             # 文档内容最小长度
+    max-duplicate-ratio: 0.8           # 最大重复率
+    # === 上下文压缩 ===
+    summary-compress-enabled: true     # 启用摘要压缩
+    max-context-length: 4000           # 上下文最大长度（字符）
+    compress-target-length: 2000       # 压缩目标长度（字符）
   chat-memory:
     # 对话记录过期时间，单位秒（7天）
     ttl: 604800
+  # ===== Prompt 调试配置（六大策略） =====
+  prompt:
+    enabled: true                    # Prompt增强总开关
+    debug-log: true                  # 是否打印完整Prompt到日志（调试用）
+    # === 1. 角色限定 ===
+    system-role: "Java后端工程师"      # 系统角色身份
+    role-description: "你是一名经验丰富的Java后端工程师，精通Spring Boot、微服务架构、数据库设计和系统优化。"  # 角色描述
+    role-domain: "Java后端开发、Spring生态、微服务、分布式系统"  # 专业领域
+    # === 2. 格式约束 ===
+    output-format: text              # 输出格式: text/json/table/bullet/strict
+    strict-output: false             # 是否禁止多余话术
+    table-columns: ""                # 表格列定义（output-format=table时生效）
+    # json-schema:                   # JSON字段约束（output-format=json时生效）
+    #   name: "名称"
+    #   description: "描述"
+    # === 3. CoT 思维链 ===
+    cot-enabled: false               # 是否启用思维链逐步推理
+    cot-instruction: "请一步步思考，先分析问题，再逐步推理，最后给出答案。"  # CoT推理指令
+    # cot-steps:                     # 自定义推理步骤
+    #   - 理解问题
+    #   - 列出已知条件
+    #   - 逐步推导
+    #   - 给出答案
+    # === 4. Few-shot 少样本 ===
+    few-shot-enabled: false          # 是否启用少样本示例
+    # few-shot-examples:             # 示例列表（问题和答案对）
+    #   - question: "示例问题"
+    #     answer: "示例答案"
+    #     reasoning: "推理过程（可选）"
+    # === 5. 边界约束 ===
+    boundary-enabled: true           # 是否启用边界约束
+    no-data-reply: "暂无相关数据，无法回答此问题。"  # 无数据时的兜底回复
+    no-fabrication: true             # 是否禁止编造数据
+    additional-constraints: ""       # 额外禁止行为
+    # === 6. 上下文约束 ===
+    context-window-size: 4000        # 上下文窗口大小（字符数）
+    context-only-reply: true         # 是否限制仅基于上下文回答
+    context-prefix: "【参考文档】"    # 上下文前缀标识
+    system-prefix: "【系统指令】"     # 系统指令前缀
+    user-prefix: "【用户问题】"       # 用户问题前缀
+    # === 预设模板（选择后自动覆盖以上配置） ===
+    # 可用预设: java-engineer / interviewer / json-output / cot-reasoning
+    #          few-shot / strict-boundary / table-output / full-combo
+    preset: ""                       # 预设模板名称，为空则使用上方自定义配置
 
 # 临时上传文件存放目录
 upload:

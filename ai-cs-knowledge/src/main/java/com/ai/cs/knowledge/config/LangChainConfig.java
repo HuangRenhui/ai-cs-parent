@@ -104,8 +104,8 @@ public class LangChainConfig {
 
 
     /**
-     * 构建检索增强器（带Rerank重排）
-     * 通过向量检索召回相关片段，再使用Rerank模型重排提升精度
+     * 构建检索增强器（带Rerank重排 + 质量过滤优化）
+     * 流程：向量检索 → Rerank重排 → 低分过滤 → 返回高质量结果
      */
     @Bean
     public RetrievalAugmentor retrievalAugmentor(
@@ -113,20 +113,21 @@ public class LangChainConfig {
             EmbeddingModel embeddingModel,
             ScoringModel scoringModel
     ) {
-        // 向量检索：从向量库召回topK个候选片段
+        // 向量检索：从向量库召回topK个候选片段（使用 minScore 做初筛）
         var contentRetriever = EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(embeddingStore)
                 .embeddingModel(embeddingModel)
                 .maxResults(ragProperties.getRetrieve().getTopK())
+                .minScore(ragProperties.getRetrieve().getVectorMinScore())  // 向量初筛阈值
                 .build();
 
-        // 配置Rerank重排聚合器
+        // 配置Rerank重排聚合器（带最低相关性阈值过滤）
         ContentAggregator aggregator = ReRankingContentAggregator.builder()
-                .scoringModel(scoringModel)                    // 设置评分模型
-                .minScore(ragProperties.getRetrieve().getMinScore())  // 最低相关性阈值
+                .scoringModel(scoringModel)                              // BGE-Reranker评分模型
+                .minScore(ragProperties.getRetrieve().getMinScore())     // Rerank最低相关性阈值
                 .build();
 
-        // 构建带Rerank重排的检索增强器
+        // 构建带Rerank重排+质量过滤的检索增强器
         return DefaultRetrievalAugmentor.builder()
                 .contentRetriever(contentRetriever)
                 .contentAggregator(aggregator)  // 注入重排聚合器
