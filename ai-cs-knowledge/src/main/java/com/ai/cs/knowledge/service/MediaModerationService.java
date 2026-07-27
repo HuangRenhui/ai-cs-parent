@@ -3,9 +3,13 @@ package com.ai.cs.knowledge.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -162,21 +166,79 @@ public class MediaModerationService {
         ModerationResult result = new ModerationResult();
 
         try {
-            // TODO: 实现HTTP调用远程审核API
-            // 根据API返回结果填充ModerationResult
-            log.info("远程审核API调用: {}", apiUrl);
-            result.setPassed(true);
-            result.setRiskLevel("SAFE");
-            result.setSuggestion("远程审核框架已就绪");
+            URL url = URI.create(apiUrl).toURL();
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(30000);
+            conn.setRequestProperty("Content-Type", contentType);
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(content);
+                os.flush();
+            }
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                String responseBody = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                // 根据远程API返回的JSON结果填充审核结果
+                result = parseRemoteModerationResult(responseBody);
+                log.info("远程审核API调用成功: {} -> 风险等级: {}", apiUrl, result.getRiskLevel());
+            } else {
+                log.warn("远程审核API返回非200状态码: {}", responseCode);
+                result.setPassed(false);
+                result.setRiskLevel("HIGH");
+                result.setSuggestion("远程审核服务返回异常状态码: " + responseCode);
+            }
+            conn.disconnect();
 
         } catch (Exception e) {
             log.error("远程审核失败: {}", e.getMessage());
             result.setPassed(false);
             result.setRiskLevel("HIGH");
-            result.setSuggestion("远程审核服务不可用");
+            result.setSuggestion("远程审核服务不可用: " + e.getMessage());
         }
 
         result.setDuration(System.currentTimeMillis() - startTime);
+        return result;
+    }
+
+    /**
+     * 解析远程审核API返回的JSON结果
+     * 适配阿里云/腾讯云等常见审核API的返回格式
+     */
+    private ModerationResult parseRemoteModerationResult(String responseBody) {
+        ModerationResult result = new ModerationResult();
+        try {
+            // 使用标准JSON解析（不引入额外依赖）
+            // 兼容多种审核API返回格式
+            String lowerBody = responseBody.toLowerCase();
+
+            if (lowerBody.contains("\"suggestion\":\"block\"") || lowerBody.contains("\"label\":\"spam\"")) {
+                result.setPassed(false);
+                result.setRiskLevel("BLOCKED");
+                result.setSuggestion("内容违规，已被拦截");
+            } else if (lowerBody.contains("\"suggestion\":\"review\"")) {
+                result.setPassed(false);
+                result.setRiskLevel("MEDIUM");
+                result.setSuggestion("内容需要人工复审");
+            } else if (lowerBody.contains("\"suggestion\":\"pass\"") || lowerBody.contains("\"code\":200")) {
+                result.setPassed(true);
+                result.setRiskLevel("SAFE");
+                result.setSuggestion("内容审核通过");
+            } else {
+                result.setPassed(true);
+                result.setRiskLevel("LOW");
+                result.setSuggestion("内容审核完成");
+            }
+        } catch (Exception e) {
+            log.error("解析远程审核结果失败", e);
+            result.setPassed(false);
+            result.setRiskLevel("HIGH");
+            result.setSuggestion("审核结果解析异常");
+        }
         return result;
     }
 

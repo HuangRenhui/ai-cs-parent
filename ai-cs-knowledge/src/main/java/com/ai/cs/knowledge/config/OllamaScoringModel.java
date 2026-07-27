@@ -133,29 +133,76 @@ public class OllamaScoringModel implements ScoringModel {
     }
 
     /**
-     * 从响应中解析分数（简化实现）
-     * 实际使用时需要根据Ollama API的真实返回格式调整
+     * 从响应中解析分数
+     * 支持Ollama Rerank API标准返回格式：
+     * {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
+     * 以及简化格式：[0.95, 0.87, 0.72, ...]
      */
     private List<Double> parseScoresFromResponse(String responseBody, int expectedSize) {
         List<Double> scores = new ArrayList<>();
-        
-        // 简化实现：如果解析失败，返回均匀分数
-        // 生产环境建议使用JSON库（如Jackson、Gson）解析
+
         try {
-            // 这里需要根据实际的API响应格式来解析
-            // 示例：假设返回 {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
-            // 暂时返回模拟分数，实际部署时需要替换为真实解析逻辑
-            for (int i = 0; i < expectedSize; i++) {
-                scores.add(0.5 + Math.random() * 0.4); // 0.5-0.9之间的随机分数（仅用于测试）
+            // 尝试解析标准Ollama Rerank API返回格式
+            // 格式: {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
+            if (responseBody.contains("\"relevance_score\"")) {
+                String[] parts = responseBody.split("\"relevance_score\":");
+                for (int i = 1; i < parts.length && scores.size() < expectedSize; i++) {
+                    String afterScore = parts[i].trim();
+                    // 提取逗号或}之前的数值
+                    int endIdx = 0;
+                    while (endIdx < afterScore.length() && 
+                           (Character.isDigit(afterScore.charAt(endIdx)) || afterScore.charAt(endIdx) == '.' || afterScore.charAt(endIdx) == '-')) {
+                        endIdx++;
+                    }
+                    if (endIdx > 0) {
+                        double score = Double.parseDouble(afterScore.substring(0, endIdx));
+                        scores.add(clampScore(score));
+                    }
+                }
+            } 
+            // 尝试解析简化数组格式: [0.95, 0.87, ...]
+            else if (responseBody.trim().startsWith("[")) {
+                String numbers = responseBody.replaceAll("[\\[\\]\\s]", "");
+                String[] numParts = numbers.split(",");
+                for (String num : numParts) {
+                    if (!num.isEmpty() && scores.size() < expectedSize) {
+                        double score = Double.parseDouble(num.trim());
+                        scores.add(clampScore(score));
+                    }
+                }
+            }
+            // 尝试解析单行分数格式（逗号分隔）
+            else {
+                String[] numParts = responseBody.trim().split(",");
+                for (String num : numParts) {
+                    if (!num.isEmpty() && scores.size() < expectedSize) {
+                        double score = Double.parseDouble(num.trim());
+                        scores.add(clampScore(score));
+                    }
+                }
+            }
+
+            // 如果解析出的分数不足，用默认值补齐
+            while (scores.size() < expectedSize) {
+                scores.add(0.5);
+                log.warn("Rerank分数不足，用默认值0.5补齐，已解析: {}，期望: {}", scores.size() - 1, expectedSize);
             }
         } catch (Exception e) {
-            log.error("解析Rerank响应失败", e);
+            log.error("解析Rerank响应失败，降级为默认分数", e);
+            scores.clear();
             for (int i = 0; i < expectedSize; i++) {
                 scores.add(0.5);
             }
         }
-        
+
         return scores;
+    }
+
+    /**
+     * 将分数限制在[0, 1]有效范围内
+     */
+    private double clampScore(double score) {
+        return Math.max(0.0, Math.min(1.0, score));
     }
 
     /**
