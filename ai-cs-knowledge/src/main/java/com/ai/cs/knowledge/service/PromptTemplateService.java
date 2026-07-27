@@ -118,7 +118,7 @@ public class PromptTemplateService {
         strict.setNoFabrication(true);
         strict.setNoDataReply("暂无相关资料");
         strict.setContextOnlyReply(true);
-        strict.setAdditionalConstraints("禁止使用"根据我的经验"、"通常来说"等模糊表述。如果文档中没有明确说明，必须回复"暂无相关资料"。");
+        strict.setAdditionalConstraints("禁止使用\"根据我的经验\"、\"通常来说\"等模糊表述。如果文档中没有明确说明，必须回复\"暂无相关资料\"。");
         PRESETS.put("strict-boundary", presetDefaults(strict));
 
         // --- 预设7：表格输出 ---
@@ -359,7 +359,7 @@ public class PromptTemplateService {
             }
             case "bullet" -> {
                 rule.append("【输出格式要求】\n");
-                rule.append("请使用要点列表（bullet points）格式回答，每条要点以"- "开头，简明扼要。");
+                rule.append("请使用要点列表（bullet points）格式回答，每条要点以\"-\"开头，简明扼要。");
             }
             case "strict" -> {
                 rule.append("【输出格式要求】\n");
@@ -450,7 +450,7 @@ public class PromptTemplateService {
 
         // 无数据回复
         if (cfg.getNoDataReply() != null && !cfg.getNoDataReply().isEmpty()) {
-            rule.append("2. 如果参考文档中没有相关信息，直接回复"").append(cfg.getNoDataReply()).append(""，禁止猜测。\n");
+            rule.append("2. 如果参考文档中没有相关信息，直接回复\"\").append(cfg.getNoDataReply()).append(\"\"，禁止猜测。\n");
         }
 
         // 额外约束
@@ -533,49 +533,100 @@ public class PromptTemplateService {
 
     /**
      * 合并预设和运行时配置（运行时配置覆盖预设）
+     * <p>
+     * 重要：会创建预设的深拷贝，不会污染 PRESETS 静态 Map 中的原始预设对象。
      */
     private PromptProperties merge(PromptProperties preset, PromptProperties runtime) {
-        // 运行时配置中非空/非默认的字段覆盖预设
+        // 创建预设的深拷贝，避免污染静态 PRESETS 中的原始对象
+        PromptProperties merged = deepCopy(preset);
+
+        // 运行时配置中非空/非默认的字段覆盖
         if (runtime.getSystemRole() != null && !runtime.getSystemRole().isEmpty()) {
-            preset.setSystemRole(runtime.getSystemRole());
+            merged.setSystemRole(runtime.getSystemRole());
         }
         if (runtime.getRoleDescription() != null && !runtime.getRoleDescription().isEmpty()) {
-            preset.setRoleDescription(runtime.getRoleDescription());
+            merged.setRoleDescription(runtime.getRoleDescription());
         }
         if (runtime.getRoleDomain() != null && !runtime.getRoleDomain().isEmpty()) {
-            preset.setRoleDomain(runtime.getRoleDomain());
+            merged.setRoleDomain(runtime.getRoleDomain());
         }
         if (runtime.getOutputFormat() != null && !"text".equals(runtime.getOutputFormat())) {
-            preset.setOutputFormat(runtime.getOutputFormat());
+            merged.setOutputFormat(runtime.getOutputFormat());
         }
         if (runtime.getStrictOutput() != null) {
-            preset.setStrictOutput(runtime.getStrictOutput());
+            merged.setStrictOutput(runtime.getStrictOutput());
         }
         if (runtime.getCotEnabled() != null) {
-            preset.setCotEnabled(runtime.getCotEnabled());
+            merged.setCotEnabled(runtime.getCotEnabled());
         }
         if (runtime.getCotInstruction() != null && !runtime.getCotInstruction().isEmpty()) {
-            preset.setCotInstruction(runtime.getCotInstruction());
+            merged.setCotInstruction(runtime.getCotInstruction());
         }
         if (runtime.getFewShotEnabled() != null) {
-            preset.setFewShotEnabled(runtime.getFewShotEnabled());
+            merged.setFewShotEnabled(runtime.getFewShotEnabled());
         }
         if (runtime.getFewShotExamples() != null && !runtime.getFewShotExamples().isEmpty()) {
-            preset.setFewShotExamples(runtime.getFewShotExamples());
+            merged.setFewShotExamples(new ArrayList<>(runtime.getFewShotExamples()));
         }
         if (runtime.getNoDataReply() != null && !runtime.getNoDataReply().isEmpty()) {
-            preset.setNoDataReply(runtime.getNoDataReply());
+            merged.setNoDataReply(runtime.getNoDataReply());
         }
         if (runtime.getAdditionalConstraints() != null && !runtime.getAdditionalConstraints().isEmpty()) {
-            preset.setAdditionalConstraints(runtime.getAdditionalConstraints());
+            merged.setAdditionalConstraints(runtime.getAdditionalConstraints());
         }
         if (runtime.getContextOnlyReply() != null) {
-            preset.setContextOnlyReply(runtime.getContextOnlyReply());
+            merged.setContextOnlyReply(runtime.getContextOnlyReply());
         }
         if (runtime.getDebugLog() != null) {
-            preset.setDebugLog(runtime.getDebugLog());
+            merged.setDebugLog(runtime.getDebugLog());
         }
-        return preset;
+        return merged;
+    }
+
+    /**
+     * 深拷贝 PromptProperties（用于 merge 时保护预设原始对象不被污染）
+     */
+    private PromptProperties deepCopy(PromptProperties source) {
+        PromptProperties copy = new PromptProperties();
+        copy.setEnabled(source.getEnabled());
+        copy.setDebugLog(source.getDebugLog());
+        copy.setSystemRole(source.getSystemRole());
+        copy.setRoleDescription(source.getRoleDescription());
+        copy.setRoleDomain(source.getRoleDomain());
+        copy.setOutputFormat(source.getOutputFormat());
+        if (source.getJsonSchema() != null) {
+            copy.setJsonSchema(new HashMap<>(source.getJsonSchema()));
+        }
+        copy.setStrictOutput(source.getStrictOutput());
+        copy.setTableColumns(source.getTableColumns());
+        copy.setCotEnabled(source.getCotEnabled());
+        copy.setCotInstruction(source.getCotInstruction());
+        if (source.getCotSteps() != null) {
+            copy.setCotSteps(new ArrayList<>(source.getCotSteps()));
+        }
+        copy.setFewShotEnabled(source.getFewShotEnabled());
+        if (source.getFewShotExamples() != null) {
+            List<PromptProperties.FewShotExample> copiedExamples = new ArrayList<>();
+            for (PromptProperties.FewShotExample ex : source.getFewShotExamples()) {
+                PromptProperties.FewShotExample copiedEx = new PromptProperties.FewShotExample();
+                copiedEx.setQuestion(ex.getQuestion());
+                copiedEx.setAnswer(ex.getAnswer());
+                copiedEx.setReasoning(ex.getReasoning());
+                copiedExamples.add(copiedEx);
+            }
+            copy.setFewShotExamples(copiedExamples);
+        }
+        copy.setBoundaryEnabled(source.getBoundaryEnabled());
+        copy.setNoDataReply(source.getNoDataReply());
+        copy.setNoFabrication(source.getNoFabrication());
+        copy.setAdditionalConstraints(source.getAdditionalConstraints());
+        copy.setContextWindowSize(source.getContextWindowSize());
+        copy.setContextOnlyReply(source.getContextOnlyReply());
+        copy.setContextPrefix(source.getContextPrefix());
+        copy.setSystemPrefix(source.getSystemPrefix());
+        copy.setUserPrefix(source.getUserPrefix());
+        copy.setPreset(source.getPreset());
+        return copy;
     }
 
     /**
