@@ -28,5 +28,9 @@
             <groupId>com.ai.cs</groupId>
             <artifactId>ai-cs-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
     </dependencies>
 </project>

@@ -2,6 +2,7 @@ package com.ai.cs.websocket;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
@@ -11,7 +12,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  * @author huangrenhui
  * @date 2026/6/11 17:49
  */
-@SpringBootApplication(scanBasePackages = "com.ai.cs")
+@SpringBootApplication(scanBasePackages = "com.ai.cs", exclude = SecurityAutoConfiguration.class)
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.ai.cs.api.feign")
 public class WebSocketApplication {
