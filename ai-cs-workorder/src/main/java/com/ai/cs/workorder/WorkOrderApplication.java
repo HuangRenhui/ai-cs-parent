@@ -2,6 +2,7 @@ package com.ai.cs.workorder;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 /**
@@ -10,7 +11,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  * @author huangrenhui
  * @date 2026/6/11 18:15
  */
-@SpringBootApplication(scanBasePackages = "com.ai.cs")
+@SpringBootApplication(scanBasePackages = "com.ai.cs", exclude = SecurityAutoConfiguration.class)
 @EnableDiscoveryClient
 public class WorkOrderApplication {
     public static void main(String[] args) {

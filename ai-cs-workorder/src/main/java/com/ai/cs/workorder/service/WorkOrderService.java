@@ -2,6 +2,8 @@ package com.ai.cs.workorder.service;
 
 import cn.hutool.core.lang.UUID;
 import com.ai.cs.common.dto.WorkOrderDTO;
+import com.ai.cs.common.exception.BusinessException;
+import com.ai.cs.common.util.ValidateUtil;
 import com.ai.cs.workorder.entity.WorkOrder;
 import com.ai.cs.workorder.mapper.WorkOrderMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -27,12 +29,18 @@ public class WorkOrderService extends ServiceImpl<WorkOrderMapper, WorkOrder> {
      * 创建工单
      */
     public String createOrder(WorkOrderDTO dto) {
+        if (dto == null) {
+            throw new BusinessException("工单内容不能为空");
+        }
+        ValidateUtil.requireOrderType(dto.getOrderType());
+        ValidateUtil.requireLength(dto.getContent(), "工单内容", 1, 2000);
+        ValidateUtil.optionalSessionId(dto.getSessionId());
         WorkOrder order = new WorkOrder();
         order.setOrderNo("WO_" + UUID.randomUUID().toString(true));
         order.setSessionId(dto.getSessionId());
-        order.setCustomerId(dto.getCustomerId());
-        order.setOrderType(dto.getOrderType());
-        order.setOrderContent(dto.getContent());
+        order.setCustomerId(dto.getCustomerId() == null ? 0L : dto.getCustomerId());
+        order.setOrderType(dto.getOrderType().trim());
+        order.setOrderContent(dto.getContent().trim());
         order.setOrderStatus(1);
         order.setAgentId(0L);
         this.save(order);
@@ -40,17 +48,20 @@ public class WorkOrderService extends ServiceImpl<WorkOrderMapper, WorkOrder> {
         return order.getOrderNo();
     }
 
-    /**
-     * 分页查询工单
-     */
     public Page<WorkOrder> queryPage(int pageNum, int pageSize, String orderType,
-                                      Integer orderStatus, Long agentId) {
+                                      Integer orderStatus, Long agentId, String keyword) {
+        pageNum = ValidateUtil.pageNum(pageNum);
+        pageSize = ValidateUtil.pageSize(pageSize);
         LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
         if (orderType != null && !orderType.isBlank()) {
             wrapper.eq(WorkOrder::getOrderType, orderType);
         }
         if (orderStatus != null) {
             wrapper.eq(WorkOrder::getOrderStatus, orderStatus);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w.like(WorkOrder::getOrderNo, keyword)
+                    .or().like(WorkOrder::getOrderContent, keyword));
         }
         if (agentId != null) {
             wrapper.eq(WorkOrder::getAgentId, agentId);
@@ -65,7 +76,7 @@ public class WorkOrderService extends ServiceImpl<WorkOrderMapper, WorkOrder> {
     public void assignOrder(Long orderId, Long agentId) {
         WorkOrder order = this.getById(orderId);
         if (order == null) {
-            throw new RuntimeException("工单不存在");
+            throw new BusinessException("工单不存在");
         }
         order.setAgentId(agentId);
         order.setOrderStatus(2); // 处理中
@@ -79,7 +90,7 @@ public class WorkOrderService extends ServiceImpl<WorkOrderMapper, WorkOrder> {
     public void updateStatus(Long orderId, Integer status) {
         WorkOrder order = this.getById(orderId);
         if (order == null) {
-            throw new RuntimeException("工单不存在");
+            throw new BusinessException("工单不存在");
         }
         order.setOrderStatus(status);
         this.updateById(order);

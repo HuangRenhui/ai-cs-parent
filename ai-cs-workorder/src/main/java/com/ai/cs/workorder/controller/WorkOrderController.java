@@ -37,8 +37,9 @@ public class WorkOrderController {
                                          @RequestParam(defaultValue = "10") int pageSize,
                                          @RequestParam(required = false) String orderType,
                                          @RequestParam(required = false) Integer orderStatus,
-                                         @RequestParam(required = false) Long agentId) {
-        return Result.success(workOrderService.queryPage(pageNum, pageSize, orderType, orderStatus, agentId));
+                                         @RequestParam(required = false) Long agentId,
+                                         @RequestParam(required = false) String keyword) {
+        return Result.success(workOrderService.queryPage(pageNum, pageSize, orderType, orderStatus, agentId, keyword));
     }
 
     /** 获取工单详情 */
