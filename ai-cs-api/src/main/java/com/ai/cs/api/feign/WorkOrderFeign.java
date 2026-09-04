@@ -14,7 +14,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(value = "ai-cs-workorder", fallback = WorkOrderFeignFallback.class)
+@FeignClient(value = "ai-cs-workorder", url = "${feign.workorder.url:http://localhost:8085}", fallback = WorkOrderFeignFallback.class)
 public interface WorkOrderFeign {
     @PostMapping("/workorder/create")
     Result<String> createOrder(@RequestBody WorkOrderDTO dto);

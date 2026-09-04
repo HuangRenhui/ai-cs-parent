@@ -9,14 +9,15 @@ package com.ai.cs.api.feign;
  */
 import com.ai.cs.api.feign.fallback.AiAgentFeignFallback;
 import com.ai.cs.common.dto.ChatDTO;
+import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(value = "ai-cs-agent", fallback = AiAgentFeignFallback.class)
+@FeignClient(value = "ai-cs-agent", url = "${feign.agent.url:http://localhost:8082}", fallback = AiAgentFeignFallback.class)
 public interface AiAgentFeign {
 
     @PostMapping("/ai/chat/send")
-    Result<String> chat(@RequestBody ChatDTO dto);
+    Result<ChatReplyDTO> chat(@RequestBody ChatDTO dto);
 }

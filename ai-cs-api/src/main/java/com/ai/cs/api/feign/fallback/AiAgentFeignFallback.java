@@ -2,6 +2,7 @@ package com.ai.cs.api.feign.fallback;
 
 import com.ai.cs.api.feign.AiAgentFeign;
 import com.ai.cs.common.dto.ChatDTO;
+import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 public class AiAgentFeignFallback implements AiAgentFeign {
 
     @Override
-    public Result<String> chat(ChatDTO dto) {
+    public Result<ChatReplyDTO> chat(ChatDTO dto) {
         log.error("AI智能体服务调用失败，触发熔断降级");
         return Result.fail(503, "AI智能体服务暂时不可用，请稍后重试");
     }

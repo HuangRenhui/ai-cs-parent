@@ -12,12 +12,12 @@ import org.springframework.web.bind.annotation.PathVariable;
  * @author huangrenhui
  * @date 2026/7/20
  */
-@FeignClient(value = "ai-cs-base-service", fallback = BaseServiceFeignFallback.class)
+@FeignClient(value = "ai-cs-base-service", url = "${feign.base-service.url:http://localhost:8084}", fallback = BaseServiceFeignFallback.class)
 public interface BaseServiceFeign {
 
     @GetMapping("/customer/{id}")
     Result<Object> getCustomerById(@PathVariable("id") Long id);
 
-    @GetMapping("/user/info")
+    @GetMapping("/auth/userinfo")
     Result<Object> getUserInfo();
 }
