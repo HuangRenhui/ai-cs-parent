@@ -1,5 +1,6 @@
 package com.ai.cs.job.task;
 
+import com.ai.cs.job.support.JobLockService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,6 +28,9 @@ public class StatisticsTask {
     @Resource
     private JdbcTemplate jdbcTemplate;
 
+    @Resource
+    private JobLockService jobLockService;
+
     @Value("${job.statistics-hourly:true}")
     private boolean hourlyEnabled;
 
@@ -41,7 +46,10 @@ public class StatisticsTask {
             log.debug("[定时任务] 每小时统计已禁用，跳过");
             return;
         }
-
+        if (!jobLockService.tryLock("job:lock:stats-hourly", Duration.ofMinutes(10))) {
+            log.info("[定时任务] 每小时统计未拿到锁，跳过");
+            return;
+        }
         log.info("[定时任务] 开始执行每小时数据统计...");
 
         try {
@@ -77,6 +85,8 @@ public class StatisticsTask {
             log.info("[定时任务] 每小时数据统计完成 - 会话:{}, 工单:{}, 客户:{}", sessionCount, orderCount, customerCount);
         } catch (Exception e) {
             log.error("[定时任务] 每小时数据统计失败", e);
+        } finally {
+            jobLockService.unlock("job:lock:stats-hourly");
         }
     }
 
@@ -89,7 +99,10 @@ public class StatisticsTask {
             log.debug("[定时任务] 每日统计已禁用，跳过");
             return;
         }
-
+        if (!jobLockService.tryLock("job:lock:stats-daily", Duration.ofMinutes(20))) {
+            log.info("[定时任务] 每日统计未拿到锁，跳过");
+            return;
+        }
         log.info("[定时任务] 开始执行每日数据统计...");
 
         try {
@@ -131,6 +144,8 @@ public class StatisticsTask {
                     sessionCount, orderCount, completedCount, customerCount, activeAgentCount);
         } catch (Exception e) {
             log.error("[定时任务] 每日数据统计失败", e);
+        } finally {
+            jobLockService.unlock("job:lock:stats-daily");
         }
     }
 
