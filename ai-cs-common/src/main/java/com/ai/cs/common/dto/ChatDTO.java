@@ -2,6 +2,8 @@ package com.ai.cs.common.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 聊天 DTO
  *
@@ -13,4 +15,11 @@ public class ChatDTO {
     private String sessionId;
     private String msg;
     private String history;
+    private Long customerId;
+    private String visitorRef;
+    private String scene;
+    private String channel;
+    /** 知识库租户，默认 default */
+    private String tenantCode;
+    private List<BizEntity> entities;
 }

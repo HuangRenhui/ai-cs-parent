@@ -19,11 +19,19 @@ public class Result<T> {
     }
 
     public static <T> Result<T> success(T data) {
+        return success("操作成功", data);
+    }
+
+    public static <T> Result<T> success(String msg, T data) {
         Result<T> result = new Result<>();
         result.setCode(200);
-        result.setMsg("操作成功");
+        result.setMsg(msg);
         result.setData(data);
         return result;
+    }
+
+    public boolean isOk() {
+        return Integer.valueOf(200).equals(code);
     }
 
     public static <T> Result<T> fail(Integer code, String msg) {

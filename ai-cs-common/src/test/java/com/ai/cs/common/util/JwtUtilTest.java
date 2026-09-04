@@ -80,5 +80,16 @@ class JwtUtilTest {
     void testGetUsername() {
         String token = JwtUtil.generateToken(TEST_USER_ID, TEST_USERNAME);
         assertEquals(TEST_USERNAME, JwtUtil.getUsername(token));
+        assertEquals(JwtUtil.TYP_STAFF, JwtUtil.getTokenType(token));
+        assertFalse(JwtUtil.isVisitor(token));
+    }
+
+    @Test
+    @DisplayName("访客令牌带 visitor 类型")
+    void testVisitorToken() {
+        String token = JwtUtil.generateVisitorToken(0L, "visitor:anon");
+        assertTrue(JwtUtil.isVisitor(token));
+        assertEquals(JwtUtil.TYP_VISITOR, JwtUtil.getTokenType(token));
+        assertEquals("visitor:anon", JwtUtil.getUsername(token));
     }
 }
