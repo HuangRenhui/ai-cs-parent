@@ -1,9 +1,15 @@
 package com.ai.cs.aiagent.service;
 
 import com.ai.cs.aiagent.util.LlmUtil;
+import com.ai.cs.api.feign.KnowledgeFeign;
+import com.ai.cs.api.feign.OpenToolFeign;
+import com.ai.cs.api.feign.SessionFeign;
 import com.ai.cs.api.feign.WorkOrderFeign;
+import com.ai.cs.common.constant.PromptConst;
 import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.IntentDTO;
+import com.ai.cs.common.dto.RagSearchResultDTO;
+import com.ai.cs.common.result.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,15 +19,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-/**
- * AiAgentService 单元测试
- *
- * @author huangrenhui
- * @date 2026/7/20
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AiAgentService 单元测试")
 class AiAgentServiceTest {
@@ -31,6 +32,15 @@ class AiAgentServiceTest {
 
     @Mock
     private WorkOrderFeign workOrderFeign;
+
+    @Mock
+    private KnowledgeFeign knowledgeFeign;
+
+    @Mock
+    private OpenToolFeign openToolFeign;
+
+    @Mock
+    private SessionFeign sessionFeign;
 
     @InjectMocks
     private AiAgentService aiAgentService;
@@ -51,26 +61,31 @@ class AiAgentServiceTest {
         IntentDTO intent = new IntentDTO();
         intent.setIntent("转人工");
         when(llmUtil.getIntent(anyString())).thenReturn(intent);
+        when(sessionFeign.transfer(anyString())).thenReturn(Result.success("ok"));
 
         String reply = aiAgentService.chat(chatDTO);
         assertTrue(reply.contains("人工客服"));
+        verify(sessionFeign).transfer("session-001");
     }
 
     @Test
-    @DisplayName("意图识别 - 查物流（有订单号）")
-    void testChat_QueryLogistics_WithEntity() {
+    @DisplayName("查物流失败不声称已发货")
+    void testChat_QueryLogistics_ToolDown() {
         IntentDTO intent = new IntentDTO();
         intent.setIntent("查物流");
         intent.setEntity("ORDER-123");
         when(llmUtil.getIntent(anyString())).thenReturn(intent);
+        when(openToolFeign.invoke(any())).thenReturn(Result.fail(503, "down"));
 
         String reply = aiAgentService.chat(chatDTO);
         assertTrue(reply.contains("ORDER-123"));
-        assertTrue(reply.contains("运输中"));
+        assertTrue(reply.contains("暂时不可用"));
+        assertFalse(reply.contains("已发货"));
+        assertFalse(reply.contains("运输中"));
     }
 
     @Test
-    @DisplayName("意图识别 - 查物流（无订单号）")
+    @DisplayName("查物流无订单号")
     void testChat_QueryLogistics_NoEntity() {
         IntentDTO intent = new IntentDTO();
         intent.setIntent("查物流");
@@ -78,17 +93,45 @@ class AiAgentServiceTest {
 
         String reply = aiAgentService.chat(chatDTO);
         assertTrue(reply.contains("请提供"));
+        verify(openToolFeign, never()).invoke(any());
     }
 
     @Test
-    @DisplayName("意图识别 - 默认LLM回复")
-    void testChat_DefaultLLMReply() {
+    @DisplayName("知识库不可用返回繁忙话术而不是闲聊")
+    void testChat_KnowledgeUnavailable() {
         IntentDTO intent = new IntentDTO();
-        intent.setIntent("其他");
+        intent.setIntent("咨询");
         when(llmUtil.getIntent(anyString())).thenReturn(intent);
-        when(llmUtil.chatReply(anyString(), anyString())).thenReturn("这是AI的默认回复");
+        when(knowledgeFeign.ragSearch(any(), any(), any())).thenReturn(Result.fail(503, "down"));
 
         String reply = aiAgentService.chat(chatDTO);
-        assertEquals("这是AI的默认回复", reply);
+        assertEquals(PromptConst.LLM_BUSY_REPLY, reply);
+        verify(llmUtil, never()).chatReply(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("意图模型失败返回繁忙话术")
+    void testChat_IntentDegraded() {
+        IntentDTO intent = new IntentDTO();
+        intent.setIntent("咨询");
+        intent.setLlmDegraded(true);
+        when(llmUtil.getIntent(anyString())).thenReturn(intent);
+
+        String reply = aiAgentService.chat(chatDTO);
+        assertEquals(PromptConst.LLM_BUSY_REPLY, reply);
+        verifyNoInteractions(knowledgeFeign);
+    }
+
+    @Test
+    @DisplayName("知识库命中返回资料答复")
+    void testChat_KnowledgeHit() {
+        IntentDTO intent = new IntentDTO();
+        intent.setIntent("咨询");
+        when(llmUtil.getIntent(anyString())).thenReturn(intent);
+        RagSearchResultDTO hit = RagSearchResultDTO.hit("根据资料：营业时间 9 点", java.util.List.of());
+        when(knowledgeFeign.ragSearch(any(), any(), any())).thenReturn(Result.success(hit));
+
+        String reply = aiAgentService.chat(chatDTO);
+        assertEquals("根据资料：营业时间 9 点", reply);
     }
 }

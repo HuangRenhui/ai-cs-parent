@@ -4,6 +4,7 @@ import com.ai.cs.aiagent.service.AgentToolService;
 import com.ai.cs.aiagent.service.AiAgentService;
 import com.ai.cs.aiagent.service.MultimodalChatService;
 import com.ai.cs.common.dto.ChatDTO;
+import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.result.Result;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
@@ -33,9 +34,8 @@ public class AiChatController {
 
     /** 文本对话 */
     @PostMapping("/chat/send")
-    public Result<String> chat(@RequestBody ChatDTO dto) {
-        String reply = aiAgentService.chat(dto);
-        return Result.success(reply);
+    public Result<ChatReplyDTO> chat(@RequestBody ChatDTO dto) {
+        return Result.success(aiAgentService.chatDetail(dto));
     }
 
     /** 图片对话（多模态） */

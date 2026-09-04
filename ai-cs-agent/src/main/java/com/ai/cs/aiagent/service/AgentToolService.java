@@ -3,11 +3,16 @@ package com.ai.cs.aiagent.service;
 import com.ai.cs.aiagent.enums.AiToolEnum;
 import com.ai.cs.api.feign.WorkOrderFeign;
 import com.ai.cs.common.dto.WorkOrderDTO;
+import com.ai.cs.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Agent工具增强服务
@@ -23,17 +28,8 @@ public class AgentToolService {
     @Resource
     private WorkOrderFeign workOrderFeign;
 
-    /** 工具执行结果缓存 */
-    private final Map<String, Object> toolCache = new LinkedHashMap<>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Object> eldest) {
-            return size() > 100;
-        }
-    };
+    private final Map<String, String> toolCache = new ConcurrentHashMap<>();
 
-    /**
-     * 获取所有可用工具列表
-     */
     public List<Map<String, String>> getAvailableTools() {
         List<Map<String, String>> tools = new ArrayList<>();
         for (AiToolEnum tool : AiToolEnum.values()) {
@@ -45,13 +41,6 @@ public class AgentToolService {
         return tools;
     }
 
-    /**
-     * 工具链编排：按顺序执行多个工具
-     * @param sessionId 会话ID
-     * @param userMsg 用户消息
-     * @param toolNames 工具名称列表
-     * @return 执行结果汇总
-     */
     public String executeToolChain(String sessionId, String userMsg, List<String> toolNames) {
         StringBuilder result = new StringBuilder();
         for (String toolName : toolNames) {
@@ -65,17 +54,18 @@ public class AgentToolService {
         return result.toString();
     }
 
-    /**
-     * 执行单个工具（带缓存）
-     */
     public String executeTool(String sessionId, String userMsg, String toolName) {
-        String cacheKey = toolName + ":" + userMsg.hashCode();
-        if (toolCache.containsKey(cacheKey)) {
+        String cacheKey = toolName + ":" + (userMsg == null ? 0 : userMsg.hashCode());
+        String cached = toolCache.get(cacheKey);
+        if (cached != null) {
             log.debug("工具执行结果命中缓存: {}", toolName);
-            return toolCache.get(cacheKey).toString();
+            return cached;
         }
 
         String result = doExecuteTool(sessionId, userMsg, toolName);
+        if (toolCache.size() > 200) {
+            toolCache.clear();
+        }
         toolCache.put(cacheKey, result);
         return result;
     }
@@ -102,17 +92,17 @@ public class AgentToolService {
             orderDTO.setContent(content);
             orderDTO.setSessionId(sessionId);
             orderDTO.setCustomerId(0L);
-            workOrderFeign.createOrder(orderDTO);
-            return "工单已创建成功";
+            Result<String> created = workOrderFeign.createOrder(orderDTO);
+            if (created != null && created.isOk()) {
+                return created.getData() == null ? "工单已创建成功" : created.getData();
+            }
+            return "创建工单失败: " + (created == null ? "无响应" : created.getMsg());
         } catch (Exception e) {
             log.error("创建工单失败", e);
             return "创建工单失败: " + e.getMessage();
         }
     }
 
-    /**
-     * 清除工具缓存
-     */
     public void clearCache() {
         toolCache.clear();
         log.info("工具缓存已清除");
