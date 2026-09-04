@@ -19,6 +19,8 @@
         <module>ai-cs-workorder</module>
         <module>ai-cs-websocket</module>
         <module>ai-cs-job</module>
+        <module>ai-cs-open</module>
+        <module>ai-cs-ops</module>
     </modules>
 
     <!-- 统一版本 -->
