@@ -11,6 +11,12 @@ spring:
     nacos:
       discovery:
         server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
@@ -33,6 +39,11 @@ mybatis-plus:
 milvus:
   host: localhost
   port: 19530
+  collection-name: cs_kb_faq
+  top-k: 5
+  score-threshold: 0.40
+  dimension: 1024
+# FAQ 向量化走 ai.embedding（Dashscope）。顶层 embedding.url 仅文档 RAG / 旧脚本参考，主路径不再调用 localhost:8000
 embedding:
   url: http://127.0.0.1:8000/embedding
 llm:
@@ -40,6 +51,14 @@ llm:
   api-key: xxx
   model: qwen-7b
   temperature: 0.2
+ai:
+  llm:
+    api-key: ${AI_LLM_API_KEY:}
+    model: qwen-turbo
+    url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
+  embedding:
+    model: text-embedding-v3
+    dimension: 1024
 
 # RAG私有化配置（LangChain4j + Ollama + Chroma）
 rag:

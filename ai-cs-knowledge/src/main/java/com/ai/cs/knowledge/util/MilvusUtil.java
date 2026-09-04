@@ -1,24 +1,38 @@
 package com.ai.cs.knowledge.util;
 
+import com.ai.cs.knowledge.config.MilvusProperties;
 import io.milvus.client.MilvusClient;
 import io.milvus.client.MilvusServiceClient;
+import io.milvus.common.clientenum.ConsistencyLevelEnum;
+import io.milvus.grpc.DataType;
+import io.milvus.grpc.MutationResult;
 import io.milvus.grpc.SearchResultData;
 import io.milvus.grpc.SearchResults;
 import io.milvus.param.ConnectParam;
+import io.milvus.param.IndexType;
+import io.milvus.param.MetricType;
 import io.milvus.param.R;
+import io.milvus.param.RpcStatus;
+import io.milvus.param.collection.CreateCollectionParam;
+import io.milvus.param.collection.FieldType;
+import io.milvus.param.collection.HasCollectionParam;
+import io.milvus.param.collection.LoadCollectionParam;
 import io.milvus.param.dml.DeleteParam;
 import io.milvus.param.dml.InsertParam;
 import io.milvus.param.dml.SearchParam;
-import io.milvus.grpc.MutationResult;
+import io.milvus.param.index.CreateIndexParam;
+import io.milvus.response.SearchResultsWrapper;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
-import jakarta.annotation.PostConstruct;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  *
@@ -38,6 +52,16 @@ public class MilvusUtil {
 
     private MilvusClient client;
     public static final String COLLECTION_NAME = "cs_faq_collection";
+    public static final String FIELD_FAQ_ID = "faq_id";
+    public static final String FIELD_TENANT_ID = "tenant_id";
+    public static final String FIELD_EMBEDDING = "embedding";
+    public static final String FIELD_CONTENT = "content";
+
+    @Resource
+    private MilvusProperties milvusProperties;
+
+    private final AtomicBoolean tenantReady = new AtomicBoolean(false);
+    private String tenantLastError = "租户集合未初始化";
 
     @PostConstruct
     public void init() {
@@ -293,5 +317,205 @@ public class MilvusUtil {
             log.error("提取content字段失败, index={}", index, e);
         }
         return null;
+    }
+
+    public boolean isReady() {
+        return client != null;
+    }
+
+    public String statusMessage() {
+        if (!isReady()) {
+            return "DOWN: 未连接";
+        }
+        return tenantReady.get() ? "UP" : ("租户集合: " + tenantLastError);
+    }
+
+    public String tenantCollectionName() {
+        return milvusProperties == null ? "cs_kb_faq" : milvusProperties.getCollectionName();
+    }
+
+    public float scoreThreshold() {
+        return milvusProperties == null ? 0.40f : milvusProperties.getScoreThreshold();
+    }
+
+    public int topK() {
+        return milvusProperties == null ? 5 : Math.max(1, milvusProperties.getTopK());
+    }
+
+    public void upsertTenant(long faqId, String tenantId, List<Float> vector, String content) {
+        ensureTenantCollection(vector == null ? 0 : vector.size());
+        deleteByFaqId(faqId);
+        String tenant = normalizeTenant(tenantId);
+        String text = truncate(content);
+        List<InsertParam.Field> fields = new ArrayList<>();
+        fields.add(new InsertParam.Field(FIELD_FAQ_ID, Collections.singletonList(faqId)));
+        fields.add(new InsertParam.Field(FIELD_TENANT_ID, Collections.singletonList(tenant)));
+        fields.add(new InsertParam.Field(FIELD_EMBEDDING, Collections.singletonList(vector)));
+        fields.add(new InsertParam.Field(FIELD_CONTENT, Collections.singletonList(text)));
+        R<MutationResult> resp = getClient().insert(InsertParam.newBuilder()
+                .withCollectionName(tenantCollectionName())
+                .withFields(fields)
+                .build());
+        if (resp.getStatus() != R.Status.Success.getCode()) {
+            throw new IllegalStateException("租户向量写入失败: " + resp.getMessage());
+        }
+    }
+
+    public boolean deleteByFaqId(Long faqId) {
+        if (!isReady() || faqId == null) {
+            return false;
+        }
+        String expr = FIELD_FAQ_ID + " in [" + faqId + "]";
+        R<MutationResult> resp = getClient().delete(DeleteParam.newBuilder()
+                .withCollectionName(tenantCollectionName())
+                .withExpr(expr)
+                .build());
+        return resp.getStatus() == R.Status.Success.getCode();
+    }
+
+    public List<MilvusHit> search(String tenantId, List<Float> vector, int topK) {
+        ensureTenantCollection(vector == null ? 0 : vector.size());
+        String expr = FIELD_TENANT_ID + " == \"" + escape(normalizeTenant(tenantId)) + "\"";
+        SearchParam searchParam = SearchParam.newBuilder()
+                .withCollectionName(tenantCollectionName())
+                .withMetricType(MetricType.COSINE)
+                .withVectors(Collections.singletonList(vector))
+                .withVectorFieldName(FIELD_EMBEDDING)
+                .withTopK(topK)
+                .withExpr(expr)
+                .withParams("{\"nprobe\":" + Math.max(1, milvusProperties.getNprobe()) + "}")
+                .withOutFields(List.of(FIELD_FAQ_ID, FIELD_CONTENT, FIELD_TENANT_ID))
+                .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                .build();
+        R<SearchResults> resp = getClient().search(searchParam);
+        if (resp.getStatus() != R.Status.Success.getCode()) {
+            throw new IllegalStateException("租户向量检索失败: " + resp.getMessage());
+        }
+        List<MilvusHit> hits = new ArrayList<>();
+        if (resp.getData() == null || resp.getData().getResults() == null) {
+            return hits;
+        }
+        SearchResultsWrapper wrapper = new SearchResultsWrapper(resp.getData().getResults());
+        List<SearchResultsWrapper.IDScore> scores = wrapper.getIDScore(0);
+        List<?> faqIds = wrapper.getFieldData(FIELD_FAQ_ID, 0);
+        List<?> contents = wrapper.getFieldData(FIELD_CONTENT, 0);
+        int n = scores == null ? 0 : scores.size();
+        for (int i = 0; i < n; i++) {
+            long faqId = toLong(faqIds, i, scores.get(i).getLongID());
+            float score = scores.get(i).getScore();
+            String content = contents != null && i < contents.size() && contents.get(i) != null
+                    ? String.valueOf(contents.get(i)) : "";
+            hits.add(new MilvusHit(faqId, score, content));
+        }
+        return hits;
+    }
+
+    private synchronized void ensureTenantCollection(int dimHint) {
+        if (!isReady()) {
+            throw new IllegalStateException("Milvus 未连接");
+        }
+        if (tenantReady.get()) {
+            return;
+        }
+        try {
+            String name = tenantCollectionName();
+            int dim = dimHint > 0 ? dimHint : Math.max(8, milvusProperties.getDimension());
+            MilvusServiceClient milvus = (MilvusServiceClient) getClient();
+            R<Boolean> has = milvus.hasCollection(HasCollectionParam.newBuilder().withCollectionName(name).build());
+            if (has.getStatus() != R.Status.Success.getCode()) {
+                throw new IllegalStateException("检查租户集合失败: " + has.getMessage());
+            }
+            if (Boolean.FALSE.equals(has.getData())) {
+                createTenantCollection(name, dim);
+            }
+            R<RpcStatus> load = milvus.loadCollection(LoadCollectionParam.newBuilder().withCollectionName(name).build());
+            if (load.getStatus() != R.Status.Success.getCode()) {
+                throw new IllegalStateException("Load 租户集合失败: " + load.getMessage());
+            }
+            tenantReady.set(true);
+            tenantLastError = "";
+        } catch (Exception e) {
+            tenantReady.set(false);
+            tenantLastError = e.getMessage();
+            throw e instanceof RuntimeException re ? re : new IllegalStateException(e);
+        }
+    }
+
+    private void createTenantCollection(String name, int dim) {
+        FieldType faqId = FieldType.newBuilder()
+                .withName(FIELD_FAQ_ID)
+                .withDataType(DataType.Int64)
+                .withPrimaryKey(true)
+                .withAutoID(false)
+                .build();
+        FieldType tenantId = FieldType.newBuilder()
+                .withName(FIELD_TENANT_ID)
+                .withDataType(DataType.VarChar)
+                .withMaxLength(64)
+                .build();
+        FieldType embedding = FieldType.newBuilder()
+                .withName(FIELD_EMBEDDING)
+                .withDataType(DataType.FloatVector)
+                .withDimension(dim)
+                .build();
+        FieldType content = FieldType.newBuilder()
+                .withName(FIELD_CONTENT)
+                .withDataType(DataType.VarChar)
+                .withMaxLength(milvusProperties.getContentMaxLength())
+                .build();
+        MilvusServiceClient milvus = (MilvusServiceClient) getClient();
+        R<RpcStatus> created = milvus.createCollection(CreateCollectionParam.newBuilder()
+                .withCollectionName(name)
+                .withDescription("tenant-isolated FAQ embeddings")
+                .withShardsNum(1)
+                .addFieldType(faqId)
+                .addFieldType(tenantId)
+                .addFieldType(embedding)
+                .addFieldType(content)
+                .build());
+        if (created.getStatus() != R.Status.Success.getCode()) {
+            throw new IllegalStateException("创建租户集合失败: " + created.getMessage());
+        }
+        R<RpcStatus> index = milvus.createIndex(CreateIndexParam.newBuilder()
+                .withCollectionName(name)
+                .withFieldName(FIELD_EMBEDDING)
+                .withIndexType(IndexType.IVF_FLAT)
+                .withMetricType(MetricType.COSINE)
+                .withExtraParam("{\"nlist\":" + Math.max(8, milvusProperties.getNlist()) + "}")
+                .withSyncMode(Boolean.TRUE)
+                .build());
+        if (index.getStatus() != R.Status.Success.getCode()) {
+            throw new IllegalStateException("创建租户索引失败: " + index.getMessage());
+        }
+        log.info("已创建租户 Milvus 集合 {} dim={}", name, dim);
+    }
+
+    private String truncate(String content) {
+        String text = content == null ? "" : content;
+        int max = milvusProperties.getContentMaxLength();
+        return text.length() <= max ? text : text.substring(0, max);
+    }
+
+    private String normalizeTenant(String tenantId) {
+        return StringUtils.hasText(tenantId) ? tenantId.trim() : "default";
+    }
+
+    private String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private long toLong(List<?> faqIds, int index, long fallback) {
+        if (faqIds == null || index >= faqIds.size() || faqIds.get(index) == null) {
+            return fallback;
+        }
+        Object raw = faqIds.get(index);
+        if (raw instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(raw));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 }

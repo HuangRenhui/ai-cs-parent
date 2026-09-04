@@ -59,11 +59,8 @@ public class AudioDeduplicationService {
      * @return 指纹特征向量
      */
     public double[] generateFingerprint(File audioFile, int sampleCount) throws IOException {
-        try {
-            AudioInputStream audioStream = AudioSystem.getAudioInputStream(audioFile);
-            AudioFormat format = audioStream.getFormat();
-
-            // 转换为PCM格式便于处理
+        try (AudioInputStream original = AudioSystem.getAudioInputStream(audioFile)) {
+            AudioFormat format = original.getFormat();
             AudioFormat pcmFormat = new AudioFormat(
                     AudioFormat.Encoding.PCM_SIGNED,
                     format.getSampleRate(),
@@ -73,23 +70,18 @@ public class AudioDeduplicationService {
                     format.getSampleRate(),
                     false
             );
-
+            byte[] audioBytes;
             if (!format.matches(pcmFormat)) {
-                audioStream = AudioSystem.getAudioInputStream(pcmFormat, audioStream);
+                try (AudioInputStream converted = AudioSystem.getAudioInputStream(pcmFormat, original)) {
+                    audioBytes = readAllBytes(converted);
+                }
+            } else {
+                audioBytes = readAllBytes(original);
             }
-
-            // 读取音频数据
-            byte[] audioBytes = readAllBytes(audioStream);
-            audioStream.close();
-
-            // 转换为short数组
             short[] samples = new short[audioBytes.length / 2];
             ByteBuffer.wrap(audioBytes).order(ByteOrder.LITTLE_ENDIAN)
                     .asShortBuffer().get(samples);
-
-            // 计算频谱特征（简化FFT）
             return computeSpectralFeatures(samples, sampleCount);
-
         } catch (UnsupportedAudioFileException e) {
             throw new IOException("不支持的音频格式: " + e.getMessage(), e);
         }

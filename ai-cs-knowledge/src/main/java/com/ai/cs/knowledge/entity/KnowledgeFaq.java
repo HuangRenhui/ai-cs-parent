@@ -17,6 +17,8 @@ import lombok.EqualsAndHashCode;
 public class KnowledgeFaq extends BaseEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
+    /** 租户编码，默认 default */
+    private String tenantCode;
     private String question;
     private String answer;
     private String category;

@@ -2,6 +2,7 @@ package com.ai.cs.knowledge;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
@@ -12,7 +13,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  * @author huangrenhui
  * @date 2026/6/11 17:57
  */
-@SpringBootApplication(scanBasePackages = "com.ai.cs")
+@SpringBootApplication(scanBasePackages = "com.ai.cs", exclude = SecurityAutoConfiguration.class)
 @EnableDiscoveryClient
 @EnableConfigurationProperties
 public class KnowledgeApplication {
