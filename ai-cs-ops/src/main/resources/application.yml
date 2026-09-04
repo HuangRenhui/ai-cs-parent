@@ -1,0 +1,40 @@
+server:
+  port: 8087
+spring:
+  application:
+    name: ai-cs-ops
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+ops:
+  log-dirs:
+    - logs
+    - ../logs
+  max-lines-per-file: 4000
+  connect-timeout-ms: 800
+  services:
+    - name: gateway
+      url: http://localhost:8080/actuator/health
+    - name: websocket
+      url: http://localhost:8081
+    - name: ai-agent
+      url: http://localhost:8082
+    - name: knowledge
+      url: http://localhost:8083/knowledge/health
+    - name: base-service
+      url: http://localhost:8084
+    - name: workorder
+      url: http://localhost:8085
+    - name: open
+      url: http://localhost:8086
+    - name: ops
+      url: http://localhost:8087/ops/health/self
+    - name: job
+      url: http://localhost:8088
