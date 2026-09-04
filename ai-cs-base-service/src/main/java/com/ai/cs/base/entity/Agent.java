@@ -16,6 +16,7 @@ public class Agent extends BaseEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String agentAccount;
+    @TableField(updateStrategy = FieldStrategy.NOT_NULL)
     private String agentPwd;
     private String agentName;
     private Integer agentStatus;

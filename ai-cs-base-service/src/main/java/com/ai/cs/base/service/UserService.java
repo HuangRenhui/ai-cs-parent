@@ -4,6 +4,7 @@ import com.ai.cs.base.entity.Menu;
 import com.ai.cs.base.entity.User;
 import com.ai.cs.base.mapper.UserMapper;
 import com.ai.cs.common.dto.LoginDTO;
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.util.JwtUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -36,11 +37,11 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 .eq(User::getDelFlag, 0));
 
         if (user == null || user.getStatus() == 0) {
-            throw new RuntimeException("用户不存在或已被禁用");
+            throw new BusinessException("用户不存在或已被禁用");
         }
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new RuntimeException("用户名或密码错误");
+            throw new BusinessException("用户名或密码错误");
         }
 
         // 获取角色和权限

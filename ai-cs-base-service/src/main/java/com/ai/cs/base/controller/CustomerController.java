@@ -2,6 +2,7 @@ package com.ai.cs.base.controller;
 
 import com.ai.cs.base.entity.Customer;
 import com.ai.cs.base.service.CustomerService;
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.result.Result;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
@@ -17,17 +18,46 @@ import java.util.List;
 @RestController
 @RequestMapping("/customer")
 public class CustomerController {
+
     @Resource
     private CustomerService customerService;
 
     @GetMapping("/list")
-    public Result<List<Customer>> list() {
-        return Result.success(customerService.list());
+    public Result<List<Customer>> list(@RequestParam(required = false) String keyword) {
+        return Result.success(customerService.listByKeyword(keyword));
+    }
+
+    @GetMapping("/{id}")
+    public Result<Customer> detail(@PathVariable Long id) {
+        Customer customer = customerService.getById(id);
+        if (customer == null) {
+            throw new BusinessException("客户不存在");
+        }
+        return Result.success(customer);
     }
 
     @PostMapping("/save")
     public Result<String> save(@RequestBody Customer customer) {
-        customerService.save(customer);
+        customer.setId(null);
+        customerService.saveCustomer(customer);
         return Result.success("新增成功");
+    }
+
+    @PutMapping("/update")
+    public Result<String> update(@RequestBody Customer customer) {
+        if (customer.getId() == null) {
+            throw new BusinessException("客户ID不能为空");
+        }
+        customerService.saveCustomer(customer);
+        return Result.success("修改成功");
+    }
+
+    @DeleteMapping("/delete/{id}")
+    public Result<String> delete(@PathVariable Long id) {
+        if (customerService.getById(id) == null) {
+            throw new BusinessException("客户不存在");
+        }
+        customerService.removeById(id);
+        return Result.success("删除成功");
     }
 }
