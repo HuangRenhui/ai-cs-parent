@@ -4,14 +4,13 @@
     <springProperty scope="context" name="MODULE_NAME" source="spring.application.name" defaultValue="ai-cs-gateway"/>
     <!-- 日志路径 -->
     <property name="LOG_PATH" value="./logs"/>
-    <!-- 日志格式 -->
-    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{requestId}] [%thread] %-5level %logger{36} - %msg%n"/>
     <property name="JSON_PATTERN" value='{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%-5level","thread":"%thread","logger":"%logger{36}","message":"%msg"}%n'/>
 
     <!-- 控制台输出（彩色） -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{36}) - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%X{requestId}] [%thread] %cyan(%logger{36}) - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -45,29 +44,24 @@
         </rollingPolicy>
     </appender>
 
-    <!-- JSON 格式输出（prod 环境启用） -->
-    <springProfile name="prod">
-        <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-            <file>${LOG_PATH}/${MODULE_NAME}-json.log</file>
-            <encoder>
-                <pattern>${JSON_PATTERN}</pattern>
-                <charset>UTF-8</charset>
-            </encoder>
-            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-                <fileNamePattern>${LOG_PATH}/${MODULE_NAME}-json.%d{yyyy-MM-dd}.log</fileNamePattern>
-                <maxHistory>30</maxHistory>
-            </rollingPolicy>
-        </appender>
-    </springProfile>
+    <!-- JSON 行日志（运维台按 requestId 检索） -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${MODULE_NAME}-json.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${MODULE_NAME}-json.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+        <encoder class="com.ai.cs.common.log.JsonLineEncoder">
+            <service>${MODULE_NAME}</service>
+        </encoder>
+    </appender>
 
     <!-- 根日志级别 -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
         <appender-ref ref="ERROR_FILE"/>
-        <springProfile name="prod">
-            <appender-ref ref="JSON_FILE"/>
-        </springProfile>
+        <appender-ref ref="JSON_FILE"/>
     </root>
 
     <!-- 项目包日志级别 -->

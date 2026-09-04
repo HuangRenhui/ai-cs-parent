@@ -15,37 +15,39 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
- * Gateway JWT认证全局过滤器
- * 对所有请求进行JWT Token校验，白名单路径跳过
- *
- * @author huangrenhui
- * @date 2026/7/20
+ * Gateway JWT 全局过滤器。访客令牌只能访问聊天相关路径。
  */
 @Slf4j
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
 
-    /** 无需认证的路径白名单 */
     private static final List<String> WHITE_LIST = List.of(
             "/api/auth/login",
             "/api/auth/register",
+            "/auth/login",
+            "/auth/register",
             "/ws/",
-            "/doc.html",
-            "/webjars/",
-            "/v3/api-docs",
-            "/swagger-resources"
+            "/open/widget/init",
+            "/ops/health/self",
+            "/knowledge/health",
+            "/files/avatars/",
+            "/actuator/health"
+    );
+
+    private static final List<String> VISITOR_ALLOWED = List.of(
+            "/ai/chat",
+            "/session/ensure",
+            "/session/message"
     );
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // 白名单路径直接放行
         if (isWhiteListed(path)) {
             return chain.filter(exchange);
         }
 
-        // 提取Token
         String token = extractToken(exchange.getRequest());
         if (token == null || !JwtUtil.validateToken(token)) {
             log.warn("未授权访问: {}", path);
@@ -53,12 +55,19 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
-        // 将用户信息添加到请求头传递给下游服务
+        if (JwtUtil.isVisitor(token) && !isVisitorAllowed(path)) {
+            log.warn("访客令牌越权访问: {}", path);
+            exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+            return exchange.getResponse().setComplete();
+        }
+
         Long userId = JwtUtil.getUserId(token);
         String username = JwtUtil.getUsername(token);
+        String typ = JwtUtil.getTokenType(token);
         ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                 .header("X-User-Id", String.valueOf(userId))
                 .header("X-Username", username != null ? username : "")
+                .header("X-Token-Type", typ != null ? typ : JwtUtil.TYP_STAFF)
                 .build();
 
         return chain.filter(exchange.mutate().request(modifiedRequest).build());
@@ -71,6 +80,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
     private boolean isWhiteListed(String path) {
         return WHITE_LIST.stream().anyMatch(path::startsWith);
+    }
+
+    private boolean isVisitorAllowed(String path) {
+        return VISITOR_ALLOWED.stream().anyMatch(path::startsWith);
     }
 
     private String extractToken(ServerHttpRequest request) {

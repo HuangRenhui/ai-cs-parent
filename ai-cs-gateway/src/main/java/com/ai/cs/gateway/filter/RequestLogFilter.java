@@ -29,7 +29,8 @@ public class RequestLogFilter implements GlobalFilter, Ordered {
             long duration = System.currentTimeMillis() - start;
             int status = exchange.getResponse().getStatusCode() != null
                     ? exchange.getResponse().getStatusCode().value() : 0;
-            log.info("[Gateway] {} {} -> {} ({}ms)", method, path, status, duration);
+            String requestId = exchange.getRequest().getHeaders().getFirst("X-Request-Id");
+            log.info("[Gateway] {} {} -> {} ({}ms) requestId={}", method, path, status, duration, requestId);
         });
     }
 

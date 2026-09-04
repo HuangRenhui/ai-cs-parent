@@ -7,7 +7,12 @@ spring:
     nacos:
       discovery:
         server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
       config:
+        enabled: false
+        import-check:
+          enabled: false
         server-addr: localhost:8848
     gateway:
       globalcors:
@@ -17,66 +22,46 @@ spring:
             allowed-methods: "*"
             allowed-headers: "*"
             allow-credentials: false
-      # Redis限流（需要引入 spring-boot-starter-data-redis-reactive）
-      # default-filters:
-      #   - name: RequestRateLimiter
-      #     args:
-      #       key-resolver: "#{@ipKeyResolver}"
-      #       redis-rate-limiter.replenishRate: 10
-      #       redis-rate-limiter.burstCapacity: 20
       routes:
-        # WebSocket聊天路由
         - id: websocket-route
-          uri: lb:ws://ai-cs-websocket
+          uri: ${GATEWAY_WS_URI:ws://localhost:8081}
           predicates:
             - Path=/ws/**
-        # AI智能体路由
         - id: ai-agent-route
-          uri: lb://ai-cs-agent
+          uri: ${GATEWAY_AGENT_URI:http://localhost:8082}
           predicates:
             - Path=/ai/**
-        # 知识库路由
         - id: knowledge-route
-          uri: lb://ai-cs-knowledge
+          uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:
             - Path=/knowledge/**
-        # 客户管理路由
-        - id: customer-route
-          uri: lb://ai-cs-base-service
+        - id: knowledge-api-route
+          uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:
-            - Path=/customer/**
-        # 工单路由
+            - Path=/api/rag/**,/api/image/**,/api/audio/**,/api/file/**,/api/prompt/**,/api/multimodal/**,/api/document/**,/api/knowledge-graph/**,/api/knowledge-enhanced/**,/api/multimodal-knowledge/**
+        - id: base-service-route
+          uri: ${GATEWAY_BASE_URI:http://localhost:8084}
+          predicates:
+            - Path=/customer/**,/session/**,/agent/**,/file/**,/files/**,/auth/**,/statistics/**,/system/**
         - id: workorder-route
-          uri: lb://ai-cs-workorder
+          uri: ${GATEWAY_WORKORDER_URI:http://localhost:8085}
           predicates:
             - Path=/workorder/**
-        # 认证路由
-        - id: auth-route
-          uri: lb://ai-cs-base-service
+        - id: open-route
+          uri: ${GATEWAY_OPEN_URI:http://localhost:8086}
           predicates:
-            - Path=/auth/**
-        # 统计路由
-        - id: statistics-route
-          uri: lb://ai-cs-base-service
+            - Path=/open/**
+        - id: ops-route
+          uri: ${GATEWAY_OPS_URI:http://localhost:8087}
           predicates:
-            - Path=/statistics/**
-        # 系统管理路由
-        - id: system-route
-          uri: lb://ai-cs-base-service
-          predicates:
-            - Path=/system/**
-        # 会话管理路由
-        - id: session-route
-          uri: lb://ai-cs-base-service
-          predicates:
-            - Path=/session/**
-        # Actuator 监控路由
-        - id: actuator-route
-          uri: lb://ai-cs-base-service
-          predicates:
-            - Path=/actuator/**
+            - Path=/ops/**
 
-# Actuator 监控配置
+ai:
+  jwt:
+    secret: ${JWT_SECRET:}
+    expire-ms: 86400000
+    visitor-expire-ms: 7200000
+
 management:
   endpoints:
     web:
@@ -85,4 +70,4 @@ management:
       base-path: /actuator
   endpoint:
     health:
-      show-details: always
+      show-details: never
