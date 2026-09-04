@@ -52,7 +52,7 @@ const handleLogin = async () => {
       const res = await request.post('/auth/login', {
         username: loginForm.username,
         password: loginForm.password
-      })
+      }, { silent: true })
       if (res.code === 200) {
         localStorage.setItem('token', res.data.token)
         localStorage.setItem('userInfo', JSON.stringify(res.data))
@@ -61,7 +61,7 @@ const handleLogin = async () => {
         errorMsg.value = res.msg || '登录失败'
       }
     } catch (e) {
-      errorMsg.value = '网络错误，请检查网络连接'
+      errorMsg.value = e?.msg || e?.response?.data?.msg || e?.message || '登录失败'
     } finally {
       loading.value = false
     }

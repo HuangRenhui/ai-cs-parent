@@ -1,5 +1,8 @@
 <template>
-  <div class="app-container" v-if="isLoggedIn">
+  <div v-if="isBlank" class="blank-shell">
+    <router-view />
+  </div>
+  <div class="app-container" v-else-if="isLoggedIn">
     <el-container>
       <!-- 桌面端侧边栏 -->
       <el-aside width="220px" class="sidebar desktop-sidebar">
@@ -14,23 +17,45 @@
             <el-icon><ChatDotRound /></el-icon>
             <span>AI聊天</span>
           </el-menu-item>
+          <el-menu-item index="/session">
+            <el-icon><Tickets /></el-icon>
+            <span>会话记录</span>
+          </el-menu-item>
           <el-menu-item index="/customer">
             <el-icon><User /></el-icon>
             <span>客户管理</span>
           </el-menu-item>
           <el-menu-item index="/workorder">
-            <el-icon><Tickets /></el-icon>
+            <el-icon><Document /></el-icon>
             <span>工单管理</span>
           </el-menu-item>
           <el-menu-item index="/knowledge">
             <el-icon><Reading /></el-icon>
             <span>知识库管理</span>
           </el-menu-item>
+          <el-menu-item index="/agent">
+            <el-icon><Headset /></el-icon>
+            <span>坐席管理</span>
+          </el-menu-item>
+          <el-menu-item index="/open">
+            <el-icon><Link /></el-icon>
+            <span>开放接入</span>
+          </el-menu-item>
+          <el-sub-menu index="/ops">
+            <template #title>
+              <el-icon><Monitor /></el-icon>
+              <span>运维</span>
+            </template>
+            <el-menu-item index="/ops">总览</el-menu-item>
+            <el-menu-item index="/ops/logs">日志查询</el-menu-item>
+            <el-menu-item index="/ops/traces">链路追踪</el-menu-item>
+            <el-menu-item index="/ops/alerts">告警</el-menu-item>
+            <el-menu-item index="/ops/health">服务健康</el-menu-item>
+          </el-sub-menu>
         </el-menu>
       </el-aside>
       <el-container>
         <el-header class="top-header">
-          <!-- 移动端汉堡菜单按钮 -->
           <div class="header-left">
             <el-button class="mobile-menu-btn" @click="mobileMenuVisible = !mobileMenuVisible" text>
               <el-icon :size="22"><Expand v-if="!mobileMenuVisible" /><Fold v-else /></el-icon>
@@ -43,7 +68,6 @@
           </div>
         </el-header>
 
-        <!-- 移动端抽屉菜单 -->
         <el-drawer v-model="mobileMenuVisible" direction="ltr" size="220px" :with-header="false" class="mobile-drawer">
           <div class="logo" @click="mobileMenuVisible = false; $router.push('/dashboard')">AI 智能客服</div>
           <el-menu :default-active="$route.path" mode="vertical" router background-color="#2a3f5f"
@@ -56,17 +80,33 @@
               <el-icon><ChatDotRound /></el-icon>
               <span>AI聊天</span>
             </el-menu-item>
+            <el-menu-item index="/session">
+              <el-icon><Tickets /></el-icon>
+              <span>会话记录</span>
+            </el-menu-item>
             <el-menu-item index="/customer">
               <el-icon><User /></el-icon>
               <span>客户管理</span>
             </el-menu-item>
             <el-menu-item index="/workorder">
-              <el-icon><Tickets /></el-icon>
+              <el-icon><Document /></el-icon>
               <span>工单管理</span>
             </el-menu-item>
             <el-menu-item index="/knowledge">
               <el-icon><Reading /></el-icon>
               <span>知识库管理</span>
+            </el-menu-item>
+            <el-menu-item index="/agent">
+              <el-icon><Headset /></el-icon>
+              <span>坐席管理</span>
+            </el-menu-item>
+            <el-menu-item index="/open">
+              <el-icon><Link /></el-icon>
+              <span>开放接入</span>
+            </el-menu-item>
+            <el-menu-item index="/ops">
+              <el-icon><Monitor /></el-icon>
+              <span>运维总览</span>
             </el-menu-item>
           </el-menu>
         </el-drawer>
@@ -83,13 +123,14 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Odometer, ChatDotRound, User, Tickets, Reading, Expand, Fold } from '@element-plus/icons-vue'
+import { Odometer, ChatDotRound, User, Tickets, Reading, Expand, Fold, Document, Headset, Link, Monitor } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 
+const isBlank = computed(() => !!route.meta.blank)
 const isLoggedIn = computed(() => {
-  return route.path !== '/login' && !!localStorage.getItem('token')
+  return !isBlank.value && route.path !== '/login' && !!localStorage.getItem('token')
 })
 
 const userInfo = ref(null)
@@ -123,7 +164,7 @@ html, body {
   height: 100%;
   -webkit-overflow-scrolling: touch;
 }
-.app-container {
+.app-container, .blank-shell {
   height: 100vh;
 }
 .logo {
@@ -168,23 +209,30 @@ html, body {
 .el-main {
   background-color: #f0f2f5;
 }
-
-/* 移动端汉堡菜单按钮（桌面端隐藏） */
+.page-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(31, 42, 55, 0.04);
+}
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
 .mobile-menu-btn {
   display: none !important;
 }
 .mobile-title {
   display: none;
 }
-
-/* ====== 移动端适配 ====== */
 @media (max-width: 768px) {
-  /* 隐藏桌面侧边栏 */
   .desktop-sidebar {
     display: none !important;
   }
-
-  /* 显示移动端菜单按钮 */
   .mobile-menu-btn {
     display: inline-flex !important;
   }
@@ -194,8 +242,6 @@ html, body {
     font-weight: bold;
     color: #2a3f5f;
   }
-
-  /* 移动端头部 */
   .top-header {
     padding: 0 12px;
     height: 50px;
@@ -207,19 +253,13 @@ html, body {
     font-size: 12px;
     padding: 5px 10px;
   }
-
-  /* 主内容区域 */
   .el-main {
     padding: 12px;
   }
-
-  /* 移动端抽屉样式 */
   .mobile-drawer .el-menu {
     border-right: none;
   }
 }
-
-/* 平板适配 */
 @media (min-width: 769px) and (max-width: 1024px) {
   .desktop-sidebar {
     width: 180px !important;
@@ -228,8 +268,6 @@ html, body {
     padding: 16px;
   }
 }
-
-/* 移动端触摸优化 */
 @media (hover: none) and (pointer: coarse) {
   .el-menu-item {
     min-height: 48px;

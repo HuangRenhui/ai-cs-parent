@@ -10,21 +10,23 @@
       <el-input v-model="searchKeyword" placeholder="搜索工单号或内容" class="search-input" />
       <el-select v-model="statusFilter" placeholder="状态筛选" class="search-select">
         <el-option label="全部" value="" />
-        <el-option label="待处理" value="待处理" />
-        <el-option label="已完成" value="已完成" />
+        <el-option label="待处理" :value="1" />
+        <el-option label="处理中" :value="2" />
+        <el-option label="已完成" :value="3" />
+        <el-option label="已关闭" :value="4" />
       </el-select>
       <el-button type="primary" @click="loadWorkOrders">搜索</el-button>
     </div>
 
-    <el-table :data="workOrderList" border>
+    <el-table :data="workOrderList" border empty-text="暂无工单或加载失败">
       <el-table-column prop="id" label="ID" />
       <el-table-column prop="orderNo" label="工单号" />
       <el-table-column prop="orderType" label="工单类型" />
-      <el-table-column prop="content" label="工单内容" />
-      <el-table-column prop="status" label="状态">
+      <el-table-column prop="orderContent" label="工单内容" />
+      <el-table-column prop="orderStatus" label="状态">
         <template #default="scope">
-          <el-tag :type="getStatusType(scope.row.status)">
-            {{ scope.row.status }}
+          <el-tag :type="getStatusType(scope.row.orderStatus)">
+            {{ statusLabel(scope.row.orderStatus) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -33,7 +35,7 @@
       <el-table-column label="操作">
         <template #default="scope">
           <el-button size="small" @click="editWorkOrder(scope.row)">编辑</el-button>
-          <el-button size="small" type="success" @click="completeWorkOrder(scope.row.id)" v-if="scope.row.status === '待处理'">完成</el-button>
+          <el-button size="small" type="success" @click="completeWorkOrder(scope.row.id)" v-if="scope.row.orderStatus === 1 || scope.row.orderStatus === 2">完成</el-button>
           <el-button size="small" type="danger" @click="deleteWorkOrder(scope.row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -50,7 +52,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="工单内容">
-          <el-textarea v-model="form.content" rows="4" />
+          <el-textarea v-model="form.orderContent" rows="4" />
         </el-form-item>
         <el-form-item label="会话ID">
           <el-input v-model="form.sessionId" />
@@ -69,7 +71,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import request from '../utils/request'
+import { listWorkOrders } from '../api/index'
 
 const workOrderList = ref([])
 const showCreateDialog = ref(false)
@@ -79,20 +83,24 @@ const statusFilter = ref('')
 const form = ref({
   id: '',
   orderType: '',
-  content: '',
+  orderContent: '',
   sessionId: '',
   customerId: ''
 })
 
+const statusLabel = (code) => {
+  return { 1: '待处理', 2: '处理中', 3: '已完成', 4: '已关闭' }[code] || code
+}
+
 const loadWorkOrders = async () => {
   try {
-    const params = {}
+    const params = { pageNum: 1, pageSize: 50 }
     if (searchKeyword.value) params.keyword = searchKeyword.value
-    if (statusFilter.value) params.status = statusFilter.value
-    const response = await request.get('/workorder/list', { params })
-    workOrderList.value = response.data
+    if (statusFilter.value !== '' && statusFilter.value != null) params.orderStatus = statusFilter.value
+    const response = await listWorkOrders(params)
+    workOrderList.value = response.data?.records || []
   } catch (error) {
-    console.error('获取工单列表失败:', error)
+    workOrderList.value = []
   }
 }
 
@@ -102,15 +110,20 @@ const saveWorkOrder = async () => {
       await request.put('/workorder/update', form.value)
       alert('修改成功')
     } else {
-      await request.post('/workorder/create', form.value)
+      await request.post('/workorder/create', {
+        orderType: form.value.orderType,
+        content: form.value.orderContent,
+        sessionId: form.value.sessionId,
+        customerId: form.value.customerId
+      })
       alert('创建成功')
     }
     showCreateDialog.value = false
-    form.value = { id: '', orderType: '', content: '', sessionId: '', customerId: '' }
+    form.value = { id: '', orderType: '', orderContent: '', sessionId: '', customerId: '' }
     isEdit.value = false
     loadWorkOrders()
   } catch (error) {
-    console.error('保存工单失败:', error)
+    ElMessage.error(error?.msg || '保存工单失败')
   }
 }
 
@@ -143,7 +156,10 @@ const deleteWorkOrder = async (id) => {
 }
 
 const getStatusType = (status) => {
-  return status === '待处理' ? 'warning' : 'success'
+  if (status === 1) return 'warning'
+  if (status === 2) return ''
+  if (status === 3) return 'success'
+  return 'info'
 }
 
 onMounted(loadWorkOrders)

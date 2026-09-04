@@ -22,11 +22,15 @@
         </div>
         <div class="message-content">
           <div class="content">{{ msg.content }}</div>
+          <div v-if="msg.citations && msg.citations.length" class="citations">
+            引用：
+            <span v-for="c in msg.citations" :key="c.faqId">#{{ c.faqId }} {{ c.question }}</span>
+          </div>
           <div class="time">{{ msg.time }}</div>
         </div>
       </div>
       <div v-if="isLoading" class="loading">
-        <el-spinner size="small" />
+        <el-icon class="is-loading"><Loading /></el-icon>
         <span>AI正在思考...</span>
       </div>
     </div>
@@ -65,9 +69,11 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
-import { Bot, User } from '@element-plus/icons-vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { Bot, User, Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import request from '../utils/request'
+import { createWorkOrder, ensureSession } from '../api'
 
 const messages = ref([
   { content: '您好！我是AI智能客服，请问有什么可以帮助您的？', isAI: true, time: new Date().toLocaleTimeString() }
@@ -76,12 +82,119 @@ const inputMessage = ref('')
 const messagesRef = ref(null)
 const isLoading = ref(false)
 const showCreateOrderDialog = ref(false)
-const sessionId = ref('session_' + Date.now())
+const sessionId = ref('sess_' + Date.now())
+let socket = null
+let closedByUser = false
+let reconnectTimer = null
+let replyTimer = null
+const REPLY_TIMEOUT_MS = 35000
 
 const orderForm = ref({
   orderType: '',
   content: '',
   customerId: ''
+})
+
+const wsUrl = () => {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = localStorage.getItem('token') || ''
+  const requestId = sessionStorage.getItem('lastRequestId') || ''
+  return `${proto}//${location.host}/ws/${sessionId.value}?token=${encodeURIComponent(token)}&requestId=${encodeURIComponent(requestId)}`
+}
+
+const stopReplyTimer = () => {
+  if (replyTimer) {
+    clearTimeout(replyTimer)
+    replyTimer = null
+  }
+}
+
+const armReplyTimer = () => {
+  stopReplyTimer()
+  replyTimer = setTimeout(() => {
+    if (isLoading.value) {
+      isLoading.value = false
+      messages.value.push({
+        content: '回复超时，请稍后重试或转人工客服。',
+        isAI: true,
+        time: new Date().toLocaleTimeString()
+      })
+    }
+  }, REPLY_TIMEOUT_MS)
+}
+
+const connectWs = () => {
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    return
+  }
+  try {
+    socket = new WebSocket(wsUrl())
+    socket.onopen = () => {}
+    socket.onclose = () => {
+      stopReplyTimer()
+      if (isLoading.value) {
+        isLoading.value = false
+      }
+      socket = null
+      if (!closedByUser) {
+        reconnectTimer = setTimeout(connectWs, 2000)
+      }
+    }
+    socket.onerror = () => {
+      stopReplyTimer()
+      isLoading.value = false
+    }
+    socket.onmessage = (ev) => {
+      let data = ev.data
+      try {
+        data = JSON.parse(ev.data)
+      } catch {
+        data = { type: 'ai', content: ev.data }
+      }
+      if (data.type === 'system') {
+        return
+      }
+      if (data.type === 'error') {
+        stopReplyTimer()
+        isLoading.value = false
+        messages.value.push({ content: data.content || '连接异常', isAI: true, time: new Date().toLocaleTimeString() })
+        return
+      }
+      if (data.type === 'ai') {
+        stopReplyTimer()
+        isLoading.value = false
+        messages.value.push({
+          content: data.content,
+          isAI: true,
+          time: new Date().toLocaleTimeString(),
+          citations: data.citations || []
+        })
+        nextTick(() => {
+          if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+        })
+      }
+    }
+  } catch {
+    socket = null
+  }
+}
+
+onMounted(async () => {
+  try {
+    await ensureSession({ sessionId: sessionId.value, sessionType: 1 })
+  } catch {
+    /* 会话服务不可用时仍可聊天 */
+  }
+  connectWs()
+})
+onUnmounted(() => {
+  closedByUser = true
+  stopReplyTimer()
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  if (socket) {
+    socket.close()
+    socket = null
+  }
 })
 
 const sendMessage = async () => {
@@ -92,6 +205,7 @@ const sendMessage = async () => {
     isAI: false,
     time: new Date().toLocaleTimeString()
   })
+  const lastUser = inputMessage.value
   inputMessage.value = ''
 
   nextTick(() => {
@@ -100,16 +214,24 @@ const sendMessage = async () => {
 
   isLoading.value = true
 
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    armReplyTimer()
+    socket.send(JSON.stringify({ msg: lastUser, sessionId: sessionId.value }))
+    return
+  }
+
   try {
     const response = await request.post('/ai/chat/send', {
       sessionId: sessionId.value,
-      msg: messages.value[messages.value.length - 1].content
+      msg: lastUser
     })
-
+    const payload = response.data
+    const text = typeof payload === 'string' ? payload : (payload?.reply || '')
     messages.value.push({
-      content: response.data,
+      content: text,
       isAI: true,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      citations: payload?.citations || []
     })
   } catch (error) {
     messages.value.push({
@@ -128,10 +250,18 @@ const sendMessage = async () => {
 
 const clearSession = () => {
   if (!confirm('确定要清空当前会话吗？')) return
-  sessionId.value = 'session_' + Date.now()
+  sessionId.value = 'sess_' + Date.now()
   messages.value = [
     { content: '您好！我是AI智能客服，请问有什么可以帮助您的？', isAI: true, time: new Date().toLocaleTimeString() }
   ]
+  closedByUser = true
+  if (socket) {
+    socket.close()
+    socket = null
+  }
+  closedByUser = false
+  ensureSession({ sessionId: sessionId.value, sessionType: 1 }).catch(() => {})
+  connectWs()
 }
 
 const getRecentMessages = () => {
@@ -145,15 +275,15 @@ const createOrder = async () => {
     return
   }
   try {
-    await request.post('/workorder/create', {
+    await createWorkOrder({
       ...orderForm.value,
       sessionId: sessionId.value
     })
     showCreateOrderDialog.value = false
     orderForm.value = { orderType: '', content: '', customerId: '' }
-    alert('工单创建成功')
+    ElMessage.success('工单创建成功')
   } catch (error) {
-    console.error('创建工单失败:', error)
+    ElMessage.error(error?.msg || '创建工单失败')
   }
 }
 </script>
@@ -236,6 +366,12 @@ const createOrder = async () => {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+  padding: 0 8px;
+}
+.citations {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 6px;
   padding: 0 8px;
 }
 .user-message .time {
