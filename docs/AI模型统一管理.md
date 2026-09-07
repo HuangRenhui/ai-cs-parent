@@ -59,10 +59,11 @@
 
 ## 6. 故障转移策略
 
-- 调用失败：连续 N 次(默认 2，可在模型上配置 `fail_threshold`) → 该模型熔断摘除
+- 调用失败：同模型先按 `max_retries` 重试（默认 1 次，超时重试对付费模型可能重复计费，慎用）
+- 仍失败：连续失败达 `fail_threshold`(默认 2) → 该模型熔断摘除，冷却 60s 后半开探测恢复
 - 从同能力、`enabled`、其余候选中按 `priority` 升序取次优模型继续本次调用
-- 熔断冷却 60s 后允许半开探测，成功即恢复候选
-- 每次调用记录 token、耗时、成功/失败到 `cs_model_usage`（由 ai-cs-job 从 Redis 流消费落库）
+- 配额：达当日 `daily_token_limit` / `daily_cost_limit` 上限的模型自动顺延（把本地/免费模型注册为候选即获得"超限降级"）；达 80% 输出预警日志
+- 每次调用记录 token、耗时、成本快照（按发生时单价）、成功/失败到 `cs_model_usage`（由 ai-cs-job 从 Redis 流消费落库）
 - 全部 DOWN 时返回明确错误，不静默失败
 
 ## 7. 分阶段实施
@@ -175,6 +176,21 @@
 - 表结构：`cs_ai_model` 增加 `timeout_ms`、`fail_threshold`、`cost_per_1k_in`、`cost_per_1k_out`；新增 `cs_model_usage`。
 - 升级脚本：`docs/database/ai_model_upgrade.sql`（已有库执行）。
 - 数据流：调用 → Router 记录事件到 Redis Stream → ai-cs-job 每 5s 批量消费落库 → base-service 提供查询 → 前端展示。
+
+### 8.9 计量与配额：重试 / 成本 / 每日上限（已落地）
+
+| 文件 | 说明 |
+|------|------|
+| `cs_ai_model` | 新增 `max_retries`、`daily_token_limit`、`daily_cost_limit`（升级脚本见 `ai_model_upgrade.sql` v2 段） |
+| `cs_model_usage` | 新增 `cost` 成本快照列（按发生时单价计算，改价不回溯历史） |
+| `common/llm/ModelUsageRecorder` | 成功事件按单价算成本；Redis 维护当日 token/成本计数（`ai:model:usage:daily:{id}:{yyyyMMdd}`，TTL 50h）；达 80% 配额当日去重预警日志 |
+| `common/llm/ModelRouter` | 同模型失败按 `maxRetries` 重试（重试不重复计熔断）；调用前检查当日配额，超限顺延候选——注册本地/免费模型为候选即"超限自动降级" |
+| `base-service` | 实体/校验/汇总补新字段，`/usage/summary` 返回 `totalCost` |
+| `frontend/AiModelPage.vue` | 表单新增重试次数/日 Token 配额/日成本配额；列表供应方列带「免费/按量」标识；用量页签展示单条成本与总成本 |
+
+- 重试与熔断是两个旋钮：`maxRetries` 管单次抖动重试，`failThreshold` 管连续失败后摘除。
+- 配额计数是 Redis 近似值（流消费落库与计数分离，重启不丢当日计数，TTL 50h 自动清理）。
+- 租户级配额/积分体系属 SaaS 计费层，当前不做（见功能清单 §16）。
 
 ## 9. 文档同步
 
