@@ -7,6 +7,7 @@ import WorkOrderPage from '../views/WorkOrderPage.vue'
 import KnowledgePage from '../views/KnowledgePage.vue'
 import SessionPage from '../views/SessionPage.vue'
 import AgentPage from '../views/AgentPage.vue'
+import AiModelPage from '../views/AiModelPage.vue'
 import OpenPage from '../views/OpenPage.vue'
 import WidgetPage from '../views/WidgetPage.vue'
 import OpsLayout from '../views/ops/OpsLayout.vue'
@@ -27,6 +28,7 @@ const routes = [
   { path: '/workorder', name: 'WorkOrder', component: WorkOrderPage, meta: { requiresAuth: true, title: '工单管理' } },
   { path: '/knowledge', name: 'Knowledge', component: KnowledgePage, meta: { requiresAuth: true, title: '知识库管理' } },
   { path: '/agent', name: 'Agent', component: AgentPage, meta: { requiresAuth: true, title: '坐席管理' } },
+  { path: '/ai-model', name: 'AiModel', component: AiModelPage, meta: { requiresAuth: true, title: 'AI模型管理' } },
   { path: '/open', name: 'Open', component: OpenPage, meta: { requiresAuth: true, title: '开放接入' } },
   {
     path: '/ops',

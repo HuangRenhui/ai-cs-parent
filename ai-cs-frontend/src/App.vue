@@ -41,6 +41,10 @@
             <el-icon><Link /></el-icon>
             <span>开放接入</span>
           </el-menu-item>
+          <el-menu-item index="/ai-model">
+            <el-icon><Cpu /></el-icon>
+            <span>AI模型管理</span>
+          </el-menu-item>
           <el-sub-menu index="/ops">
             <template #title>
               <el-icon><Monitor /></el-icon>
@@ -104,6 +108,10 @@
               <el-icon><Link /></el-icon>
               <span>开放接入</span>
             </el-menu-item>
+            <el-menu-item index="/ai-model">
+              <el-icon><Cpu /></el-icon>
+              <span>AI模型管理</span>
+            </el-menu-item>
             <el-menu-item index="/ops">
               <el-icon><Monitor /></el-icon>
               <span>运维总览</span>
@@ -123,7 +131,7 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Odometer, ChatDotRound, User, Tickets, Reading, Expand, Fold, Document, Headset, Link, Monitor } from '@element-plus/icons-vue'
+import { Odometer, ChatDotRound, User, Tickets, Reading, Expand, Fold, Document, Headset, Link, Monitor, Cpu } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()

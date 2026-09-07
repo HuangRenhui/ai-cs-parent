@@ -68,3 +68,13 @@ export const getOpsTraces = (params) => request.get('/ops/traces', { params })
 export const getOpsTrace = (traceId) => request.get(`/ops/traces/${encodeURIComponent(traceId)}`)
 export const getOpsAlerts = () => request.get('/ops/alerts')
 export const saveOpsAlerts = (rules) => request.put('/ops/alerts', rules)
+
+// ===== AI 模型统一管理（base-service /system/ai-model）=====
+export const listAiModels = () => request.get('/system/ai-model/list')
+export const listAiModelsEnabled = (modelType) => request.get('/system/ai-model/enabled', { params: { modelType } })
+export const getAiModelActive = (modelType) => request.get('/system/ai-model/active', { params: { modelType } })
+export const saveAiModel = (data) => request.post('/system/ai-model/save', data)
+export const setAiModelActive = (id) => request.put(`/system/ai-model/active/${id}`)
+export const setAiModelEnabled = (id, enabled) => request.put(`/system/ai-model/enabled/${id}`, { enabled })
+export const deleteAiModel = (id) => request.delete(`/system/ai-model/delete/${id}`)
+export const testAiModel = (id) => request.post(`/system/ai-model/test/${id}`)
