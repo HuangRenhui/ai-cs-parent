@@ -28,9 +28,10 @@
           <el-tag>{{ typeLabel(row.modelType) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="供应方" width="120">
+      <el-table-column label="供应方" width="150">
         <template #default="{ row }">
           <el-tag :type="providerType(row.provider)" effect="plain">{{ providerLabel(row.provider) }}</el-tag>
+          <el-tag :type="billingTag(row).type" size="small" effect="dark" style="margin-left: 4px">{{ billingTag(row).label }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="remoteModel" label="上游模型" min-width="120" />
@@ -80,6 +81,7 @@
           <el-tag type="danger">失败 {{ usageSummary.fail }}</el-tag>
           <el-tag type="info">Token {{ usageSummary.totalTokens }}</el-tag>
           <el-tag type="warning">均耗时 {{ usageSummary.avgLatencyMs }}ms</el-tag>
+          <el-tag type="danger" v-if="usageSummary.totalCost != null">成本 ¥{{ usageSummary.totalCost }}</el-tag>
         </div>
         <el-table :data="usageList" stripe v-loading="usageLoading" empty-text="暂无用记录" size="small">
           <el-table-column prop="createTime" label="时间" width="160" />
@@ -87,6 +89,9 @@
           <el-table-column prop="modelType" label="能力" width="100" />
           <el-table-column prop="totalTokens" label="Token" width="90" align="right" />
           <el-table-column prop="latencyMs" label="耗时(ms)" width="90" align="right" />
+          <el-table-column label="成本(元)" width="90" align="right">
+            <template #default="{ row }">{{ row.cost != null ? row.cost : '—' }}</template>
+          </el-table-column>
           <el-table-column label="结果" width="80" align="center">
             <template #default="{ row }">
               <el-tag :type="row.success === 1 ? 'success' : 'danger'" size="small">{{ row.success === 1 ? '成功' : '失败' }}</el-tag>
@@ -153,9 +158,34 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item label="重试次数">
+              <el-tooltip content="同模型失败重试次数(0-5)；超时重试对付费模型可能重复计费" placement="top">
+                <el-input-number v-model="form.maxRetries" :min="0" :max="5" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
             <el-form-item label="熔断阈值">
               <el-tooltip content="连续失败达到此次数即摘除，冷却 60s 后探测恢复" placement="top">
                 <el-input-number v-model="form.failThreshold" :min="1" :max="10" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="日Token配额">
+              <el-tooltip content="每日 token 上限，留空不限；超限自动顺延到其它候选（本地/免费模型即降级目标）" placement="top">
+                <el-input-number v-model="form.dailyTokenLimit" :min="0" :step="100000" style="width: 100%" placeholder="不限" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="日成本配额">
+              <el-tooltip content="每日成本上限(元)，留空不限；达 80% 输出预警日志" placement="top">
+                <el-input-number v-model="form.dailyCostLimit" :min="0" :precision="2" :step="10" style="width: 100%" placeholder="不限" />
               </el-tooltip>
             </el-form-item>
           </el-col>
@@ -233,7 +263,8 @@ const typeOptions = [
 const emptyForm = () => ({
   id: null, modelName: '', provider: 'OLLAMA', modelType: 'LLM', baseUrl: '',
   apiKey: '', apiSecret: '', remoteModel: '', temperature: 0.3, dimension: 1024,
-  priority: 0, timeoutMs: 20000, failThreshold: 2, costPer1kIn: null, costPer1kOut: null,
+  priority: 0, timeoutMs: 20000, maxRetries: 1, failThreshold: 2,
+  dailyTokenLimit: null, dailyCostLimit: null, costPer1kIn: null, costPer1kOut: null,
   enabled: 1, isActive: 0, health: 'UNKNOWN', remark: ''
 })
 const form = reactive(emptyForm())
@@ -243,6 +274,11 @@ const providerType = (v) => ({ OLLAMA: 'warning', DASHSCOPE: 'success', OPENAI: 
 const typeLabel = (v) => typeOptions.find((t) => t.value === v)?.label || v
 const healthLabel = (v) => ({ UNKNOWN: '未知', HEALTHY: '健康', DOWN: '故障' }[v] || v)
 const healthType = (v) => ({ UNKNOWN: 'info', HEALTHY: 'success', DOWN: 'danger' }[v] || 'info')
+/** 本地/免费 与 按量付费 标识：单价为空即免费（本地 Ollama 或自建） */
+const billingTag = (row) => {
+  const metered = row.costPer1kIn != null || row.costPer1kOut != null
+  return metered ? { label: '按量', type: 'warning' } : { label: '免费', type: 'success' }
+}
 
 const loadModels = async () => {
   loading.value = true
@@ -290,6 +326,9 @@ const openDialog = (row) => {
   if (!form.modelType) form.modelType = 'LLM'
   if (form.temperature == null) form.temperature = 0.3
   if (form.priority == null) form.priority = 0
+  if (form.timeoutMs == null) form.timeoutMs = 20000
+  if (form.maxRetries == null) form.maxRetries = 1
+  if (form.failThreshold == null) form.failThreshold = 2
   if (form.dimension == null) form.dimension = 1024
   if (form.enabled == null) form.enabled = 1
   visible.value = true
