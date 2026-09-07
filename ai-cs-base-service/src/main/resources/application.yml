@@ -18,12 +18,23 @@ spring:
     url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: root
     password: 你的数据库密码
+  # Redis（模型注册表跨服务广播）
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3000ms
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 ai:
   jwt:
     secret: ${JWT_SECRET:}
+  # 模型密钥(apiKey/apiSecret)落库加密密钥；未配置时使用内置默认(仅演示/本机)，生产务必用环境变量 AI_MODEL_SECRET 注入
+  model:
+    secret: ${AI_MODEL_SECRET:}
 app:
   upload-dir: uploads/avatars
 
