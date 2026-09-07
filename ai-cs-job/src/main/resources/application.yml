@@ -41,3 +41,7 @@ job:
   cache-warmup: true
   # 系统健康检查（每5分钟）
   health-check: true
+  # 模型用量消费（每5秒）
+  model-usage-consume: true
+  # 模型失败告警阈值（近5分钟）
+  model-fail-alert-threshold: 5
