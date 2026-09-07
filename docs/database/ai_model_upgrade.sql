@@ -31,3 +31,12 @@ CREATE TABLE IF NOT EXISTS `cs_model_usage` (
   KEY `idx_type_time` (`model_type`, `create_time`),
   KEY `idx_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模型调用用量记录';
+
+-- ============================================
+-- v2 增强：重试次数 / 每日配额 / 成本快照（已有库按需执行）
+-- ============================================
+-- ALTER TABLE `cs_ai_model`
+--   ADD COLUMN `max_retries` INT DEFAULT 1 COMMENT '同模型失败重试次数' AFTER `timeout_ms`,
+--   ADD COLUMN `daily_token_limit` BIGINT DEFAULT NULL COMMENT '每日token配额(NULL不限)' AFTER `fail_threshold`,
+--   ADD COLUMN `daily_cost_limit` DECIMAL(12,4) DEFAULT NULL COMMENT '每日成本配额(元)' AFTER `daily_token_limit`;
+-- ALTER TABLE `cs_model_usage` ADD COLUMN `cost` DECIMAL(12,6) DEFAULT NULL COMMENT '成本快照(元)' AFTER `latency_ms`;
