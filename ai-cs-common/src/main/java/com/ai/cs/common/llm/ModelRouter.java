@@ -96,23 +96,25 @@ public class ModelRouter {
         }
         Exception last = null;
         for (AiModelRoute route : pool) {
-            // 跳过已 DOWN 或熔断中的模型
+            // 跳过已 DOWN、熔断中、或超当日配额的模型（超限自动顺延，免费/本地候选即降级目标）
             if (ModelHealthEnum.DOWN.getCode().equalsIgnoreCase(route.getHealth())
                     || !circuitBreaker.allow(route)) {
                 continue;
             }
+            if (quotaExceeded(route)) {
+                continue;
+            }
             try {
-                ModelCallResult result = client.chatWithUsage(route.getBaseUrl(), route.getApiKey(),
-                        route.getRemoteModel(), route.getTemperature(), messages, route.getTimeoutMs());
+                ModelCallResult result = callChatWithRetry(route, messages);
                 markHealthy(route);
                 circuitBreaker.onSuccess(route);
-                usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result));
+                usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result), route);
                 return result.getText();
             } catch (Exception e) {
                 last = e;
-                log.warn("模型[{}]调用失败，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
+                log.warn("模型[{}]调用失败(含重试)，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
                 circuitBreaker.onFailure(route);
-                usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()));
+                usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()), route);
                 markDownIfBroken(route);
             }
         }
@@ -148,18 +150,20 @@ public class ModelRouter {
                     || !circuitBreaker.allow(route)) {
                 continue;
             }
+            if (quotaExceeded(route)) {
+                continue;
+            }
             try {
-                ModelCallResult result = client.embedWithUsage(route.getBaseUrl(), route.getApiKey(),
-                        route.getRemoteModel(), text, route.getTimeoutMs());
+                ModelCallResult result = callEmbedWithRetry(route, text);
                 markHealthy(route);
                 circuitBreaker.onSuccess(route);
-                usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result));
+                usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result), route);
                 return OpenAiCompatClient.parseEmbedding(result);
             } catch (Exception e) {
                 last = e;
-                log.warn("向量模型[{}]调用失败，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
+                log.warn("向量模型[{}]调用失败(含重试)，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
                 circuitBreaker.onFailure(route);
-                usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()));
+                usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()), route);
                 markDownIfBroken(route);
             }
         }
@@ -284,6 +288,87 @@ public class ModelRouter {
 
     private boolean isEnabled(AiModelRoute r) {
         return r.getEnabled() != null && r.getEnabled() == 1;
+    }
+
+    /**
+     * 同模型失败重试：首次 + maxRetries 次；重试不重复计熔断（一次用户调用最多计一次失败）。
+     * 注意：超时后重试对付费模型可能重复计费，maxRetries 建议 0~2。
+     */
+    private ModelCallResult callChatWithRetry(AiModelRoute route, List<Map<String, String>> messages) {
+        int attempts = 1 + Math.max(0, route.getMaxRetries() == null ? 0 : Math.min(route.getMaxRetries(), 5));
+        Exception last = null;
+        for (int i = 0; i < attempts; i++) {
+            try {
+                return client.chatWithUsage(route.getBaseUrl(), route.getApiKey(),
+                        route.getRemoteModel(), route.getTemperature(), messages, route.getTimeoutMs());
+            } catch (Exception e) {
+                last = e;
+                if (i < attempts - 1) {
+                    log.info("模型[{}]第{}次调用失败，立即重试: {}", route.getModelName(), i + 1, e.getMessage());
+                }
+            }
+        }
+        throw last instanceof ModelCallException mce ? mce : new ModelCallException("模型调用失败: " + last.getMessage(), last);
+    }
+
+    private ModelCallResult callEmbedWithRetry(AiModelRoute route, String text) {
+        int attempts = 1 + Math.max(0, route.getMaxRetries() == null ? 0 : Math.min(route.getMaxRetries(), 5));
+        Exception last = null;
+        for (int i = 0; i < attempts; i++) {
+            try {
+                return client.embedWithUsage(route.getBaseUrl(), route.getApiKey(),
+                        route.getRemoteModel(), text, route.getTimeoutMs());
+            } catch (Exception e) {
+                last = e;
+                if (i < attempts - 1) {
+                    log.info("向量模型[{}]第{}次调用失败，立即重试: {}", route.getModelName(), i + 1, e.getMessage());
+                }
+            }
+        }
+        throw last instanceof ModelCallException mce ? mce : new ModelCallException("模型调用失败: " + last.getMessage(), last);
+    }
+
+    /**
+     * 当日配额检查：token 或成本任一达到上限即视为超限（Redis 计数，由用量记录器维护）。
+     * 超限后顺延下一候选——把免费/本地模型注册为候选即获得"超限自动降级"能力。
+     */
+    private boolean quotaExceeded(AiModelRoute route) {
+        if (redisTemplate == null || route.getId() == null) {
+            return false;
+        }
+        boolean hasTokenLimit = route.getDailyTokenLimit() != null && route.getDailyTokenLimit() > 0;
+        boolean hasCostLimit = route.getDailyCostLimit() != null && route.getDailyCostLimit().signum() > 0;
+        if (!hasTokenLimit && !hasCostLimit) {
+            return false;
+        }
+        try {
+            Map<Object, Object> daily = redisTemplate.opsForHash().entries(ModelUsageRecorder.dailyKey(route.getId()));
+            long tokens = parseLong(daily.get("tokens"));
+            long costMicro = parseLong(daily.get("costMicro"));
+            boolean over = (hasTokenLimit && tokens >= route.getDailyTokenLimit())
+                    || (hasCostLimit && java.math.BigDecimal.valueOf(costMicro)
+                            .movePointLeft(6).compareTo(route.getDailyCostLimit()) >= 0);
+            if (over) {
+                log.warn("模型[{}]已达当日配额上限(tokens={}/{}, costMicro={})，顺延下一候选",
+                        route.getModelName(), tokens,
+                        hasTokenLimit ? route.getDailyTokenLimit() : "不限", costMicro);
+            }
+            return over;
+        } catch (Exception e) {
+            log.warn("读取模型当日配额失败，按未超限处理: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private long parseLong(Object v) {
+        if (v == null) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(String.valueOf(v));
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     private void sortAndEnsureActiveFirst(List<AiModelRoute> list) {

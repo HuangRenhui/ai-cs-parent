@@ -6,11 +6,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
- * 模型用量/失败事件记录器：写入 Redis 流，由 ai-cs-job 消费落库。
+ * 模型用量/失败事件记录器：写 Redis 流由 ai-cs-job 落库；
+ * 同时维护当日 token/成本计数（供路由层配额检查）与 80% 配额预警。
  * 不阻塞主调用链，失败仅打日志。
  *
  * @author ai-cs
@@ -21,21 +27,40 @@ public class ModelUsageRecorder {
 
     public static final String STREAM_KEY = "ai:model:usage:stream";
     private static final long MAX_LEN = 100000;
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyyMMdd");
+    /** 成本计数精度：元 × 10^6 */
+    private static final long COST_SCALE = 1_000_000L;
+    private static final BigDecimal COST_SCALE_BD = BigDecimal.valueOf(COST_SCALE);
+    /** 配额预警水位 */
+    private static final double ALERT_RATIO = 0.8;
 
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;
 
+    /** 当日用量计数 key：hash {tokens, costMicro} */
+    public static String dailyKey(Long modelId) {
+        return "ai:model:usage:daily:" + modelId + ":" + LocalDate.now().format(DAY);
+    }
+
+    /** 当日 80% 预警去重 key */
+    private static String alertKey(Long modelId) {
+        return "ai:model:quota:alert:" + modelId + ":" + LocalDate.now().format(DAY);
+    }
+
     /**
-     * 记录一次调用（成功或失败）
+     * 记录一次调用（成功或失败）：写流 + 累计当日计数 + 80% 配额预警。
      */
-    public void record(ModelUsageEvent event) {
-        if (event == null || redisTemplate == null) {
+    public void record(ModelUsageEvent event, AiModelRoute route) {
+        if (event == null) {
+            return;
+        }
+        if (event.getTs() == null) {
+            event.setTs(System.currentTimeMillis());
+        }
+        if (redisTemplate == null) {
             return;
         }
         try {
-            if (event.getTs() == null) {
-                event.setTs(System.currentTimeMillis());
-            }
             Map<String, String> map = new HashMap<>();
             map.put("payload", JSON.toJSONString(event));
             redisTemplate.opsForStream().add(STREAM_KEY, map);
@@ -43,10 +68,73 @@ public class ModelUsageRecorder {
         } catch (Exception e) {
             log.warn("记录模型用量事件失败: {}", e.getMessage());
         }
+        // 仅成功且有 token 消耗时累计配额计数
+        if (route != null && route.getId() != null
+                && event.getSuccess() != null && event.getSuccess() == 1
+                && event.getTotalTokens() != null && event.getTotalTokens() > 0) {
+            accumulateDaily(route, event);
+        }
+    }
+
+    private void accumulateDaily(AiModelRoute route, ModelUsageEvent event) {
+        try {
+            String key = dailyKey(route.getId());
+            long tokens = redisTemplate.opsForHash().increment(key, "tokens", event.getTotalTokens());
+            long costMicro = 0L;
+            if (event.getCost() != null) {
+                costMicro = redisTemplate.opsForHash().increment(key, "costMicro",
+                        event.getCost().multiply(COST_SCALE_BD).longValue());
+            }
+            redisTemplate.expire(key, 50, TimeUnit.HOURS);
+            alertIfNearQuota(route, tokens, costMicro);
+        } catch (Exception e) {
+            log.warn("累计模型当日用量失败: {}", e.getMessage());
+        }
+    }
+
+    /** 达到 80% 配额时输出一次预警日志（当日去重） */
+    private void alertIfNearQuota(AiModelRoute route, long tokens, long costMicro) {
+        boolean nearToken = route.getDailyTokenLimit() != null && route.getDailyTokenLimit() > 0
+                && tokens >= route.getDailyTokenLimit() * ALERT_RATIO;
+        boolean nearCost = route.getDailyCostLimit() != null
+                && BigDecimal.valueOf(costMicro).divide(COST_SCALE_BD, 6, RoundingMode.HALF_UP)
+                        .compareTo(route.getDailyCostLimit().multiply(BigDecimal.valueOf(ALERT_RATIO))) >= 0;
+        if (!nearToken && !nearCost) {
+            return;
+        }
+        String key = alertKey(route.getId());
+        Boolean first = redisTemplate.opsForValue().setIfAbsent(key, "1", 26, TimeUnit.HOURS);
+        if (Boolean.TRUE.equals(first)) {
+            log.warn("[模型配额预警] 模型[{}]当日用量已达 80%：tokens={}/{}, cost={}/{} 元，超过配额后将自动降级到其它候选模型",
+                    route.getModelName(), tokens,
+                    route.getDailyTokenLimit() == null ? "不限" : route.getDailyTokenLimit(),
+                    BigDecimal.valueOf(costMicro).divide(COST_SCALE_BD, 4, RoundingMode.HALF_UP),
+                    route.getDailyCostLimit() == null ? "不限" : route.getDailyCostLimit());
+        }
     }
 
     /**
-     * 便捷构造成功事件
+     * 按模型单价与 token 计算本次成本（元），无单价返回 null（本地/免费模型）。
+     */
+    public static BigDecimal computeCost(AiModelRoute route, Integer promptTokens, Integer completionTokens) {
+        if (route == null) {
+            return null;
+        }
+        BigDecimal cost = null;
+        if (route.getCostPer1kIn() != null && promptTokens != null && promptTokens > 0) {
+            cost = route.getCostPer1kIn().multiply(BigDecimal.valueOf(promptTokens))
+                    .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP);
+        }
+        if (route.getCostPer1kOut() != null && completionTokens != null && completionTokens > 0) {
+            BigDecimal out = route.getCostPer1kOut().multiply(BigDecimal.valueOf(completionTokens))
+                    .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP);
+            cost = cost == null ? out : cost.add(out);
+        }
+        return cost;
+    }
+
+    /**
+     * 便捷构造成功事件（含成本快照）
      */
     public static ModelUsageEvent success(AiModelRoute route, String sessionId, ModelCallResult result) {
         ModelUsageEvent e = new ModelUsageEvent();
@@ -57,6 +145,7 @@ public class ModelUsageRecorder {
             e.setCompletionTokens(result.getCompletionTokens());
             e.setTotalTokens(result.getTotalTokens());
             e.setLatencyMs(result.getLatencyMs());
+            e.setCost(computeCost(route, result.getPromptTokens(), result.getCompletionTokens()));
         }
         return e;
     }
