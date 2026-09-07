@@ -313,6 +313,10 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         r.setTemperature(c.getTemperature());
         r.setDimension(c.getDimension());
         r.setPriority(c.getPriority());
+        r.setTimeoutMs(c.getTimeoutMs());
+        r.setFailThreshold(c.getFailThreshold());
+        r.setCostPer1kIn(c.getCostPer1kIn());
+        r.setCostPer1kOut(c.getCostPer1kOut());
         r.setEnabled(c.getEnabled());
         r.setIsActive(c.getIsActive());
         r.setHealth(c.getHealth());

@@ -1,8 +1,11 @@
 package com.ai.cs.base.controller;
 
 import com.ai.cs.base.entity.AiModelConfig;
+import com.ai.cs.base.entity.ModelUsageRecord;
 import com.ai.cs.base.service.AiModelConfigService;
+import com.ai.cs.base.service.ModelUsageService;
 import com.ai.cs.common.result.Result;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +32,9 @@ public class AiModelConfigController {
     @Resource
     private AiModelConfigService aiModelConfigService;
 
+    @Resource
+    private ModelUsageService modelUsageService;
+
     /** 全部模型（含启用/停用） */
     @GetMapping("/list")
     public Result<List<AiModelConfig>> list() {
@@ -45,6 +51,32 @@ public class AiModelConfigController {
     @GetMapping("/active")
     public Result<AiModelConfig> active(@RequestParam String modelType) {
         return Result.success(aiModelConfigService.getActive(modelType));
+    }
+
+    /** 用量/失败记录分页 */
+    @GetMapping("/usage/page")
+    public Result<Page<ModelUsageRecord>> usagePage(@RequestParam(defaultValue = "1") int page,
+                                                    @RequestParam(defaultValue = "10") int size,
+                                                    @RequestParam(required = false) Long modelId,
+                                                    @RequestParam(required = false) String modelType,
+                                                    @RequestParam(required = false) Integer success,
+                                                    @RequestParam(required = false) String startTime,
+                                                    @RequestParam(required = false) String endTime) {
+        return Result.success(modelUsageService.page(page, size, modelId, modelType, success, startTime, endTime));
+    }
+
+    /** 用量汇总 */
+    @GetMapping("/usage/summary")
+    public Result<Map<String, Object>> usageSummary(@RequestParam(required = false) String modelType,
+                                                    @RequestParam(required = false) String startTime,
+                                                    @RequestParam(required = false) String endTime) {
+        return Result.success(modelUsageService.summary(modelType, startTime, endTime));
+    }
+
+    /** 近 N 分钟失败次数（告警用） */
+    @GetMapping("/usage/recent-fail")
+    public Result<Long> recentFail(@RequestParam(defaultValue = "5") int minutes) {
+        return Result.success(modelUsageService.recentFailCount(minutes));
     }
 
     /** 注册或修改模型 */
