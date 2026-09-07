@@ -1,8 +1,8 @@
 package com.ai.cs.common.llm;
 
 import com.alibaba.fastjson.JSON;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +22,7 @@ public class ModelUsageRecorder {
     public static final String STREAM_KEY = "ai:model:usage:stream";
     private static final long MAX_LEN = 100000;
 
-    @Resource(required = false)
+    @Autowired(required = false)
     private StringRedisTemplate redisTemplate;
 
     /**
