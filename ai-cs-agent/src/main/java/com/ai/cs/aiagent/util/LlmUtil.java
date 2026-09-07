@@ -3,29 +3,32 @@ package com.ai.cs.aiagent.util;
 import com.ai.cs.common.constant.PromptConst;
 import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.enums.IntentEnum;
-import com.ai.cs.common.llm.DashscopeModelClient;
 import com.ai.cs.common.llm.ModelCallException;
+import com.ai.cs.common.llm.ModelRouter;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 意图与闲聊：提示词走 {@link PromptConst}，模型走 {@link DashscopeModelClient}。
+ * 意图与闲聊：提示词走 {@link PromptConst}，模型统一走 {@link ModelRouter}
+ * （未登记对话模型时回退历史配置；登记后支持本地/在线切换与故障转移）。
  */
 @Slf4j
 @Component
 public class LlmUtil {
 
     @Resource
-    private DashscopeModelClient modelClient;
+    private ModelRouter modelRouter;
 
     public IntentDTO getIntent(String userMsg) {
         String prompt = PromptConst.fill(PromptConst.INTENT_PROMPT, userMsg == null ? "" : userMsg);
         try {
-            return parseIntent(modelClient.chat(prompt));
+            return parseIntent(modelRouter.chat(singleUser(prompt)));
         } catch (ModelCallException e) {
             log.error("意图识别调用失败", e);
             return fallbackConsult();
@@ -37,11 +40,15 @@ public class LlmUtil {
                 history == null ? "" : history,
                 userMsg == null ? "" : userMsg);
         try {
-            return modelClient.chat(prompt);
+            return modelRouter.chat(singleUser(prompt));
         } catch (ModelCallException e) {
             log.error("闲聊调用失败", e);
             return PromptConst.LLM_BUSY_REPLY;
         }
+    }
+
+    private static List<Map<String, String>> singleUser(String prompt) {
+        return List.of(Map.of("role", "user", "content", prompt));
     }
 
     private IntentDTO parseIntent(String raw) {
