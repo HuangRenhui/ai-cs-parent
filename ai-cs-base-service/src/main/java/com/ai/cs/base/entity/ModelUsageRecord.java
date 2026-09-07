@@ -45,6 +45,9 @@ public class ModelUsageRecord extends BaseEntity {
     /** 耗时(毫秒) */
     private Long latencyMs;
 
+    /** 本次调用成本快照(元) */
+    private java.math.BigDecimal cost;
+
     /** 是否成功 1/0 */
     private Integer success;
 

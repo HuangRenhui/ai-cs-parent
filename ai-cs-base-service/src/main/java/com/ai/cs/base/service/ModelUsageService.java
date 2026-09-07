@@ -79,6 +79,10 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
         result.put("promptTokens", promptTokens);
         result.put("completionTokens", completionTokens);
         result.put("avgLatencyMs", Math.round(avgLatency));
+        java.math.BigDecimal totalCost = list.stream()
+                .map(r -> r.getCost() == null ? java.math.BigDecimal.ZERO : r.getCost())
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        result.put("totalCost", totalCost.setScale(4, java.math.RoundingMode.HALF_UP));
         return result;
     }
 

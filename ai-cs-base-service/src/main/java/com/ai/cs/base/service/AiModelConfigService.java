@@ -297,6 +297,15 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         if (!StringUtils.hasText(c.getRemoteModel())) {
             throw new BusinessException("上游模型标识不能为空");
         }
+        if (c.getMaxRetries() != null && (c.getMaxRetries() < 0 || c.getMaxRetries() > 5)) {
+            throw new BusinessException("重试次数需在 0-5 之间");
+        }
+        if (c.getDailyTokenLimit() != null && c.getDailyTokenLimit() < 0) {
+            throw new BusinessException("每日 token 配额不能为负数");
+        }
+        if (c.getDailyCostLimit() != null && c.getDailyCostLimit().signum() < 0) {
+            throw new BusinessException("每日成本配额不能为负数");
+        }
     }
 
     /** 将实体转成路由对象（解密出明文密钥，供测试连接与 Redis 广播使用） */
@@ -314,7 +323,10 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         r.setDimension(c.getDimension());
         r.setPriority(c.getPriority());
         r.setTimeoutMs(c.getTimeoutMs());
+        r.setMaxRetries(c.getMaxRetries());
         r.setFailThreshold(c.getFailThreshold());
+        r.setDailyTokenLimit(c.getDailyTokenLimit());
+        r.setDailyCostLimit(c.getDailyCostLimit());
         r.setCostPer1kIn(c.getCostPer1kIn());
         r.setCostPer1kOut(c.getCostPer1kOut());
         r.setEnabled(c.getEnabled());

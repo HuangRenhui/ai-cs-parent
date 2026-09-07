@@ -53,8 +53,17 @@ public class AiModelConfig extends BaseEntity {
     /** 单次调用超时(毫秒) */
     private Integer timeoutMs;
 
+    /** 同模型失败重试次数(不含首次，0-5) */
+    private Integer maxRetries;
+
     /** 连续失败熔断阈值(达到即摘除) */
     private Integer failThreshold;
+
+    /** 每日 token 配额(NULL 不限) */
+    private Long dailyTokenLimit;
+
+    /** 每日成本配额(元，NULL 不限) */
+    private BigDecimal dailyCostLimit;
 
     /** 输入单价(元/千token) */
     private BigDecimal costPer1kIn;

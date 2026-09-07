@@ -107,8 +107,8 @@ public class ModelUsageConsumeTask {
 
     private void insert(ModelUsageEvent e) {
         String sql = "INSERT INTO cs_model_usage (model_id, model_name, model_type, provider, session_id, " +
-                "prompt_tokens, completion_tokens, total_tokens, latency_ms, success, error_msg, create_time) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
+                "prompt_tokens, completion_tokens, total_tokens, latency_ms, cost, success, error_msg, create_time) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
         jdbcTemplate.update(sql,
                 e.getModelId(),
                 e.getModelName(),
@@ -119,6 +119,7 @@ public class ModelUsageConsumeTask {
                 e.getCompletionTokens(),
                 e.getTotalTokens(),
                 e.getLatencyMs(),
+                e.getCost(),
                 e.getSuccess(),
                 e.getErrorMsg(),
                 e.getTs() == null ? LocalDateTime.now().format(FMT)
