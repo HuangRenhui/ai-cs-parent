@@ -78,3 +78,6 @@ export const setAiModelActive = (id) => request.put(`/system/ai-model/active/${i
 export const setAiModelEnabled = (id, enabled) => request.put(`/system/ai-model/enabled/${id}`, { enabled })
 export const deleteAiModel = (id) => request.delete(`/system/ai-model/delete/${id}`)
 export const testAiModel = (id) => request.post(`/system/ai-model/test/${id}`)
+export const pageModelUsage = (params) => request.get('/system/ai-model/usage/page', { params })
+export const getModelUsageSummary = (params) => request.get('/system/ai-model/usage/summary', { params })
+export const getModelRecentFail = (minutes = 5) => request.get('/system/ai-model/usage/recent-fail', { params: { minutes } })

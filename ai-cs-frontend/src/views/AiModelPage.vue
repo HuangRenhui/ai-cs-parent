@@ -14,10 +14,12 @@
       </div>
     </div>
 
-    <el-tabs v-model="activeType" @tab-change="loadModels">
-      <el-tab-pane label="全部" name="" />
-      <el-tab-pane v-for="t in typeOptions" :key="t.value" :label="t.label" :name="t.value" />
-    </el-tabs>
+    <el-tabs v-model="mainTab" style="margin-top: 8px">
+      <el-tab-pane label="模型列表" name="models">
+        <el-tabs v-model="activeType" @tab-change="loadModels">
+          <el-tab-pane label="全部" name="" />
+          <el-tab-pane v-for="t in typeOptions" :key="t.value" :label="t.label" :name="t.value" />
+        </el-tabs>
 
     <el-table :data="modelList" stripe v-loading="loading" empty-text="暂无模型，请先注册">
       <el-table-column prop="modelName" label="名称" min-width="130" />
@@ -59,6 +61,49 @@
         </template>
       </el-table-column>
     </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="用量统计" name="usage">
+        <div class="usage-bar">
+          <el-select v-model="usageQuery.modelType" placeholder="能力类型" clearable style="width: 160px" @change="loadUsage">
+            <el-option v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
+          <el-select v-model="usageQuery.success" placeholder="结果" clearable style="width: 120px" @change="loadUsage">
+            <el-option label="成功" :value="1" />
+            <el-option label="失败" :value="0" />
+          </el-select>
+          <el-button @click="loadUsage">查询</el-button>
+        </div>
+        <div class="usage-summary" v-if="usageSummary">
+          <el-tag>总调用 {{ usageSummary.total }}</el-tag>
+          <el-tag type="success">成功 {{ usageSummary.success }}</el-tag>
+          <el-tag type="danger">失败 {{ usageSummary.fail }}</el-tag>
+          <el-tag type="info">Token {{ usageSummary.totalTokens }}</el-tag>
+          <el-tag type="warning">均耗时 {{ usageSummary.avgLatencyMs }}ms</el-tag>
+        </div>
+        <el-table :data="usageList" stripe v-loading="usageLoading" empty-text="暂无用记录" size="small">
+          <el-table-column prop="createTime" label="时间" width="160" />
+          <el-table-column prop="modelName" label="模型" min-width="120" />
+          <el-table-column prop="modelType" label="能力" width="100" />
+          <el-table-column prop="totalTokens" label="Token" width="90" align="right" />
+          <el-table-column prop="latencyMs" label="耗时(ms)" width="90" align="right" />
+          <el-table-column label="结果" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.success === 1 ? 'success' : 'danger'" size="small">{{ row.success === 1 ? '成功' : '失败' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="errorMsg" label="失败原因" min-width="180" show-overflow-tooltip />
+        </el-table>
+        <el-pagination
+          v-model:current-page="usageQuery.page"
+          v-model:page-size="usageQuery.size"
+          :total="usageTotal"
+          layout="total, prev, pager, next"
+          @current-change="loadUsage"
+          style="margin-top: 12px; justify-content: flex-end"
+        />
+      </el-tab-pane>
+    </el-tabs>
 
     <el-dialog :title="form.id ? '编辑模型' : '注册模型'" v-model="visible" width="560px">
       <el-form :model="form" label-width="96px">
@@ -99,6 +144,38 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="超时(ms)">
+              <el-tooltip content="单次调用超时，默认 20000" placement="top">
+                <el-input-number v-model="form.timeoutMs" :min="1000" :max="120000" :step="1000" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="熔断阈值">
+              <el-tooltip content="连续失败达到此次数即摘除，冷却 60s 后探测恢复" placement="top">
+                <el-input-number v-model="form.failThreshold" :min="1" :max="10" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="输入单价">
+              <el-tooltip content="元/千token，用于成本估算，可留空" placement="top">
+                <el-input-number v-model="form.costPer1kIn" :min="0" :precision="6" :step="0.001" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="输出单价">
+              <el-tooltip content="元/千token，用于成本估算，可留空" placement="top">
+                <el-input-number v-model="form.costPer1kOut" :min="0" :precision="6" :step="0.001" style="width: 100%" />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="向量维度" v-if="form.modelType === 'EMBEDDING'">
           <el-input-number v-model="form.dimension" :min="64" :step="64" style="width: 100%" />
         </el-form-item>
@@ -119,7 +196,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteAiModel, getAiModelActive, listAiModels, listAiModelsEnabled,
-  saveAiModel, setAiModelActive, setAiModelEnabled, testAiModel
+  saveAiModel, setAiModelActive, setAiModelEnabled, testAiModel,
+  pageModelUsage, getModelUsageSummary
 } from '../api'
 
 const modelList = ref([])
@@ -127,8 +205,15 @@ const loading = ref(false)
 const visible = ref(false)
 const saving = ref(false)
 const activeType = ref('')
+const mainTab = ref('models')
 const llmEnabled = ref([])
 const currentActiveId = ref(null)
+
+const usageList = ref([])
+const usageLoading = ref(false)
+const usageTotal = ref(0)
+const usageSummary = ref(null)
+const usageQuery = reactive({ page: 1, size: 10, modelType: '', success: null })
 
 const providerOptions = [
   { value: 'OLLAMA', label: 'OLLAMA（本地）' },
@@ -148,7 +233,8 @@ const typeOptions = [
 const emptyForm = () => ({
   id: null, modelName: '', provider: 'OLLAMA', modelType: 'LLM', baseUrl: '',
   apiKey: '', apiSecret: '', remoteModel: '', temperature: 0.3, dimension: 1024,
-  priority: 0, enabled: 1, isActive: 0, health: 'UNKNOWN', remark: ''
+  priority: 0, timeoutMs: 20000, failThreshold: 2, costPer1kIn: null, costPer1kOut: null,
+  enabled: 1, isActive: 0, health: 'UNKNOWN', remark: ''
 })
 const form = reactive(emptyForm())
 
@@ -264,7 +350,29 @@ const remove = async (row) => {
   loadModels()
 }
 
-onMounted(loadModels)
+const loadUsage = async () => {
+  usageLoading.value = true
+  try {
+    const params = { page: usageQuery.page, size: usageQuery.size }
+    if (usageQuery.modelType) params.modelType = usageQuery.modelType
+    if (usageQuery.success !== null && usageQuery.success !== undefined && usageQuery.success !== '') params.success = usageQuery.success
+    const res = await pageModelUsage(params)
+    usageList.value = res.data?.records || []
+    usageTotal.value = res.data?.total || 0
+    const sum = await getModelUsageSummary({ modelType: usageQuery.modelType || undefined })
+    usageSummary.value = sum.data
+  } catch {
+    usageList.value = []
+    usageTotal.value = 0
+  } finally {
+    usageLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadModels()
+  loadUsage()
+})
 </script>
 
 <style scoped>
@@ -286,6 +394,18 @@ onMounted(loadModels)
 .muted {
   color: #c0c4cc;
 }
+.usage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.usage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
 @media (max-width: 640px) {
   .page-toolbar {
     flex-direction: column;
@@ -300,6 +420,18 @@ onMounted(loadModels)
   }
   .current-model .el-select {
     width: 100% !important;
+  }
+  .usage-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .usage-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
   }
   :deep(.el-table) {
     font-size: 13px;
