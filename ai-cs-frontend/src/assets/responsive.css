@@ -1,0 +1,153 @@
+/* 全渠道响应式基座：PC >1024 · 平板 641–1024 · 手机 ≤640 */
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 输入框聚焦时 iOS 不自动放大 */
+input,
+select,
+textarea,
+.el-input__inner {
+  font-size: max(16px, 1rem);
+}
+
+/* ===== 卡片与工具条 ===== */
+.page-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(31, 42, 55, 0.04);
+}
+
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+/* ===== 表格横向滚动，移动端不压缩布局 ===== */
+.el-table {
+  width: 100%;
+}
+.el-table__header-wrapper,
+.el-table__body-wrapper,
+.el-table__footer-wrapper {
+  overflow-x: auto;
+}
+
+/* ===== 弹窗响应式（Element Plus 宽度单位） ===== */
+.el-dialog {
+  max-width: calc(100vw - 32px);
+}
+@media (max-width: 640px) {
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    margin-top: 12px !important;
+    max-height: calc(100vh - 24px - var(--safe-top) - var(--safe-bottom));
+    overflow-y: auto;
+  }
+  .el-form-item__label {
+    line-height: 1.4;
+    padding-bottom: 4px;
+  }
+}
+
+/* 抽屉在手机上占全宽 */
+@media (max-width: 640px) {
+  .el-drawer {
+    --el-drawer-size: 100% !important;
+  }
+}
+
+/* ===== 内联查询表单在小屏改为竖排 ===== */
+@media (max-width: 640px) {
+  .el-form--inline {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .el-form--inline .el-form-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-right: 0;
+    margin-bottom: 8px;
+  }
+  .el-form--inline .el-form-item__label {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .el-form--inline .el-form-item__content {
+    flex: 1;
+    min-width: 0;
+  }
+  .el-form--inline .el-input,
+  .el-form--inline .el-select,
+  .el-form--inline .el-date-editor {
+    width: 100% !important;
+  }
+}
+
+/* ===== 分页器小屏 ===== */
+@media (max-width: 640px) {
+  .el-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .el-pagination .el-pagination__total,
+  .el-pagination .el-pagination__sizes,
+  .el-pagination .el-pagination__jump {
+    margin-left: 0;
+    margin-bottom: 6px;
+  }
+}
+
+/* ===== 触屏增大点击区域 ===== */
+@media (hover: none) and (pointer: coarse) {
+  .el-button {
+    min-height: 36px;
+  }
+  .el-menu-item,
+  .el-sub-menu__title {
+    min-height: 48px;
+    line-height: 48px;
+  }
+  .el-switch {
+    --el-switch-height: 24px;
+  }
+}
+
+/* ===== 通用小屏排布工具 ===== */
+@media (max-width: 640px) {
+  .page-card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  .page-toolbar {
+    gap: 10px;
+  }
+  .el-row {
+    --el-row-gutter: 12px;
+  }
+  /* 弹窗表单标签换行 */
+  .el-form--label-left .el-form-item__label,
+  .el-form-item__label {
+    white-space: nowrap;
+  }
+}

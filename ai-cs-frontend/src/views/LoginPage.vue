@@ -105,10 +105,21 @@ const handleLogin = async () => {
   height: 44px;
   font-size: 16px;
 }
-.login-error {
-  color: #f56c6c;
-  text-align: center;
-  font-size: 14px;
-  margin-top: 8px;
+@media (max-width: 640px) {
+  .login-card {
+    width: 100%;
+    max-width: none;
+    padding: 28px 20px;
+    border-radius: 10px;
+  }
+  .login-title {
+    font-size: 20px;
+  }
+  .login-container {
+    padding: 16px;
+    padding-bottom: calc(16px + var(--safe-bottom));
+    align-items: flex-start;
+    padding-top: max(40px, calc(24px + var(--safe-top)));
+  }
 }
 </style>

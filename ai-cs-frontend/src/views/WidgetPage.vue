@@ -92,7 +92,7 @@ const send = async () => {
 
 <style scoped>
 .widget { height: 100%; display: flex; flex-direction: column; background: #f4f6fb; }
-header { padding: 12px 16px; background: #1e2a44; color: #fff; display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+header { padding: 12px 16px; background: #1e2a44; color: #fff; display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding-top: calc(12px + var(--safe-top)); }
 header span { color: #9aa8c3; font-size: 12px; }
 .msgs { flex: 1; overflow: auto; padding: 16px; }
 .row { display: flex; margin-bottom: 10px; }
@@ -100,5 +100,9 @@ header span { color: #9aa8c3; font-size: 12px; }
 .bubble { max-width: 80%; padding: 8px 12px; border-radius: 10px; background: #fff; line-height: 1.5; }
 .mine .bubble { background: #3b82f6; color: #fff; }
 .cites { font-size: 11px; color: #9aa8c3; margin-top: 4px; }
-footer { display: flex; gap: 8px; padding: 12px; background: #fff; border-top: 1px solid #e8edf5; }
+footer { display: flex; gap: 8px; padding: 12px; background: #fff; border-top: 1px solid #e8edf5; padding-bottom: calc(12px + var(--safe-bottom)); }
+@media (max-width: 640px) {
+  .msgs { padding: 12px; }
+  .bubble { max-width: 86%; font-size: 14px; }
+}
 </style>

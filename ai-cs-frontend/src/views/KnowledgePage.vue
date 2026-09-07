@@ -374,6 +374,7 @@ onMounted(() => {
 .actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .upload-btn {
   display: inline-block;
@@ -388,6 +389,7 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 16px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .search-section {
   margin-bottom: 16px;
@@ -415,5 +417,38 @@ onMounted(() => {
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 8px;
+}
+@media (max-width: 640px) {
+  .knowledge-container {
+    padding: 12px;
+  }
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .header h2 {
+    font-size: 18px;
+  }
+  .search-bar,
+  .search-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .search-bar .el-input,
+  .search-bar .el-select,
+  .search-section .el-input {
+    width: 100% !important;
+  }
+  .search-section {
+    padding: 12px;
+  }
+  .pager {
+    justify-content: center;
+  }
+  :deep(.el-table) {
+    font-size: 13px;
+  }
 }
 </style>

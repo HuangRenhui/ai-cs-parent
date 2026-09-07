@@ -193,7 +193,7 @@ onMounted(loadWorkOrders)
 }
 
 /* 移动端适配 */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .workorder-container {
     padding: 12px;
   }
@@ -207,6 +207,7 @@ onMounted(loadWorkOrders)
   }
   .search-bar {
     flex-direction: column;
+    align-items: stretch;
     gap: 8px;
   }
   .search-input {

@@ -159,4 +159,14 @@ onMounted(loadCustomers)
 
 <style scoped>
 .table-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #e8edf5; }
+@media (max-width: 640px) {
+  .page-toolbar > .el-input {
+    width: 100% !important;
+  }
+  .page-toolbar > div {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+}
 </style>

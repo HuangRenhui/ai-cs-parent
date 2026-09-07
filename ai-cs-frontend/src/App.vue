@@ -199,16 +199,19 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
+  padding-top: var(--safe-top);
 }
 .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 .header-right {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0;
 }
 .user-info {
   color: #606266;
@@ -217,27 +220,15 @@ html, body {
 .el-main {
   background-color: #f0f2f5;
 }
-.page-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 8px 24px rgba(31, 42, 55, 0.04);
-}
-.page-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
 .mobile-menu-btn {
   display: none !important;
 }
 .mobile-title {
   display: none;
 }
-@media (max-width: 768px) {
+
+/* 手机：抽屉菜单 + 精简顶栏 */
+@media (max-width: 640px) {
   .desktop-sidebar {
     display: none !important;
   }
@@ -252,7 +243,8 @@ html, body {
   }
   .top-header {
     padding: 0 12px;
-    height: 50px;
+    padding-top: var(--safe-top);
+    height: calc(50px + var(--safe-top));
   }
   .user-info {
     display: none;
@@ -264,25 +256,21 @@ html, body {
   .el-main {
     padding: 12px;
   }
+  .chat-container {
+    border-radius: 10px;
+  }
   .mobile-drawer .el-menu {
     border-right: none;
   }
 }
-@media (min-width: 769px) and (max-width: 1024px) {
+
+/* 平板：窄侧栏 */
+@media (min-width: 641px) and (max-width: 1024px) {
   .desktop-sidebar {
     width: 180px !important;
   }
   .el-main {
     padding: 16px;
-  }
-}
-@media (hover: none) and (pointer: coarse) {
-  .el-menu-item {
-    min-height: 48px;
-    line-height: 48px;
-  }
-  .el-button {
-    min-height: 40px;
   }
 }
 </style>

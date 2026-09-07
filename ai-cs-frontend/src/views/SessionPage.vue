@@ -92,4 +92,12 @@ h3 { font-size: 16px; }
 .role { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
 .body { line-height: 1.6; white-space: pre-wrap; }
 .time { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+@media (max-width: 1024px) {
+  .session-page { flex-direction: column; }
+  .list-pane { width: 100%; }
+  .msg-list { max-height: 50vh; }
+}
+@media (max-width: 640px) {
+  .msg-list { max-height: 45vh; }
+}
 </style>

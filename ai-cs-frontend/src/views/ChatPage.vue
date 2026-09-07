@@ -396,11 +396,12 @@ const createOrder = async () => {
 }
 
 /* 移动端适配 */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .chat-header {
     padding: 12px;
     flex-direction: column;
     gap: 8px;
+    align-items: flex-start;
   }
   .chat-header h2 {
     font-size: 16px;
@@ -417,12 +418,13 @@ const createOrder = async () => {
     padding: 10px;
   }
   .content {
-    max-width: 85%;
+    max-width: 82%;
     font-size: 14px;
   }
   .chat-input {
     padding: 10px;
     gap: 8px;
+    padding-bottom: calc(10px + var(--safe-bottom));
   }
   .avatar {
     width: 32px;

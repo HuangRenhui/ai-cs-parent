@@ -286,4 +286,23 @@ onMounted(loadModels)
 .muted {
   color: #c0c4cc;
 }
+@media (max-width: 640px) {
+  .page-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .toolbar-right {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+  }
+  .current-model .el-select {
+    width: 100% !important;
+  }
+  :deep(.el-table) {
+    font-size: 13px;
+  }
+}
 </style>

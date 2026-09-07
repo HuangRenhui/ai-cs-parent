@@ -23,4 +23,13 @@ const go = (path) => router.push(path)
 
 <style scoped>
 .ops-tabs { margin-bottom: 8px; }
+@media (max-width: 640px) {
+  :deep(.el-tabs__nav-scroll) {
+    overflow-x: auto;
+  }
+  :deep(.el-tabs__item) {
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}
 </style>

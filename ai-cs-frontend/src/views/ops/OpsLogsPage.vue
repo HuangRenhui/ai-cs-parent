@@ -116,4 +116,10 @@ onMounted(() => {
 .hint { color: #6b7280; line-height: 1.6; font-size: 13px; margin-bottom: 12px; }
 .pager { margin-top: 16px; display: flex; justify-content: flex-end; }
 .line { margin-top: 6px; color: #374151; word-break: break-all; }
+@media (max-width: 640px) {
+  .pager { justify-content: center; }
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+}
 </style>

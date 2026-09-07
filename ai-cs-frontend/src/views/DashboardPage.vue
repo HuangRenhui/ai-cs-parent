@@ -197,7 +197,7 @@ onMounted(() => {
 }
 
 /* 移动端适配 */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .dashboard-container {
     padding: 12px;
   }
@@ -215,13 +215,20 @@ onMounted(() => {
     margin-right: 10px;
   }
   .stat-value {
-    font-size: 22px;
+    font-size: 20px;
   }
   .chart-box {
     height: 220px;
   }
   .chart-row {
     margin-bottom: 12px;
+  }
+}
+
+/* 平板：两列卡片 */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .chart-box {
+    height: 260px;
   }
 }
 </style>

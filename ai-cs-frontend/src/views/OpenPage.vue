@@ -231,4 +231,12 @@ onMounted(load)
 <style scoped>
 .hint { color: #6b7280; font-size: 13px; margin: 0 0 16px; }
 h3 { margin: 0; }
+@media (max-width: 640px) {
+  :deep(.el-table) {
+    font-size: 13px;
+  }
+  .page-toolbar > h3 {
+    font-size: 15px;
+  }
+}
 </style>

@@ -57,4 +57,8 @@ onMounted(load)
 .stat-value { font-size: 28px; font-weight: 700; margin: 8px 0 4px; }
 .stat-desc { color: #9aa3b2; font-size: 12px; }
 .hint { color: #6b7280; line-height: 1.6; font-size: 13px; }
+@media (max-width: 640px) {
+  .stat-card { padding: 12px; margin-bottom: 12px; }
+  .stat-value { font-size: 22px; }
+}
 </style>
