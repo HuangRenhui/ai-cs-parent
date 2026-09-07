@@ -39,6 +39,7 @@ DROP TABLE IF EXISTS `cs_role`;
 DROP TABLE IF EXISTS `cs_menu`;
 DROP TABLE IF EXISTS `cs_operation_log`;
 DROP TABLE IF EXISTS `cs_statistics`;
+DROP TABLE IF EXISTS `cs_ai_model`;
 DROP TABLE IF EXISTS `cs_sys_config`;
 
 CREATE TABLE `cs_customer` (
@@ -457,6 +458,28 @@ CREATE TABLE `cs_sys_config` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置表';
+
+CREATE TABLE `cs_ai_model` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    `model_name` VARCHAR(100) NOT NULL COMMENT '显示名称',
+    `provider` VARCHAR(32) NOT NULL COMMENT '供应方: ollama/dashscope/openai/deepseek/other',
+    `model_type` VARCHAR(32) NOT NULL COMMENT '能力: LLM/EMBEDDING/RERANK/VISION/MULTIMODAL',
+    `base_url` VARCHAR(500) DEFAULT NULL COMMENT '服务地址',
+    `api_key` VARCHAR(1000) DEFAULT NULL COMMENT '密钥(AES-GCM加密存储 enc: 前缀)',
+    `api_secret` VARCHAR(1000) DEFAULT NULL COMMENT '附加密钥(AES-GCM加密存储)',
+    `remote_model` VARCHAR(100) DEFAULT NULL COMMENT '上游模型标识',
+    `temperature` DECIMAL(4,2) DEFAULT 0.30 COMMENT '温度',
+    `dimension` INT DEFAULT 1024 COMMENT 'embedding维度',
+    `priority` INT DEFAULT 0 COMMENT '故障切换优先级(越小越优先)',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用: 1是0否',
+    `is_active` TINYINT DEFAULT 0 COMMENT '当前生效(同能力仅一条): 1是0否',
+    `health` VARCHAR(16) DEFAULT 'UNKNOWN' COMMENT 'UNKNOWN/HEALTHY/DOWN',
+    `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    `create_time` DATETIME DEFAULT NULL COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT NULL COMMENT '更新时间',
+    KEY `idx_model_type` (`model_type`),
+    KEY `idx_enabled` (`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI模型注册表';
 
 -- ============================================
 -- 演示种子（生产勿用明文密码）
