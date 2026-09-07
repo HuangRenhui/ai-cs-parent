@@ -59,9 +59,10 @@
 
 ## 6. 故障转移策略
 
-- 调用失败：连续 N 次(默认 2) → 该模型 `health=DOWN`
+- 调用失败：连续 N 次(默认 2，可在模型上配置 `fail_threshold`) → 该模型熔断摘除
 - 从同能力、`enabled`、其余候选中按 `priority` 升序取次优模型继续本次调用
-- 后台任务每 30s 对 DOWN 模型轻量探测，成功则恢复为候选
+- 熔断冷却 60s 后允许半开探测，成功即恢复候选
+- 每次调用记录 token、耗时、成功/失败到 `cs_model_usage`（由 ai-cs-job 从 Redis 流消费落库）
 - 全部 DOWN 时返回明确错误，不静默失败
 
 ## 7. 分阶段实施
@@ -153,6 +154,27 @@
 - 密钥解析：环境变量 `AI_MODEL_SECRET` → 系统属性 `ai.model.secret` → 内置默认(仅演示/本机)；生产务必注入独立密钥。
 - 数据流：MySQL 存密文 → Redis 广播/测试连接经 `toRoute` 解密为明文 → 消费端正常调用；对外查询经 `maskSecret` 先解密再脱敏(4+****+2)。
 - 密钥一致性：base-service 需与消费端**不共享**加密密钥（消费端只收明文路由，无解密需求），密钥仅在 base-service 落库与读库两端使用。
+
+### 8.8 模型增强：超时 / 熔断 / 用量（已落地）
+
+| 文件 | 说明 |
+|------|------|
+| `common/llm/ModelCallResult` | 调用结果（文本 + token + 耗时） |
+| `common/llm/ModelUsageEvent` | 用量事件（写 Redis 流） |
+| `common/llm/ModelUsageRecorder` | 用量记录器（不阻塞主链） |
+| `common/llm/ModelCircuitBreaker` | 内存熔断器（连续失败阈值 + 60s 冷却） |
+| `common/llm/OpenAiCompatClient` | 支持每模型超时、解析 usage token |
+| `common/llm/ModelRouter` | 接入熔断器与用量记录，chat/embed 走 `*WithUsage` |
+| `base-service/entity/AiModelConfig` | 新增 timeoutMs / failThreshold / costPer1kIn / costPer1kOut |
+| `base-service/entity/ModelUsageRecord` + Service/Mapper | 用量落库与查询 |
+| `base-service/controller/AiModelConfigController` | 新增 `/usage/page`、`/usage/summary`、`/usage/recent-fail` |
+| `job/task/ModelUsageConsumeTask` | 消费 Redis 流落库，近 5 分钟失败超阈值输出告警日志 |
+| `ops/OpsAlertStore` | 接入模型失败指标，生成「模型连续失败」告警事件 |
+| `frontend/AiModelPage.vue` | 注册表单新增超时/熔断/单价；新增「用量统计」页签 |
+
+- 表结构：`cs_ai_model` 增加 `timeout_ms`、`fail_threshold`、`cost_per_1k_in`、`cost_per_1k_out`；新增 `cs_model_usage`。
+- 升级脚本：`docs/database/ai_model_upgrade.sql`（已有库执行）。
+- 数据流：调用 → Router 记录事件到 Redis Stream → ai-cs-job 每 5s 批量消费落库 → base-service 提供查询 → 前端展示。
 
 ## 9. 文档同步
 
