@@ -120,7 +120,14 @@ public class AiAgentService {
         }
         String tenant = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode().trim() : "default";
         try {
-            Result<RagSearchResultDTO> rag = knowledgeFeign.ragSearch(dto.getMsg(), tenant, dto.getSessionId());
+            // 场景入口带来的实体（如产品/订单号）并入检索 query，提升 BM25 对关联文档的命中
+            String query = dto.getMsg();
+            if (dto.getEntities() != null && !dto.getEntities().isEmpty() && dto.getEntities().get(0) != null
+                    && StringUtils.hasText(dto.getEntities().get(0).getId())
+                    && !query.contains(dto.getEntities().get(0).getId())) {
+                query = query + " " + dto.getEntities().get(0).getId();
+            }
+            Result<RagSearchResultDTO> rag = knowledgeFeign.ragSearch(query, tenant, dto.getSessionId());
             if (rag == null || !rag.isOk() || rag.getData() == null) {
                 result.setKnowledgeStatus(RagSearchResultDTO.UNAVAILABLE);
                 log.warn("知识库检索不可用: {}", rag == null ? "empty" : rag.getMsg());
