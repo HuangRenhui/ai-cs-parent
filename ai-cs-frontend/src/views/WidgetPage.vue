@@ -13,6 +13,9 @@
           </div>
         </div>
       </div>
+      <div v-if="quickActions.length" class="quick-actions">
+        <button v-for="(a, i) in quickActions" :key="i" class="chip" @click="sendAction(a)">{{ a.label }}</button>
+      </div>
     </div>
     <footer>
       <el-input v-model="input" maxlength="2000" placeholder="输入问题，可问物流/退款/咨询" @keyup.enter="send" />
@@ -33,7 +36,9 @@ const entityType = route.query.entityType || ''
 const entityId = route.query.entityId || ''
 const sessionId = ref('sess_widget_' + Date.now())
 const accessToken = ref('')
-const messages = ref([{ mine: false, text: '您好，我是智能客服。可咨询问题；物流/退款会走已注册的连接器，而不是内核订单表。' }])
+const DEFAULT_GREETING = '您好，我是智能客服。可咨询问题；物流/退款会走已注册的连接器，而不是内核订单表。'
+const messages = ref([{ mine: false, text: DEFAULT_GREETING }])
+const quickActions = ref([])
 const input = ref('')
 const sending = ref(false)
 const box = ref()
@@ -50,6 +55,13 @@ onMounted(async () => {
       entities
     })
     accessToken.value = res.data?.accessToken || ''
+    // 场景化入口：用配置的开场白替换默认首条消息，并渲染快捷动作
+    if (res.data?.greeting) {
+      messages.value[0] = { mine: false, text: res.data.greeting }
+    }
+    if (Array.isArray(res.data?.quickActions) && res.data.quickActions.length) {
+      quickActions.value = res.data.quickActions.filter((a) => a && a.label && a.send)
+    }
     if (!accessToken.value) {
       messages.value.push({ mine: false, text: '未能获取访客令牌，请确认开放服务已启动后再发送。' })
     }
@@ -57,6 +69,12 @@ onMounted(async () => {
     messages.value.push({ mine: false, text: '开放服务未启动时仍可聊天，但无法写入访客映射。' })
   }
 })
+
+const sendAction = (action) => {
+  if (sending.value) return
+  input.value = action.send
+  send()
+}
 
 const send = async () => {
   const text = input.value.trim()
@@ -100,6 +118,12 @@ header span { color: #9aa8c3; font-size: 12px; }
 .bubble { max-width: 80%; padding: 8px 12px; border-radius: 10px; background: #fff; line-height: 1.5; }
 .mine .bubble { background: #3b82f6; color: #fff; }
 .cites { font-size: 11px; color: #9aa8c3; margin-top: 4px; }
+.quick-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }
+.chip {
+  border: 1px solid #c7d4ee; background: #fff; color: #3b82f6; border-radius: 999px;
+  padding: 6px 14px; font-size: 13px; cursor: pointer; transition: background .15s;
+}
+.chip:hover { background: #eef4ff; }
 footer { display: flex; gap: 8px; padding: 12px; background: #fff; border-top: 1px solid #e8edf5; padding-bottom: calc(12px + var(--safe-bottom)); }
 @media (max-width: 640px) {
   .msgs { padding: 12px; }
