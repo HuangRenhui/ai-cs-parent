@@ -1,5 +1,7 @@
 package com.ai.cs.open.service;
 
+import com.ai.cs.common.dto.BizEntity;
+import com.ai.cs.common.dto.SceneQuickAction;
 import com.ai.cs.common.dto.ToolInvokeDTO;
 import com.ai.cs.common.dto.ToolInvokeResultDTO;
 import com.ai.cs.common.dto.WidgetInitDTO;
@@ -11,11 +13,13 @@ import com.ai.cs.open.entity.OpenConnector;
 import com.ai.cs.open.entity.OpenPack;
 import com.ai.cs.open.entity.OpenTool;
 import com.ai.cs.open.entity.OpenToolInvoke;
+import com.ai.cs.open.entity.SceneConfig;
 import com.ai.cs.open.entity.VisitorMap;
 import com.ai.cs.open.mapper.OpenConnectorMapper;
 import com.ai.cs.open.mapper.OpenPackMapper;
 import com.ai.cs.open.mapper.OpenToolInvokeMapper;
 import com.ai.cs.open.mapper.OpenToolMapper;
+import com.ai.cs.open.mapper.SceneConfigMapper;
 import com.ai.cs.open.mapper.VisitorMapMapper;
 import com.ai.cs.open.util.ConnectorUrlGuard;
 import com.alibaba.fastjson.JSON;
@@ -48,6 +52,106 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
     private VisitorMapMapper visitorMapMapper;
     @Resource
     private OpenPackMapper packMapper;
+    @Resource
+    private SceneConfigMapper sceneConfigMapper;
+
+    // ==================== 场景配置 ====================
+
+    public List<SceneConfig> listScenes() {
+        return sceneConfigMapper.selectList(new LambdaQueryWrapper<SceneConfig>()
+                .orderByAsc(SceneConfig::getSortNum).orderByAsc(SceneConfig::getId));
+    }
+
+    public void saveScene(SceneConfig config) {
+        if (config == null || !StringUtils.hasText(config.getScene())) {
+            throw new BusinessException("场景编码不能为空");
+        }
+        if (!StringUtils.hasText(config.getSceneName())) {
+            throw new BusinessException("场景名称不能为空");
+        }
+        config.setScene(config.getScene().trim().toUpperCase());
+        SceneConfig dup = sceneConfigMapper.selectOne(new LambdaQueryWrapper<SceneConfig>()
+                .eq(SceneConfig::getScene, config.getScene())
+                .ne(config.getId() != null, SceneConfig::getId, config.getId())
+                .last("limit 1"));
+        if (dup != null) {
+            throw new BusinessException("场景编码[" + config.getScene() + "]已存在");
+        }
+        if (config.getEnabled() == null) {
+            config.setEnabled(1);
+        }
+        if (config.getSortNum() == null) {
+            config.setSortNum(0);
+        }
+        if (config.getId() == null) {
+            sceneConfigMapper.insert(config);
+        } else {
+            sceneConfigMapper.updateById(config);
+        }
+    }
+
+    public void deleteScene(Long id) {
+        sceneConfigMapper.deleteById(id);
+    }
+
+    public void setSceneEnabled(Long id, Integer enabled) {
+        SceneConfig config = sceneConfigMapper.selectById(id);
+        if (config == null) {
+            throw new BusinessException("场景配置不存在");
+        }
+        config.setEnabled(enabled != null && enabled == 1 ? 1 : 0);
+        sceneConfigMapper.updateById(config);
+    }
+
+    /**
+     * 按场景解析开场白与快捷动作，写入 init 响应。
+     * scene 未配置时回退 GENERAL；{entityId} 用首个实体替换，无实体时用 greeting_empty。
+     */
+    private void applySceneProfile(WidgetInitVO vo) {
+        SceneConfig config = findSceneConfig(vo.getScene());
+        if (config == null) {
+            return;
+        }
+        String entityId = firstEntityId(vo.getEntities());
+        String greeting = config.getGreeting();
+        if (!StringUtils.hasText(entityId) && StringUtils.hasText(config.getGreetingEmpty())) {
+            greeting = config.getGreetingEmpty();
+        } else if (StringUtils.hasText(greeting)) {
+            greeting = greeting.replace("{entityId}", entityId == null ? "" : entityId);
+        }
+        vo.setGreeting(greeting);
+        if (StringUtils.hasText(config.getQuickActions())) {
+            try {
+                List<SceneQuickAction> actions = JSON.parseArray(config.getQuickActions(), SceneQuickAction.class);
+                vo.setQuickActions(actions == null ? List.of() : actions);
+            } catch (Exception e) {
+                vo.setQuickActions(List.of());
+            }
+        }
+    }
+
+    private SceneConfig findSceneConfig(String scene) {
+        if (StringUtils.hasText(scene)) {
+            SceneConfig exact = sceneConfigMapper.selectOne(new LambdaQueryWrapper<SceneConfig>()
+                    .eq(SceneConfig::getEnabled, 1)
+                    .eq(SceneConfig::getScene, scene.trim().toUpperCase())
+                    .last("limit 1"));
+            if (exact != null) {
+                return exact;
+            }
+        }
+        return sceneConfigMapper.selectOne(new LambdaQueryWrapper<SceneConfig>()
+                .eq(SceneConfig::getEnabled, 1)
+                .eq(SceneConfig::getScene, "GENERAL")
+                .last("limit 1"));
+    }
+
+    private String firstEntityId(List<BizEntity> entities) {
+        if (entities == null || entities.isEmpty() || entities.get(0) == null) {
+            return null;
+        }
+        return entities.get(0).getId();
+    }
 
     public List<OpenPack> listPacks() {
         return packMapper.selectList(new LambdaQueryWrapper<OpenPack>().orderByAsc(OpenPack::getSortNum).orderByAsc(OpenPack::getId));
@@ -189,6 +293,7 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         vo.setCustomerId(existing.getCustomerId());
         long visitorId = existing.getCustomerId() == null ? 0L : existing.getCustomerId();
         vo.setAccessToken(JwtUtil.generateVisitorToken(visitorId, "visitor:" + visitorRef));
+        applySceneProfile(vo);
         return vo;
     }
 
