@@ -10,14 +10,14 @@
   - 向量化存储与检索（Chroma/Milvus）
   - Rerank 重排优化，提升检索精度
   - 多用户会话隔离，Redis 持久化存储
-  - **文档版本管理**：支持文档版本跟踪、回退和对比
+  - 详见 [知识库手册](docs/知识库手册.md)
 - 🎫 **工单系统**：智能工单创建与流转管理
 - 💬 **实时通信**：基于 WebSocket 的即时消息推送
 - 👥 **客户管理**：完整的客户信息管理系统
 
 ## 🚀 快速开始
 
-几分钟内即可运行！详细启动步骤请查看 [快速开始指南](docs/QUICK_START.md)。
+几分钟内即可运行！详细启动步骤请查看 [快速开始](docs/快速开始.md)。
 
 **环境要求**: JDK 17+, Maven 3.6+, MySQL 8.0+, Redis 6.0+
 
@@ -29,23 +29,19 @@ cd ai-cs-parent
 # 编译项目
 mvn clean install -DskipTests
 
-# 启动服务（详见快速开始指南）
+# 启动服务（详见快速开始）
 ```
 
 ## 📚 文档导航
 
 完整文档位于 [docs](docs/) 目录：
 
-- 📘 [快速开始指南](docs/QUICK_START.md) - 快速上手
-- 🏗️ [架构概览](docs/architecture/overview.md) - 系统架构设计
-- 📦 [模块说明](docs/architecture/modules.md) - 模块职责与接口
-- 🔄 [数据流向](docs/architecture/data-flow.md) - 业务流程与数据流
-- ⚙️ [配置管理](docs/deployment/configuration.md) - 配置详解
-- 🗄️ [数据库迁移](docs/database/migration.md) - Schema 变更管理
-- 🧪 [测试指南](docs/development/testing.md) - 测试策略与实践
-- 📖 [开发规范](docs/development/standards.md) - 代码规范
-
-更多文档请查看 [文档索引](docs/README.md)。
+- 📘 [文档说明](docs/文档说明.md) — 分类索引
+- 🎯 [功能清单](docs/功能清单.md) — 实现目标（按 §17-B）
+- 🗺️ [项目现状](docs/项目现状.md) — 代码对照
+- 🚀 [快速开始](docs/快速开始.md)
+- 🏗️ [系统架构](docs/系统架构.md)
+- ⚙️ [配置说明](docs/配置说明.md)
 
 ## 🛠️ 技术栈
 
@@ -75,19 +71,21 @@ ai-cs-parent/
 ├── ai-cs-common/          # 公共模块 - 工具类、常量、DTO
 ├── ai-cs-api/             # API 模块 - Feign 接口定义
 ├── ai-cs-gateway/         # 网关服务 (端口 8080)
-├── ai-cs-base-service/    # 基础服务 - 客户管理 (端口 9001)
-├── ai-cs-agent/           # AI 代理服务 - 智能对话 (端口 9002)
-├── ai-cs-knowledge/       # 知识库服务 - 向量检索 (端口 9003)
-├── ai-cs-workorder/       # 工单服务 - 工单管理 (端口 9004)
-├── ai-cs-websocket/       # WebSocket 服务 - 实时通信 (端口 9005)
-├── ai-cs-job/             # 定时任务服务
+├── ai-cs-websocket/       # WebSocket 服务 - 实时通信 (端口 8081)
+├── ai-cs-agent/           # AI 代理服务 - 智能对话 (端口 8082)
+├── ai-cs-knowledge/       # 知识库服务 - 向量检索 (端口 8083)
+├── ai-cs-base-service/    # 基础服务 - 客户管理 (端口 8084)
+├── ai-cs-workorder/       # 工单服务 - 工单管理 (端口 8085)
+├── ai-cs-open/            # 开放接入 - 连接器/工具 (端口 8086)
+├── ai-cs-ops/             # 运维控制台 (端口 8087)
+├── ai-cs-job/             # 定时任务服务 (端口 8088)
 ├── ai-cs-frontend/        # Vue.js 前端应用
-└── docs/                  # 项目文档
+└── docs/                  # 中文文档（入口：docs/文档说明.md）
 ```
 
 ## 🤝 贡献指南
 
-欢迎贡献代码！详情请查看 [开发规范](docs/development/standards.md)。
+欢迎贡献代码！详情请查看 [开发规范](docs/编码规范.md)。
 
 1. Fork 本仓库
 2. 创建特性分支: `git checkout -b feature/amazing-feature`

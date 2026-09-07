@@ -1,6 +1,18 @@
-# Docker 部署指南
+# Docker部署
 
-本文档介绍如何使用 Docker 容器化部署 AI 智能客服系统。
+容器化部署。应用端口：8080 网关、8081 WS、8082 agent、8083 knowledge、8084 base、8085 workorder。MinIO 控制台 **9001**（对象存储，与基础服务端口无关）。open/ops/job 尚未写入本示例 compose。
+
+本地无 Docker 时用 [快速开始](快速开始.md)。
+
+## 📋 文档信息
+
+- **文档版本**: v1.0
+- **创建日期**: 2026-06-20
+- **维护者**: huangrenhui
+- **最后更新**: 2026-09-05
+- **状态**: 现行
+
+---
 
 ## 📋 目录
 
@@ -8,7 +20,9 @@
 - [Docker 镜像构建](#docker-镜像构建)
 - [Docker Compose 部署](#docker-compose-部署)
 - [Kubernetes 部署](#kubernetes-部署)
+- [高可用与灰度](#高可用与灰度)
 - [常见问题](#常见问题)
+- [监控与日志](#监控与日志)
 
 ---
 
@@ -127,7 +141,7 @@ docker push your-registry.com/ai-cs-gateway:v1.0.0
 
 ### 1. 创建 docker-compose.yml
 
-在项目根目录创建 `docker-compose.yml`：
+在项目根目录创建 `docker-compose.yml`（本示例覆盖 gateway / websocket / agent / knowledge / base / workorder 及依赖；**open :8086、ops :8087、job :8088 未写入**，补服务时端口与 [系统架构](系统架构.md) 对齐）：
 
 ```yaml
 version: '3.8'
@@ -234,7 +248,7 @@ services:
     image: ai-cs-base-service:latest
     container_name: ai-cs-base-service
     ports:
-      - "9001:9001"
+      - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -251,7 +265,7 @@ services:
     image: ai-cs-agent:latest
     container_name: ai-cs-agent
     ports:
-      - "9002:9002"
+      - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       LLM_API_KEY: ${LLM_API_KEY}
@@ -267,7 +281,7 @@ services:
     image: ai-cs-knowledge:latest
     container_name: ai-cs-knowledge
     ports:
-      - "9003:9003"
+      - "8083:8083"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       MILVUS_HOST: milvus
@@ -283,7 +297,7 @@ services:
     image: ai-cs-workorder:latest
     container_name: ai-cs-workorder
     ports:
-      - "9004:9004"
+      - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -298,7 +312,7 @@ services:
     image: ai-cs-websocket:latest
     container_name: ai-cs-websocket
     ports:
-      - "9005:9005"
+      - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_REDIS_HOST: redis
@@ -388,6 +402,8 @@ docker compose restart gateway
 ---
 
 ## Kubernetes 部署
+
+可选。单机 / 内网 POC 与 [功能清单 §17-B](功能清单.md) **不依赖** K8s。示例清单需自行对照现行端口 **8080–8088** 与库名 `ai_customer_service`；未经验证的 yaml 不要当生产清单。WebSocket 多副本前须先会话同步（功能清单 §16.2 / §18.11）。
 
 ### 1. 创建命名空间
 
@@ -500,7 +516,19 @@ kubectl logs -f deployment/gateway -n ai-cs
 
 ---
 
-## 常见问题
+## 高可用与灰度
+
+不挡单机 §17-B。合同要 SLA 再做：
+
+- **多实例**: 无状态 HTTP 服务可加副本；`ai-cs-websocket` 连接在进程内，先 Redis/总线再扩副本。
+- **负载均衡**: 生产用 Nginx / 云 LB 打到网关；示例 compose 是单副本。
+- **备份**: 库与对象存储 RPO/RTO 写进合同；本文不提供现成备份脚本。
+- **灰度**: 无现成流水线；大改（如 Netty）按功能清单第 20 节评估，不要在未做会话同步时对 WS 灰度多副本。
+- **open / ops / job**: 各有 Dockerfile，**尚未**写入本文 compose 示例（见文首）。补进 compose 后再谈副本数。
+
+---
+
+## 🔧 常见问题
 
 ### 1. 镜像构建失败
 
@@ -584,7 +612,7 @@ docker exec -i ai-cs-mysql mysql -u root -p ai_cs < backup.sql
 
 ---
 
-## 监控与日志
+## 📊 监控与日志
 
 ### 日志收集
 
@@ -612,12 +640,11 @@ curl http://localhost:8080/actuator/health
 
 ---
 
-## 下一步
+## 📚 相关文档
 
-- 阅读 [配置管理指南](configuration.md) 了解详细配置项
-- 阅读 [手动部署指南](manual.md) 了解传统部署方式
-- 查看 [数据库迁移指南](../database/migration.md) 了解数据库维护
+- [配置说明](配置说明.md)
+- [手动部署](手动部署.md)
+- [功能清单](功能清单.md) - §18.11 高可用
+- [数据库设计](数据库设计.md)
+- [快速开始](快速开始.md)
 
----
-
-**需要帮助？** 提交 [Issue](https://gitee.com/huangrenhui/ai-cs-parent/issues) 或联系维护者。
