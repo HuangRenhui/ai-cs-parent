@@ -49,6 +49,18 @@ public class AiModelRoute implements Serializable {
     /** 故障切换优先级，越小越优先 */
     private Integer priority;
 
+    /** 单次调用超时(毫秒) */
+    private Integer timeoutMs;
+
+    /** 连续失败熔断阈值(达到即摘除) */
+    private Integer failThreshold;
+
+    /** 输入单价(元/千token) */
+    private BigDecimal costPer1kIn;
+
+    /** 输出单价(元/千token) */
+    private BigDecimal costPer1kOut;
+
     /** 是否启用 1/0 */
     private Integer enabled;
 

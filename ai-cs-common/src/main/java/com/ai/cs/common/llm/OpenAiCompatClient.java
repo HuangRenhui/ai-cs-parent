@@ -54,6 +54,16 @@ public class OpenAiCompatClient {
      */
     public String chat(String baseUrl, String apiKey, String model, BigDecimal temperature,
                        List<Map<String, String>> messages) {
+        return chatWithUsage(baseUrl, apiKey, model, temperature, messages, null).getText();
+    }
+
+    /**
+     * 对话补全（带用量与耗时）
+     *
+     * @param timeoutMs 单次调用超时(毫秒)，null 则用构造默认
+     */
+    public ModelCallResult chatWithUsage(String baseUrl, String apiKey, String model, BigDecimal temperature,
+                                         List<Map<String, String>> messages, Integer timeoutMs) {
         if (!StringUtils.hasText(baseUrl) || !StringUtils.hasText(model)) {
             throw new ModelCallException("模型 baseUrl/模型名未配置");
         }
@@ -68,7 +78,10 @@ public class OpenAiCompatClient {
             body.put("temperature", temperature);
         }
 
-        String respJson = post(url, apiKey, body);
+        long start = System.currentTimeMillis();
+        String respJson = post(url, apiKey, body, timeoutMs);
+        long latency = System.currentTimeMillis() - start;
+
         JSONObject json = JSON.parseObject(respJson);
         JSONArray choices = json == null ? null : json.getJSONArray("choices");
         if (choices == null || choices.isEmpty()) {
@@ -81,7 +94,12 @@ public class OpenAiCompatClient {
         if (!StringUtils.hasText(text)) {
             throw new ModelCallException("对话模型返回空文本");
         }
-        return text.trim();
+
+        JSONObject usage = json.getJSONObject("usage");
+        Integer promptTokens = usage == null ? null : usage.getInteger("prompt_tokens");
+        Integer completionTokens = usage == null ? null : usage.getInteger("completion_tokens");
+        Integer totalTokens = usage == null ? null : usage.getInteger("total_tokens");
+        return ModelCallResult.of(text.trim(), promptTokens, completionTokens, totalTokens, latency);
     }
 
     /**
@@ -94,6 +112,13 @@ public class OpenAiCompatClient {
      * @return 向量
      */
     public List<Float> embed(String baseUrl, String apiKey, String model, String text) {
+        return parseEmbedding(embedWithUsage(baseUrl, apiKey, model, text, null));
+    }
+
+    /**
+     * 向量化（带用量与耗时）
+     */
+    public ModelCallResult embedWithUsage(String baseUrl, String apiKey, String model, String text, Integer timeoutMs) {
         if (!StringUtils.hasText(baseUrl) || !StringUtils.hasText(model)) {
             throw new ModelCallException("模型 baseUrl/模型名未配置");
         }
@@ -105,7 +130,10 @@ public class OpenAiCompatClient {
         body.put("model", model);
         body.put("input", List.of(text));
 
-        String respJson = post(url, apiKey, body);
+        long start = System.currentTimeMillis();
+        String respJson = post(url, apiKey, body, timeoutMs);
+        long latency = System.currentTimeMillis() - start;
+
         JSONObject json = JSON.parseObject(respJson);
         JSONArray data = json == null ? null : json.getJSONArray("data");
         if (data == null || data.isEmpty()) {
@@ -120,17 +148,39 @@ public class OpenAiCompatClient {
         for (int i = 0; i < embedding.size(); i++) {
             values.add(embedding.getFloat(i));
         }
-        return values;
+        // 把向量暂存到 text 字段（JSON 字符串），由调用方解析；用量从 usage 取
+        JSONObject usage = json.getJSONObject("usage");
+        Integer promptTokens = usage == null ? null : usage.getInteger("prompt_tokens");
+        Integer totalTokens = usage == null ? null : usage.getInteger("total_tokens");
+        ModelCallResult r = ModelCallResult.of(JSON.toJSONString(values), promptTokens, null, totalTokens, latency);
+        return r;
     }
 
-    private String post(String url, String apiKey, JSONObject body) {
+    /** 从 embedWithUsage 的 text 字段解析回向量 */
+    @SuppressWarnings("unchecked")
+    public static List<Float> parseEmbedding(ModelCallResult result) {
+        if (result == null || !StringUtils.hasText(result.getText())) {
+            return null;
+        }
+        return JSON.parseArray(result.getText(), Float.class);
+    }
+
+    private String post(String url, String apiKey, JSONObject body, Integer timeoutMs) {
         Request.Builder builder = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(body.toJSONString(), JSON_TYPE));
         if (StringUtils.hasText(apiKey)) {
             builder.header("Authorization", "Bearer " + apiKey.trim());
         }
-        try (Response response = http.newCall(builder.build()).execute()) {
+        OkHttpClient client = this.http;
+        if (timeoutMs != null && timeoutMs > 0) {
+            client = this.http.newBuilder()
+                    .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .connectTimeout(Math.min(timeoutMs, 10000), TimeUnit.MILLISECONDS)
+                    .writeTimeout(Math.min(timeoutMs, 10000), TimeUnit.MILLISECONDS)
+                    .build();
+        }
+        try (Response response = client.newCall(builder.build()).execute()) {
             String respJson = response.body() != null ? response.body().string() : "";
             if (!response.isSuccessful()) {
                 log.error("HTTP {} body={}", response.code(), respJson);

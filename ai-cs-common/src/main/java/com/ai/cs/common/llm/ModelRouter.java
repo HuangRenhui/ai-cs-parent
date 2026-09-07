@@ -1,29 +1,25 @@
 package com.ai.cs.common.llm;
 
-import com.ai.cs.common.constant.RedisKeyConst;
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.TypeReference;
+import com.ai.cs.common.constant.RedisKeyConst;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
- * AI 模型路由器：负责按能力(模型类型)选取当前生效模型、多模型故障转移(fallback)。
+ * 模型路由：统一从注册表选择模型，支持本地/在线零差异切换、故障自动切换、熔断与用量记录。
  *
- * <p>模型注册表由 base-service({@code /system/ai-model})写入 Redis(Hash: {@code ai:model:registry})，
- * 本组件在 base-service(测试连接/健康探测)与 agent/knowledge(对话/向量) 中复用。</p>
- *
- * <p><b>兼容旧配置</b>：当某能力未在注册表中登记任何模型（候选池为空）时，
- * 自动回退到历史配置(ai.llm / ai.embedding 的 {@link DashscopeModelClient})，
- * 保证不登记模型时原对话/向量链路完全不变；登记后才启用注册路由与故障转移。</p>
+ * <p>优先级：注册表启用模型(priority升序) → 当前生效(active) → 旧配置 DashScope 兜底。</p>
  *
  * @author ai-cs
  */
@@ -31,247 +27,283 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ModelRouter {
 
-    private static final String DEFAULT_LLM_TYPE = ModelTypeEnum.LLM.getCode();
-
-    /** type -> 该能力下已启用模型列表（按 priority 升序 + active 优先） */
-    private final Map<String, List<AiModelRoute>> candidates = new ConcurrentHashMap<>();
-
-    private final OpenAiCompatClient client = new OpenAiCompatClient(20);
+    @Resource
+    private ModelProperties modelProperties;
 
     @Resource
+    private EmbeddingProperties embeddingProperties;
+
+    @Resource(required = false)
     private StringRedisTemplate redisTemplate;
 
-    /** 旧配置回退客户端(DashScope 原生协议，来自 ai.llm/ai.embedding) */
     @Resource
-    private DashscopeModelClient legacyClient;
+    private ModelCircuitBreaker circuitBreaker;
 
-    /** 最近一次从 Redis 拉取注册表的时间戳（毫秒），用于防抖 */
-    private volatile long lastRefresh = 0L;
+    @Resource
+    private ModelUsageRecorder usageRecorder;
 
-    private static final long REFRESH_INTERVAL_MS = 5000L;
+    /** 本地路由池：modelType -> 启用模型列表(按 priority 升序) */
+    private final Map<String, List<AiModelRoute>> localRegistry = new ConcurrentHashMap<>();
+
+    /** 当前生效：modelType -> route */
+    private final Map<String, AiModelRoute> localActive = new ConcurrentHashMap<>();
+
+    /** 注册表版本号，用于 Redis 变更探测 */
+    private volatile long lastVersion = 0L;
+
+    private volatile OpenAiCompatClient openAiClient;
+    private volatile DashscopeModelClient legacyClient;
+
+    @PostConstruct
+    public void init() {
+        refreshFromRedis();
+    }
+
+    // ==================== 注册表管理 ====================
 
     /**
-     * 对话：选用 LLM 类型的当前生效模型，失败时按优先级顺延到下一候选（故障转移）。
-     * 未登记任何对话模型时回退到 {@link #legacyClient}。
-     *
-     * @param messages 消息列表 {role, content}
-     * @return 模型输出文本
+     * 用数据库启用模型刷新本地路由池（base-service 变更后调用）。
+     */
+    public synchronized void registerLocal(List<AiModelRoute> routes) {
+        localRegistry.clear();
+        localActive.clear();
+        if (routes != null) {
+            Map<String, List<AiModelRoute>> byType = routes.stream()
+                    .filter(r -> r.getEnabled() != null && r.getEnabled() == 1)
+                    .collect(Collectors.groupingBy(AiModelRoute::getModelType));
+            byType.forEach((type, list) -> {
+                list.sort(Comparator.comparing(AiModelRoute::getPriority, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(AiModelRoute::getId, Comparator.nullsLast(Long::compareTo)));
+                localRegistry.put(type, new ArrayList<>(list));
+                list.stream().filter(r -> r.getIsActive() != null && r.getIsActive() == 1)
+                        .findFirst()
+                        .ifPresent(r -> localActive.put(type, r));
+            });
+        }
+        log.info("模型路由池已刷新: {}", localRegistry.keySet());
+    }
+
+    /**
+     * 定时从 Redis 同步注册表（消费服务冷启动/变更时兜底）。
+     */
+    @Scheduled(fixedDelay = 5000)
+    public void refreshFromRedis() {
+        if (redisTemplate == null) {
+            return;
+        }
+        try {
+            String version = redisTemplate.opsForValue().get(RedisKeyConst.AI_MODEL_VERSION);
+            long v = version == null ? 0L : Long.parseLong(version);
+            if (v <= lastVersion) {
+                return;
+            }
+            Map<Object, Object> registry = redisTemplate.opsForHash().entries(RedisKeyConst.AI_MODEL_REGISTRY);
+            Map<Object, Object> active = redisTemplate.opsForHash().entries(RedisKeyConst.AI_MODEL_ACTIVE);
+            if (registry == null || registry.isEmpty()) {
+                return;
+            }
+            localRegistry.clear();
+            localActive.clear();
+            registry.forEach((type, json) -> {
+                List<AiModelRoute> list = JSON.parseArray(String.valueOf(json), AiModelRoute.class);
+                if (list != null && !list.isEmpty()) {
+                    list.sort(Comparator.comparing(AiModelRoute::getPriority, Comparator.nullsLast(Integer::compareTo))
+                            .thenComparing(AiModelRoute::getId, Comparator.nullsLast(Long::compareTo)));
+                    localRegistry.put(String.valueOf(type), list);
+                }
+            });
+            active.forEach((type, json) -> {
+                AiModelRoute route = JSON.parseObject(String.valueOf(json), AiModelRoute.class);
+                if (route != null) {
+                    localActive.put(String.valueOf(type), route);
+                }
+            });
+            lastVersion = v;
+            log.info("从 Redis 同步模型注册表: version={}, types={}", v, localRegistry.keySet());
+        } catch (Exception e) {
+            log.warn("同步模型注册表失败: {}", e.getMessage());
+        }
+    }
+
+    // ==================== 对话 ====================
+
+    /**
+     * 统一对话入口：优先注册表，失败自动切换，最终兜底旧配置。
      */
     public String chat(List<Map<String, String>> messages) {
-        return chatForType(DEFAULT_LLM_TYPE, messages);
+        return chatWithResult(messages, null).getText();
     }
 
     /**
-     * 指定能力类型的对话（预留：对话页可选模型/视觉等）
+     * 统一对话入口（带会话ID，用于用量关联）
      */
-    public String chatForType(String modelType, List<Map<String, String>> messages) {
-        ensureLoaded();
-        List<AiModelRoute> pool = pool(modelType);
-        if (pool.isEmpty()) {
-            // 兼容旧配置：未注册模型时走历史 DashScope 配置，不破坏原链路
-            return legacyClient.chatMessages(messages);
-        }
-        Exception last = null;
-        for (AiModelRoute route : pool) {
-            // 跳过已 DOWN 的模型
-            if (ModelHealthEnum.DOWN.getCode().equalsIgnoreCase(route.getHealth())) {
-                continue;
-            }
-            try {
-                String text = client.chat(route.getBaseUrl(), route.getApiKey(),
-                        route.getRemoteModel(), route.getTemperature(), messages);
-                markHealthy(route);
-                return text;
-            } catch (Exception e) {
-                last = e;
-                log.warn("模型[{}]调用失败，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
-                markDown(route);
-            }
-        }
-        // 注册的候选全部失败：回退历史配置作最后兜底
-        try {
-            return legacyClient.chatMessages(messages);
-        } catch (Exception legacyEx) {
-            log.warn("历史配置回退失败: {}", legacyEx.getMessage());
-            throw new ModelCallException("所有对话模型均不可用，请稍后重试或检查模型配置: "
-                    + (last == null ? "无可用候选" : last.getMessage()));
-        }
+    public String chat(List<Map<String, String>> messages, String sessionId) {
+        return chatWithResult(messages, sessionId).getText();
     }
 
     /**
-     * 向量化：选用 EMBEDDING 类型模型；未登记向量模型时回退 {@link #legacyClient}。
+     * 统一对话入口（返回完整结果，含用量）
+     */
+    public ModelCallResult chatWithResult(List<Map<String, String>> messages, String sessionId) {
+        List<AiModelRoute> candidates = candidates(ModelTypeEnum.LLM.getCode());
+        if (!candidates.isEmpty()) {
+            AiModelRoute active = localActive.get(ModelTypeEnum.LLM.getCode());
+            if (active != null && circuitBreaker.allow(active)) {
+                try {
+                    return doChat(active, messages, sessionId);
+                } catch (Exception e) {
+                    log.warn("当前生效模型调用失败: {} - {}", active.getModelName(), e.getMessage());
+                    circuitBreaker.onFailure(active);
+                    usageRecorder.record(ModelUsageRecorder.failure(active, sessionId, null, e.getMessage()));
+                }
+            }
+            for (AiModelRoute route : candidates) {
+                if (active != null && route.getId().equals(active.getId())) {
+                    continue;
+                }
+                if (!circuitBreaker.allow(route)) {
+                    continue;
+                }
+                try {
+                    return doChat(route, messages, sessionId);
+                } catch (Exception e) {
+                    log.warn("模型调用失败: {} - {}", route.getModelName(), e.getMessage());
+                    circuitBreaker.onFailure(route);
+                    usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()));
+                }
+            }
+            log.warn("注册表所有 LLM 模型均不可用，回退旧配置");
+        }
+        return legacyChatWithResult(messages, sessionId);
+    }
+
+    private ModelCallResult doChat(AiModelRoute route, List<Map<String, String>> messages, String sessionId) {
+        OpenAiCompatClient client = openAiClient();
+        ModelCallResult result = client.chatWithUsage(route.getBaseUrl(), route.getApiKey(),
+                route.getRemoteModel(), route.getTemperature(), messages, route.getTimeoutMs());
+        circuitBreaker.onSuccess(route);
+        usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result));
+        return result;
+    }
+
+    // ==================== Embedding ====================
+
+    /**
+     * 统一 Embedding 入口：优先注册表 EMBEDDING 模型，失败自动切换，最终兜底旧配置。
      */
     public List<Float> embed(String text) {
-        ensureLoaded();
-        List<AiModelRoute> pool = pool(ModelTypeEnum.EMBEDDING.getCode());
-        if (pool.isEmpty()) {
-            return legacyClient.embed(text);
-        }
-        Exception last = null;
-        for (AiModelRoute route : pool) {
-            if (ModelHealthEnum.DOWN.getCode().equalsIgnoreCase(route.getHealth())) {
-                continue;
-            }
-            try {
-                List<Float> vector = client.embed(route.getBaseUrl(), route.getApiKey(),
-                        route.getRemoteModel(), text);
-                markHealthy(route);
-                return vector;
-            } catch (Exception e) {
-                last = e;
-                log.warn("向量模型[{}]调用失败，尝试切换到候选。原因: {}", route.getModelName(), e.getMessage());
-                markDown(route);
-            }
-        }
-        try {
-            return legacyClient.embed(text);
-        } catch (Exception legacyEx) {
-            log.warn("历史配置回退失败: {}", legacyEx.getMessage());
-            throw new ModelCallException("所有向量模型均不可用，请稍后重试或检查模型配置: "
-                    + (last == null ? "无可用候选" : last.getMessage()));
-        }
+        return OpenAiCompatClient.parseEmbedding(embedWithResult(text, null));
     }
 
     /**
-     * 单模型连通性测试（供管理页"测试连接"与健康探测使用），不修改路由池。
-     *
-     * @return true=连接成功
+     * 统一 Embedding 入口（返回完整结果，含用量）
+     */
+    public ModelCallResult embedWithResult(String text, String sessionId) {
+        List<AiModelRoute> candidates = candidates(ModelTypeEnum.EMBEDDING.getCode());
+        if (!candidates.isEmpty()) {
+            AiModelRoute active = localActive.get(ModelTypeEnum.EMBEDDING.getCode());
+            if (active != null && circuitBreaker.allow(active)) {
+                try {
+                    return doEmbed(active, text, sessionId);
+                } catch (Exception e) {
+                    log.warn("当前生效 Embedding 模型调用失败: {} - {}", active.getModelName(), e.getMessage());
+                    circuitBreaker.onFailure(active);
+                    usageRecorder.record(ModelUsageRecorder.failure(active, sessionId, null, e.getMessage()));
+                }
+            }
+            for (AiModelRoute route : candidates) {
+                if (active != null && route.getId().equals(active.getId())) {
+                    continue;
+                }
+                if (!circuitBreaker.allow(route)) {
+                    continue;
+                }
+                try {
+                    return doEmbed(route, text, sessionId);
+                } catch (Exception e) {
+                    log.warn("Embedding 模型调用失败: {} - {}", route.getModelName(), e.getMessage());
+                    circuitBreaker.onFailure(route);
+                    usageRecorder.record(ModelUsageRecorder.failure(route, sessionId, null, e.getMessage()));
+                }
+            }
+            log.warn("注册表所有 EMBEDDING 模型均不可用，回退旧配置");
+        }
+        return legacyEmbedWithResult(text, sessionId);
+    }
+
+    private ModelCallResult doEmbed(AiModelRoute route, String text, String sessionId) {
+        OpenAiCompatClient client = openAiClient();
+        ModelCallResult result = client.embedWithUsage(route.getBaseUrl(), route.getApiKey(),
+                route.getRemoteModel(), text, route.getTimeoutMs());
+        circuitBreaker.onSuccess(route);
+        usageRecorder.record(ModelUsageRecorder.success(route, sessionId, result));
+        return result;
+    }
+
+    // ==================== 测试连接 ====================
+
+    /**
+     * 测试指定模型连通性（不记录用量，不触发熔断计数）。
      */
     public boolean testConnect(AiModelRoute route) {
         if (route == null) {
             return false;
         }
         try {
-            if (ModelTypeEnum.EMBEDDING.getCode().equalsIgnoreCase(route.getModelType())) {
-                List<Float> v = client.embed(route.getBaseUrl(), route.getApiKey(),
-                        route.getRemoteModel(), "ping");
-                return v != null && !v.isEmpty();
+            OpenAiCompatClient client = openAiClient();
+            if (ModelTypeEnum.EMBEDDING.getCode().equals(route.getModelType())) {
+                client.embedWithUsage(route.getBaseUrl(), route.getApiKey(), route.getRemoteModel(), "ping", route.getTimeoutMs());
+            } else {
+                client.chatWithUsage(route.getBaseUrl(), route.getApiKey(), route.getRemoteModel(),
+                        route.getTemperature(), List.of(Map.of("role", "user", "content", "ping")), route.getTimeoutMs());
             }
-            String text = client.chat(route.getBaseUrl(), route.getApiKey(),
-                    route.getRemoteModel(), route.getTemperature(),
-                    List.of(Map.of("role", "user", "content", "ping")));
-            return StringUtils.hasText(text);
+            return true;
         } catch (Exception e) {
-            log.warn("模型[{}]连通测试失败: {}", route.getModelName(), e.getMessage());
+            log.warn("测试连接失败: {} - {}", route.getModelName(), e.getMessage());
             return false;
         }
     }
 
-    /**
-     * 将一批模型注册进内存路由池，并按能力分组排好序。
-     * base-service 在启动预热与配置变更后调用（同时写 Redis）。
-     */
-    public void registerLocal(List<AiModelRoute> routes) {
-        candidates.clear();
-        if (routes == null || routes.isEmpty()) {
-            return;
-        }
-        for (AiModelRoute r : routes) {
-            if (r == null || !isEnabled(r)) {
-                continue;
-            }
-            candidates.computeIfAbsent(r.getModelType(), k -> new ArrayList<>()).add(r);
-        }
-        candidates.values().forEach(this::sortAndEnsureActiveFirst);
+    // ==================== 内部 ====================
+
+    private List<AiModelRoute> candidates(String modelType) {
+        return localRegistry.getOrDefault(modelType, List.of());
     }
 
-    /**
-     * 从 Redis 拉取全部启用模型并刷新本地路由池（消费服务启动/变更时调用）。
-     */
-    public void refreshFromRedis() {
-        if (redisTemplate == null) {
-            log.debug("StringRedisTemplate 不可用，跳过 Redis 刷新");
-            return;
-        }
-        try {
-            Map<Object, Object> entries = redisTemplate.opsForHash().entries(RedisKeyConst.AI_MODEL_REGISTRY);
-            List<AiModelRoute> all = new ArrayList<>();
-            for (Object value : entries.values()) {
-                if (value == null) {
-                    continue;
-                }
-                List<AiModelRoute> list = JSON.parseObject(String.valueOf(value),
-                        new TypeReference<List<AiModelRoute>>() {
-                        });
-                if (list != null) {
-                    all.addAll(list);
+    private OpenAiCompatClient openAiClient() {
+        if (openAiClient == null) {
+            synchronized (this) {
+                if (openAiClient == null) {
+                    int timeout = modelProperties.getTimeoutSeconds() == null ? 30 : modelProperties.getTimeoutSeconds();
+                    openAiClient = new OpenAiCompatClient(timeout);
                 }
             }
-            registerLocal(all);
-        } catch (Exception e) {
-            log.warn("刷新 Redis 模型注册表失败: {}", e.getMessage());
         }
+        return openAiClient;
     }
 
-    /** 本地模型池是否为空（判断是否已注册过） */
-    public boolean isEmpty() {
-        return candidates.isEmpty();
+    private ModelCallResult legacyChatWithResult(List<Map<String, String>> messages, String sessionId) {
+        long start = System.currentTimeMillis();
+        String text = legacyClient().chat(messages);
+        long latency = System.currentTimeMillis() - start;
+        return ModelCallResult.of(text, null, null, null, latency);
     }
 
-    /**
-     * 消费服务（agent/knowledge 等独立进程）按需从 Redis 同步注册表。
-     * 带 5 秒防抖：使 base-service 的"设为生效/启停"在数秒内传播到本服务，又不至于每次请求打 Redis。
-     */
-    private void ensureLoaded() {
-        long now = System.currentTimeMillis();
-        if (redisTemplate == null || now - lastRefresh < REFRESH_INTERVAL_MS) {
-            return;
-        }
-        synchronized (this) {
-            if (System.currentTimeMillis() - lastRefresh < REFRESH_INTERVAL_MS) {
-                return;
+    private ModelCallResult legacyEmbedWithResult(String text, String sessionId) {
+        long start = System.currentTimeMillis();
+        List<Float> vector = legacyClient().embed(text);
+        long latency = System.currentTimeMillis() - start;
+        return ModelCallResult.of(JSON.toJSONString(vector), null, null, null, latency);
+    }
+
+    private DashscopeModelClient legacyClient() {
+        if (legacyClient == null) {
+            synchronized (this) {
+                if (legacyClient == null) {
+                    legacyClient = new DashscopeModelClient(modelProperties, embeddingProperties);
+                }
             }
-            lastRefresh = now;
-            refreshFromRedis();
         }
-    }
-
-    /** 获取某能力的候选（深拷贝，避免外部修改内部排序态） */
-    public List<AiModelRoute> pool(String modelType) {
-        List<AiModelRoute> list = candidates.get(modelType);
-        return list == null ? Collections.emptyList() : new ArrayList<>(list);
-    }
-
-    /** 某能力当前生效模型（active==1 且 enabled），无则返回 priority 最小者 */
-    public AiModelRoute active(String modelType) {
-        List<AiModelRoute> list = pool(modelType);
-        if (list.isEmpty()) {
-            return null;
-        }
-        return list.get(0);
-    }
-
-    private boolean isEnabled(AiModelRoute r) {
-        return r.getEnabled() != null && r.getEnabled() == 1;
-    }
-
-    private void sortAndEnsureActiveFirst(List<AiModelRoute> list) {
-        list.sort((a, b) -> {
-            // 生效的排最前，其次 DOWN 的排最后
-            int da = ModelHealthEnum.DOWN.getCode().equalsIgnoreCase(a.getHealth()) ? 1 : 0;
-            int db = ModelHealthEnum.DOWN.getCode().equalsIgnoreCase(b.getHealth()) ? 1 : 0;
-            if (da != db) {
-                return da - db;
-            }
-            boolean aa = a.getIsActive() != null && a.getIsActive() == 1;
-            boolean ba = b.getIsActive() != null && b.getIsActive() == 1;
-            if (aa != ba) {
-                return aa ? -1 : 1;
-            }
-            return Integer.compare(prio(a.getPriority()), prio(b.getPriority()));
-        });
-    }
-
-    private int prio(Integer p) {
-        return p == null ? 0 : p;
-    }
-
-    private void markDown(AiModelRoute route) {
-        route.setHealth(ModelHealthEnum.DOWN.getCode());
-        // 运行时降级标记，不落 Redis（避免写放大），由后台健康探测决定是否恢复
-    }
-
-    private void markHealthy(AiModelRoute route) {
-        route.setHealth(ModelHealthEnum.HEALTHY.getCode());
+        return legacyClient;
     }
 }
