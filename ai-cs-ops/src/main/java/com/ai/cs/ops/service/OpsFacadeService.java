@@ -11,8 +11,11 @@ import com.ai.cs.ops.dto.OpsTracePageVO;
 import com.ai.cs.ops.dto.OpsTraceVO;
 import com.ai.cs.ops.query.FileLogQueryAdapter;
 import com.ai.cs.ops.query.FileTraceQueryAdapter;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,29 @@ public class OpsFacadeService {
     private HealthProbeService healthProbeService;
     @Resource
     private OpsAlertStore opsAlertStore;
+
+    @Value("${ops.base-service-url:http://localhost:8084}")
+    private String baseServiceUrl;
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    @PostConstruct
+    public void init() {
+        opsAlertStore.setModelFailCountSupplier(this::queryModelFailCount);
+    }
+
+    private Long queryModelFailCount() {
+        try {
+            String url = baseServiceUrl + "/system/ai-model/usage/recent-fail?minutes=5";
+            Map<?, ?> resp = restTemplate.getForObject(url, Map.class);
+            if (resp != null && resp.get("data") instanceof Number) {
+                return ((Number) resp.get("data")).longValue();
+            }
+        } catch (Exception e) {
+            // 查询失败不阻塞告警主流程
+        }
+        return 0L;
+    }
 
     public OpsOverviewVO overview() {
         List<OpsHealthItemVO> health = healthProbeService.probeAll();
