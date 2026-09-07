@@ -40,6 +40,7 @@ DROP TABLE IF EXISTS `cs_menu`;
 DROP TABLE IF EXISTS `cs_operation_log`;
 DROP TABLE IF EXISTS `cs_statistics`;
 DROP TABLE IF EXISTS `cs_ai_model`;
+DROP TABLE IF EXISTS `cs_model_usage`;
 DROP TABLE IF EXISTS `cs_sys_config`;
 
 CREATE TABLE `cs_customer` (
@@ -471,6 +472,10 @@ CREATE TABLE `cs_ai_model` (
     `temperature` DECIMAL(4,2) DEFAULT 0.30 COMMENT '温度',
     `dimension` INT DEFAULT 1024 COMMENT 'embedding维度',
     `priority` INT DEFAULT 0 COMMENT '故障切换优先级(越小越优先)',
+    `timeout_ms` INT DEFAULT 20000 COMMENT '单次调用超时(毫秒)',
+    `fail_threshold` INT DEFAULT 2 COMMENT '连续失败熔断阈值(达到即摘除)',
+    `cost_per_1k_in` DECIMAL(10,6) DEFAULT NULL COMMENT '输入单价(元/千token)',
+    `cost_per_1k_out` DECIMAL(10,6) DEFAULT NULL COMMENT '输出单价(元/千token)',
     `enabled` TINYINT DEFAULT 1 COMMENT '是否启用: 1是0否',
     `is_active` TINYINT DEFAULT 0 COMMENT '当前生效(同能力仅一条): 1是0否',
     `health` VARCHAR(16) DEFAULT 'UNKNOWN' COMMENT 'UNKNOWN/HEALTHY/DOWN',
@@ -480,6 +485,25 @@ CREATE TABLE `cs_ai_model` (
     KEY `idx_model_type` (`model_type`),
     KEY `idx_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI模型注册表';
+
+CREATE TABLE `cs_model_usage` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+    `model_id` BIGINT DEFAULT NULL COMMENT '模型ID',
+    `model_name` VARCHAR(100) DEFAULT NULL COMMENT '模型名称',
+    `model_type` VARCHAR(32) DEFAULT NULL COMMENT '能力类型',
+    `provider` VARCHAR(32) DEFAULT NULL COMMENT '供应方',
+    `session_id` VARCHAR(64) DEFAULT NULL COMMENT '会话ID',
+    `prompt_tokens` INT DEFAULT 0 COMMENT '输入token',
+    `completion_tokens` INT DEFAULT 0 COMMENT '输出token',
+    `total_tokens` INT DEFAULT 0 COMMENT '总token',
+    `latency_ms` INT DEFAULT 0 COMMENT '耗时(毫秒)',
+    `success` TINYINT DEFAULT 1 COMMENT '是否成功: 1是0否',
+    `error_msg` VARCHAR(500) DEFAULT NULL COMMENT '失败原因',
+    `create_time` DATETIME DEFAULT NULL COMMENT '创建时间',
+    KEY `idx_model` (`model_id`),
+    KEY `idx_type_time` (`model_type`, `create_time`),
+    KEY `idx_session` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模型调用用量记录';
 
 -- ============================================
 -- 演示种子（生产勿用明文密码）
