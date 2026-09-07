@@ -5,6 +5,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * PromptConst.fill 安全填充测试：提示词模板用 {@code %s} 占位，
+ * 重点验证用户输入带百分号时不会触发 String.format 类异常或错位替换。
+ */
 @DisplayName("PromptConst 安全填充")
 class PromptConstTest {
 

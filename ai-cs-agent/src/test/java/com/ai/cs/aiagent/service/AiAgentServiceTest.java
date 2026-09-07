@@ -23,22 +23,30 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+/**
+ * AiAgentService 单元测试：覆盖意图路由主链路——转人工、查物流降级、知识库命中/不可用、意图模型降级。
+ * 全部下游（LLM、知识库、开放工具、会话、工单）以 Mock 隔离，只验证编排逻辑与兜底话术。
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AiAgentService 单元测试")
 class AiAgentServiceTest {
 
+    /** 大模型调用入口（意图识别/对话生成），Mock 掉以固定意图返回 */
     @Mock
     private LlmUtil llmUtil;
 
     @Mock
     private WorkOrderFeign workOrderFeign;
 
+    /** 知识库检索（RAG），用于验证命中/不可用两种分支 */
     @Mock
     private KnowledgeFeign knowledgeFeign;
 
+    /** 开放工具调用（查物流/退款等），用于验证工具失败时的降级话术 */
     @Mock
     private OpenToolFeign openToolFeign;
 
+    /** 会话服务（转人工），用于验证转接动作确实触发 */
     @Mock
     private SessionFeign sessionFeign;
 
