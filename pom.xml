@@ -51,8 +51,8 @@
         <xz.version>1.9</xz.version>
         <!-- JAVE2 音频视频处理库 -->
         <jave.version>3.3.1</jave.version>
-        <!-- Fastjson JSON处理库 -->
-        <fastjson.version>1.2.83</fastjson.version>
+        <!-- Fastjson2 JSON处理库（安全升级） -->
+        <fastjson.version>2.0.43</fastjson.version>
         <!-- OkHttp HTTP客户端 -->
         <okhttp.version>4.12.0</okhttp.version>
         <!-- Apache Commons Pool2 -->
@@ -218,10 +218,10 @@
                 <version>${xz.version}</version>
             </dependency>
             
-            <!-- Fastjson JSON处理库 -->
+            <!-- Fastjson2 JSON处理库 -->
             <dependency>
-                <groupId>com.alibaba</groupId>
-                <artifactId>fastjson</artifactId>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
                 <version>${fastjson.version}</version>
             </dependency>
             

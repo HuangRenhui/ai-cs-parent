@@ -1,5 +1,6 @@
 package com.ai.cs.common.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.List;
@@ -15,6 +16,7 @@ public class ChatDTO {
     /** 会话ID，空则由服务端创建新会话 */
     private String sessionId;
     /** 用户消息内容 */
+    @NotBlank(message = "消息内容不能为空")
     private String msg;
     /** 历史对话文本（调用方自带时优先于服务端上下文） */
     private String history;

@@ -25,8 +25,8 @@ ai:
   jwt:
     secret: ${JWT_SECRET:}
   llm:
-    api-key: ${AI_LLM_API_KEY:替换为你的通义API-KEY}
-    api-secret: ${AI_LLM_API_SECRET:替换为你的通义API-SECRET}
+    api-key: ${AI_LLM_API_KEY:}
+    api-secret: ${AI_LLM_API_SECRET:}
     model: qwen-turbo
     url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
     timeout-seconds: 30

@@ -18,10 +18,10 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowed-origins: "*"
+            allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
             allowed-methods: "*"
             allowed-headers: "*"
-            allow-credentials: false
+            allow-credentials: true
       routes:
         - id: websocket-route
           uri: ${GATEWAY_WS_URI:ws://localhost:8081}

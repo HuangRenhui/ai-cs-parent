@@ -6,9 +6,10 @@ import com.ai.cs.common.dto.LoginDTO;
 import com.ai.cs.common.result.Result;
 import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.common.security.NoAuth;
+import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-import jakarta.annotation.Resource;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ public class AuthController {
      */
     @NoAuth
     @PostMapping("/login")
-    public Result<LoginDTO.Result> login(@RequestBody LoginDTO dto) {
+    public Result<LoginDTO.Result> login(@Valid @RequestBody LoginDTO dto) {
         try {
             LoginDTO.Result result = userService.login(dto.getUsername(), dto.getPassword());
             return Result.success(result);

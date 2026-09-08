@@ -5,8 +5,9 @@ import com.ai.cs.common.result.Result;
 import com.ai.cs.workorder.entity.WorkOrder;
 import com.ai.cs.workorder.service.WorkOrderService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -26,7 +27,7 @@ public class WorkOrderController {
 
     /** 创建工单（校验参数后生成 WO_ 前缀工单号，初始状态为待处理） */
     @PostMapping("/create")
-    public Result<String> create(@RequestBody WorkOrderDTO dto) {
+    public Result<String> create(@Valid @RequestBody WorkOrderDTO dto) {
         String orderNo = workOrderService.createOrder(dto);
         return Result.success("工单创建成功，工单号：" + orderNo);
     }

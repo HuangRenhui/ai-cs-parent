@@ -1,5 +1,6 @@
 package com.ai.cs.common.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.List;
@@ -13,8 +14,10 @@ import java.util.List;
 @Data
 public class LoginDTO {
     /** 登录账号 */
+    @NotBlank(message = "用户名不能为空")
     private String username;
     /** 登录密码（明文传输，依赖 HTTPS；服务端比对哈希） */
+    @NotBlank(message = "密码不能为空")
     private String password;
 
     /** 登录成功响应 */
