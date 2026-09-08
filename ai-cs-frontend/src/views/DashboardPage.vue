@@ -1,83 +1,140 @@
 <template>
-  <div class="dashboard-container">
-    <h2 class="page-title">数据概览</h2>
-    
+  <div class="page-card">
+    <div class="page-toolbar">
+      <h3>数据概览</h3>
+      <el-button :loading="loading" @click="loadDashboard">刷新</el-button>
+    </div>
+
     <!-- 统计卡片 -->
-    <el-row :gutter="20" class="stats-row">
+    <el-row :gutter="16" class="stats-row">
       <el-col :xs="12" :sm="12" :md="6" v-for="card in statCards" :key="card.title">
-        <el-card class="stat-card" :style="{ borderTopColor: card.color }">
+        <div class="stat-card">
           <div class="stat-icon" :style="{ backgroundColor: card.color }">
-            <el-icon :size="28"><component :is="card.icon" /></el-icon>
+            <el-icon :size="24"><component :is="card.icon" /></el-icon>
           </div>
           <div class="stat-info">
             <div class="stat-value">{{ card.value }}</div>
             <div class="stat-title">{{ card.title }}</div>
             <div class="stat-sub">{{ card.sub }}</div>
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
 
     <!-- 图表区域 -->
-    <el-row :gutter="20" class="chart-row">
+    <el-row :gutter="16">
       <el-col :xs="24" :md="12">
-        <el-card>
-          <template #header><span>聊天会话趋势（近30天）</span></template>
+        <div class="chart-panel">
+          <div class="panel-title">聊天会话趋势（近30天）</div>
           <div ref="chatChartRef" class="chart-box"></div>
-        </el-card>
+        </div>
       </el-col>
       <el-col :xs="24" :md="12">
-        <el-card>
-          <template #header><span>工单状态分布</span></template>
+        <div class="chart-panel">
+          <div class="panel-title">工单状态分布</div>
           <div ref="orderChartRef" class="chart-box"></div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
 
     <!-- 工单处理排行 -->
-    <el-row :gutter="20" class="chart-row">
+    <el-row :gutter="16" class="chart-row">
       <el-col :xs="24" :md="12">
-        <el-card>
-          <template #header><span>坐席处理工单排行</span></template>
-          <el-table :data="agentRank" style="width: 100%" size="small">
-            <el-table-column type="index" label="排名" width="60" />
+        <div class="chart-panel">
+          <div class="panel-title">坐席处理工单排行</div>
+          <el-table :data="agentRank" style="width: 100%" size="small" empty-text="暂无排行数据">
+            <el-table-column type="index" label="排名" width="70" />
             <el-table-column prop="name" label="坐席" />
-            <el-table-column prop="count" label="处理工单数" width="120" />
+            <el-table-column prop="count" label="处理工单数" width="140" />
           </el-table>
-        </el-card>
+        </div>
       </el-col>
       <el-col :xs="24" :md="12">
-        <el-card>
-          <template #header><span>客户增长趋势（近30天）</span></template>
+        <div class="chart-panel">
+          <div class="panel-title">客户增长趋势（近30天）</div>
           <div ref="customerChartRef" class="chart-box"></div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
-import { User, ChatDotRound, Tickets, TrendCharts } from '@element-plus/icons-vue'
-import request from '../utils/request'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ChatDotRound, Tickets, TrendCharts, User } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import { getDashboardStatistics } from '../api'
 
+const loading = ref(false)
 const chatChartRef = ref(null)
 const orderChartRef = ref(null)
 const customerChartRef = ref(null)
+let charts = []
 
 const statCards = ref([
-  { title: '今日会话', value: 0, sub: '次', icon: 'ChatDotRound', color: '#409eff' },
-  { title: '今日工单', value: 0, sub: '个', icon: 'Tickets', color: '#67c23a' },
-  { title: '新增客户', value: 0, sub: '人', icon: 'User', color: '#e6a23c' },
-  { title: '本周会话', value: 0, sub: '次', icon: 'TrendCharts', color: '#f56c6c' }
+  { title: '今日会话', value: 0, sub: '次', icon: ChatDotRound, color: '#409eff' },
+  { title: '今日工单', value: 0, sub: '个', icon: Tickets, color: '#67c23a' },
+  { title: '新增客户', value: 0, sub: '人', icon: User, color: '#e6a23c' },
+  { title: '本周会话', value: 0, sub: '次', icon: TrendCharts, color: '#f56c6c' }
 ])
 
 const agentRank = ref([])
 
+const disposeCharts = () => {
+  charts.forEach(c => c && c.dispose())
+  charts = []
+}
+
+const renderChatChart = (data) => {
+  if (!chatChartRef.value) return
+  const chart = echarts.init(chatChartRef.value)
+  charts.push(chart)
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: data.map(d => d.date) },
+    yAxis: { type: 'value', minInterval: 1 },
+    grid: { left: 40, right: 16, top: 24, bottom: 28 },
+    series: [{ data: data.map(d => d.count), type: 'line', smooth: true, areaStyle: {} }]
+  })
+}
+
+const renderOrderChart = (data) => {
+  if (!orderChartRef.value) return
+  const statusMap = { '1': '待处理', '2': '处理中', '3': '已完成', '4': '已关闭' }
+  const chart = echarts.init(orderChartRef.value)
+  charts.push(chart)
+  chart.setOption({
+    tooltip: { trigger: 'item' },
+    legend: { bottom: 0 },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '68%'],
+      data: data.map(d => ({ name: statusMap[d.status] || d.status, value: d.count }))
+    }]
+  })
+}
+
+const renderCustomerChart = (data) => {
+  if (!customerChartRef.value) return
+  const chart = echarts.init(customerChartRef.value)
+  charts.push(chart)
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: data.map(d => d.date) },
+    yAxis: { type: 'value', minInterval: 1 },
+    grid: { left: 40, right: 16, top: 24, bottom: 28 },
+    series: [{ data: data.map(d => d.count), type: 'bar', itemStyle: { color: '#67c23a' } }]
+  })
+}
+
+const handleResize = () => {
+  charts.forEach(c => c && c.resize())
+}
+
 const loadDashboard = async () => {
+  loading.value = true
   try {
-    const res = await request.get('/statistics/dashboard')
+    const res = await getDashboardStatistics()
     if (res.code === 200 && res.data) {
       const data = res.data
       const overview = data.overview || {}
@@ -90,94 +147,62 @@ const loadDashboard = async () => {
       agentRank.value = workOrderStats.agentRank || []
 
       await nextTick()
+      disposeCharts()
       renderChatChart(data.chatTrend || [])
       renderOrderChart(workOrderStats.byStatus || [])
       renderCustomerChart(data.customerTrend || [])
     }
   } catch (e) {
     console.error('加载仪表盘数据失败:', e)
+  } finally {
+    loading.value = false
   }
-}
-
-const renderChatChart = (data) => {
-  if (!chatChartRef.value) return
-  const chart = echarts.init(chatChartRef.value)
-  chart.setOption({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: data.map(d => d.date) },
-    yAxis: { type: 'value' },
-    series: [{ data: data.map(d => d.count), type: 'line', smooth: true, areaStyle: {} }]
-  })
-}
-
-const renderOrderChart = (data) => {
-  if (!orderChartRef.value) return
-  const statusMap = { '1': '待处理', '2': '处理中', '3': '已完成', '4': '已关闭' }
-  const chart = echarts.init(orderChartRef.value)
-  chart.setOption({
-    tooltip: { trigger: 'item' },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      data: data.map(d => ({ name: statusMap[d.status] || d.status, value: d.count }))
-    }]
-  })
-}
-
-const renderCustomerChart = (data) => {
-  if (!customerChartRef.value) return
-  const chart = echarts.init(customerChartRef.value)
-  chart.setOption({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: data.map(d => d.date) },
-    yAxis: { type: 'value' },
-    series: [{ data: data.map(d => d.count), type: 'bar', itemStyle: { color: '#67c23a' } }]
-  })
 }
 
 onMounted(() => {
   loadDashboard()
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  disposeCharts()
 })
 </script>
 
 <style scoped>
-.dashboard-container {
-  padding: 20px;
-}
-.page-title {
-  margin-bottom: 20px;
-  color: #2a3f5f;
-}
 .stats-row {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .stat-card {
-  border-top: 3px solid #409eff;
+  background: #f5f7fa;
+  border-radius: 12px;
+  padding: 16px;
   display: flex;
   align-items: center;
-}
-.stat-card :deep(.el-card__body) {
-  display: flex;
-  align-items: center;
-  padding: 20px;
+  height: 100%;
+  box-sizing: border-box;
+  margin-bottom: 16px;
 }
 .stat-icon {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  margin-right: 16px;
+  margin-right: 14px;
+  flex-shrink: 0;
 }
 .stat-info {
-  flex: 1;
+  min-width: 0;
 }
 .stat-value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: bold;
   color: #303133;
+  line-height: 1.2;
 }
 .stat-title {
   font-size: 14px;
@@ -188,44 +213,43 @@ onMounted(() => {
   font-size: 12px;
   color: #c0c4cc;
 }
-.chart-row {
-  margin-bottom: 20px;
+.chart-panel {
+  background: #f5f7fa;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2a3f5f;
+  margin-bottom: 12px;
 }
 .chart-box {
   width: 100%;
   height: 300px;
 }
-
-/* 移动端适配 */
 @media (max-width: 640px) {
-  .dashboard-container {
-    padding: 12px;
-  }
-  .page-title {
-    font-size: 18px;
-    margin-bottom: 12px;
-  }
-  .stat-card :deep(.el-card__body) {
+  .stat-card {
     padding: 12px;
   }
   .stat-icon {
     width: 40px;
     height: 40px;
-    border-radius: 8px;
+    border-radius: 10px;
     margin-right: 10px;
   }
   .stat-value {
-    font-size: 20px;
+    font-size: 18px;
+  }
+  .chart-panel {
+    padding: 12px;
   }
   .chart-box {
     height: 220px;
   }
-  .chart-row {
-    margin-bottom: 12px;
-  }
 }
-
-/* 平板：两列卡片 */
 @media (min-width: 641px) and (max-width: 1024px) {
   .chart-box {
     height: 260px;

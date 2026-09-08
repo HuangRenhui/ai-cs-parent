@@ -1,5 +1,8 @@
 import request from '../utils/request'
 
+// ===== 数据概览（Dashboard）=====
+export const getDashboardStatistics = () => request.get('/statistics/dashboard')
+
 export const sendChat = (data, config) => request.post('/ai/chat/send', data, config)
 
 export const uploadAvatar = (file) => {
@@ -15,8 +18,11 @@ export const deleteCustomer = (id) => request.delete(`/customer/delete/${id}`)
 
 export const listWorkOrders = (params) => request.get('/workorder/page', { params })
 export const createWorkOrder = (data) => request.post('/workorder/create', data)
+export const updateWorkOrder = (data) => request.put('/workorder/update', data)
 export const updateWorkOrderStatus = (id, status) =>
   request.put(`/workorder/status/${id}`, null, { params: { status } })
+export const completeWorkOrder = (id) => request.put(`/workorder/complete/${id}`)
+export const deleteWorkOrder = (id) => request.delete(`/workorder/delete/${id}`)
 
 export const listFaqs = (params) => {
   const query = typeof params === 'string' || params == null
@@ -30,6 +36,8 @@ export const deleteFaq = (id) => request.delete(`/knowledge/delete/${id}`)
 export const vectorizeFaq = (id) => request.post(`/knowledge/vectorize/${id}`)
 export const batchVectorize = (tenantCode) => request.post('/knowledge/vectorize/batch', null, { params: { tenantCode } })
 export const searchKnowledge = (question, tenantCode) => request.get('/knowledge/search', { params: { question, tenantCode } })
+export const ragSearchKnowledge = (question, tenantCode) =>
+  request.get('/knowledge/rag/search', { params: { question, tenantCode } })
 export const listKnowledgeMiss = (params) => request.get('/knowledge/miss', { params })
 export const importFaqs = (data) => request.post('/knowledge/import', data)
 export const getKnowledgeHealth = () => request.get('/knowledge/health')

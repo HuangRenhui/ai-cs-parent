@@ -127,3 +127,15 @@ const remove = async (id) => {
 
 onMounted(loadAgents)
 </script>
+
+<style scoped>
+/* 沿用全局 page-card / page-toolbar 模板，此处补充小屏细节 */
+@media (max-width: 640px) {
+  .page-toolbar {
+    align-items: flex-start;
+  }
+  .page-toolbar h3 {
+    font-size: 18px;
+  }
+}
+</style>
