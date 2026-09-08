@@ -38,7 +38,7 @@
 
 ## 3. 数据表
 
-见 [ai_model.sql](database/ai_model.sql)（增量脚本），表名 `cs_ai_model`。
+见 [init.sql](database/init.sql)，表名 `cs_ai_model`。本文件已包含全部列定义。
 
 ## 4. 后端改动
 
@@ -173,15 +173,14 @@
 | `ops/OpsAlertStore` | 接入模型失败指标，生成「模型连续失败」告警事件 |
 | `frontend/AiModelPage.vue` | 注册表单新增超时/熔断/单价；新增「用量统计」页签 |
 
-- 表结构：`cs_ai_model` 增加 `timeout_ms`、`fail_threshold`、`cost_per_1k_in`、`cost_per_1k_out`；新增 `cs_model_usage`。
-- 升级脚本：`docs/database/ai_model_upgrade.sql`（已有库执行）。
+- 表结构：`cs_ai_model`（含 `timeout_ms`、`fail_threshold`、`cost_per_1k_in`、`cost_per_1k_out`）与 `cs_model_usage` 均已在 `docs/database/init.sql` 中定义。已有库自行 `ALTER TABLE`。
 - 数据流：调用 → Router 记录事件到 Redis Stream → ai-cs-job 每 5s 批量消费落库 → base-service 提供查询 → 前端展示。
 
 ### 8.9 计量与配额：重试 / 成本 / 每日上限（已落地）
 
 | 文件 | 说明 |
 |------|------|
-| `cs_ai_model` | 新增 `max_retries`、`daily_token_limit`、`daily_cost_limit`（升级脚本见 `ai_model_upgrade.sql` v2 段） |
+| `cs_ai_model` | `max_retries`、`daily_token_limit`、`daily_cost_limit` 已在 init.sql 中定义 |
 | `cs_model_usage` | 新增 `cost` 成本快照列（按发生时单价计算，改价不回溯历史） |
 | `common/llm/ModelUsageRecorder` | 成功事件按单价算成本；Redis 维护当日 token/成本计数（`ai:model:usage:daily:{id}:{yyyyMMdd}`，TTL 50h）；达 80% 配额当日去重预警日志 |
 | `common/llm/ModelRouter` | 同模型失败按 `maxRetries` 重试（重试不重复计熔断）；调用前检查当日配额，超限顺延候选——注册本地/免费模型为候选即"超限自动降级" |

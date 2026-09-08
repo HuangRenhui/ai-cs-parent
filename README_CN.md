@@ -1,4 +1,6 @@
-# AI 智能客服系统
+# AI 智能客服系统 (智语)
+
+> [English](README.md) · [中文](README_CN.md)
 
 基于微服务架构的智能客服平台，集成大语言模型（LLM）、知识库检索、工单管理等功能，为企业提供智能化客户服务解决方案。
 
@@ -39,30 +41,45 @@ mvn clean install -DskipTests
 - 📘 [文档说明](docs/文档说明.md) — 分类索引
 - 🎯 [功能清单](docs/功能清单.md) — 实现目标（按 §17-B）
 - 🗺️ [项目现状](docs/项目现状.md) — 代码对照
-- 🚀 [快速开始](docs/快速开始.md)
-- 🏗️ [系统架构](docs/系统架构.md)
-- ⚙️ [配置说明](docs/配置说明.md)
+- 🚀 [快速开始](docs/快速开始.md) — 本地启动
+- 🏗️ [系统架构](docs/系统架构.md) — 微服务拓扑
+- ⚙️ [配置说明](docs/配置说明.md) — 环境与服务配置
+- 🧩 [模块说明](docs/模块说明.md) — 各服务详解
+- 📝 [接口说明](docs/接口说明.md) — API 文档
+- 🗄️ [数据库设计](docs/数据库设计.md) — 表结构与初始化
+- 🔧 [编码规范](docs/编码规范.md) — 贡献指南
+- 🐳 [Docker 部署](docs/Docker部署.md) — 容器化部署
+- 📦 [手动部署](docs/手动部署.md) — 裸机部署
+- 🧪 [测试指南](docs/测试指南.md) — 测试说明
 
 ## 🛠️ 技术栈
 
 **后端技术**：
-- Java 17 + Spring Boot 3.x
-- Spring Cloud Gateway (微服务)
-- MyBatis Plus + MySQL 8.0
-- Redis 6.0+ (缓存)
-- Milvus 2.x (向量数据库)
+- Java 17 + Spring Boot 3.2
+- Spring Cloud 2023.0 + Spring Cloud Alibaba 2023.0.1
+- Spring Cloud Gateway（API 网关）
+- MyBatis-Plus 3.5 + MySQL 8.0
+- Redis 6.0+（缓存 / 会话存储）
+- Milvus 2.x（向量数据库）
+- Resilience4j（熔断限流）
+- Flowable 7.0（工作流引擎）
+- Knife4j（OpenAPI / Swagger UI）
+- JJWT（身份认证）
 
 **前端技术**：
 - Vue 3 + Vite
 - Element Plus UI
 - Axios + Vue Router
 
-**AI/ML**：
-- LLM 集成 (通义千问、ChatGLM 等)
-- RAG (检索增强生成) 基于 LangChain4j
-- Embedding 向量化服务 (Ollama, nomic-embed-text)
-- 向量数据库 (Chroma, Milvus)
-- 重排模型 (BGE-Reranker)
+**AI / ML**：
+- LangChain4j 0.32（RAG 框架）
+- Ollama（本地 LLM + Embedding）
+- DashScope / OpenAI 兼容协议 / DeepSeek（云端 LLM）
+- Chroma / Milvus（向量存储）
+- BGE-Reranker（重排）
+
+**可观测性**：
+- Micrometer + Prometheus（指标采集）
 
 ## 📁 项目结构
 
@@ -79,8 +96,12 @@ ai-cs-parent/
 ├── ai-cs-open/            # 开放接入 - 连接器/工具 (端口 8086)
 ├── ai-cs-ops/             # 运维控制台 (端口 8087)
 ├── ai-cs-job/             # 定时任务服务 (端口 8088)
-├── ai-cs-frontend/        # Vue.js 前端应用
-└── docs/                  # 中文文档（入口：docs/文档说明.md）
+├── ai-cs-frontend/        # Vue 3 + Vite 前端应用（独立工程，不在 Maven modules 中）
+├── docs/                  # 文档（入口：docs/文档说明.md）
+├── README.md              # 英文说明
+├── README_CN.md           # 中文说明
+├── pom.xml                # Maven 父 POM
+└── .gitignore
 ```
 
 ## 🤝 贡献指南
@@ -109,4 +130,4 @@ ai-cs-parent/
 
 ---
 
-**注意**: 这是中文版本。英文文档请查看 [README.md](README.md)。
+[⬆️ 回到顶部](#ai-智能客服系统-智语) · [English README](README.md)
