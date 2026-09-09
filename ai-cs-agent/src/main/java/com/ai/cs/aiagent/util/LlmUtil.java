@@ -5,6 +5,7 @@ import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.enums.IntentEnum;
 import com.ai.cs.common.llm.ModelCallException;
 import com.ai.cs.common.llm.ModelRouter;
+import com.ai.cs.common.llm.ModelTypeEnum;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ public class LlmUtil {
         // 空消息按空串处理，避免提示词里出现 null
         String prompt = PromptConst.fill(PromptConst.INTENT_PROMPT, userMsg == null ? "" : userMsg);
         try {
-            return parseIntent(modelRouter.chat(singleUser(prompt)));
+            return parseIntent(modelRouter.chatForType(ModelTypeEnum.INTENT.getCode(), singleUser(prompt)));
         } catch (ModelCallException e) {
             // 模型不可用时降级为咨询意图，保证主流程不中断
             log.error("意图识别调用失败", e);

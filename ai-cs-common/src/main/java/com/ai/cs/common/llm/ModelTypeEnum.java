@@ -7,10 +7,13 @@ package com.ai.cs.common.llm;
  */
 public enum ModelTypeEnum {
     LLM("LLM", "对话"),
+    INTENT("INTENT", "意图识别"),
     EMBEDDING("EMBEDDING", "向量"),
     RERANK("RERANK", "重排"),
     VISION("VISION", "视觉"),
-    MULTIMODAL("MULTIMODAL", "多模态");
+    MULTIMODAL("MULTIMODAL", "多模态"),
+    TTS("TTS", "语音合成"),
+    ASR("ASR", "语音识别");
 
     private final String code;
     private final String label;

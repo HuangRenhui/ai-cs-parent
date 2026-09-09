@@ -6,6 +6,7 @@ import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.enums.IntentEnum;
 import com.ai.cs.common.llm.ModelCallException;
 import com.ai.cs.common.llm.ModelRouter;
+import com.ai.cs.common.llm.ModelTypeEnum;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -101,7 +102,7 @@ public class ConfigurableIntentService {
         String prompt = buildIntentPrompt(userMsg, intents);
         
         try {
-            String response = modelRouter.chat(List.of(
+            String response = modelRouter.chatForType(ModelTypeEnum.INTENT.getCode(), List.of(
                 Map.of("role", "user", "content", prompt)
             ));
             return parseIntent(response, intents);
