@@ -94,3 +94,29 @@ export const testAiModel = (id) => request.post(`/system/ai-model/test/${id}`)
 export const pageModelUsage = (params) => request.get('/system/ai-model/usage/page', { params })
 export const getModelUsageSummary = (params) => request.get('/system/ai-model/usage/summary', { params })
 export const getModelRecentFail = (minutes = 5) => request.get('/system/ai-model/usage/recent-fail', { params: { minutes } })
+
+// ===== AI 与自动化：可配置意图（base-service /system/intent）=====
+export const listIntents = (tenantCode) => request.get('/system/intent/listAll', { params: { tenantCode } })
+export const saveIntent = (data) => request.post('/system/intent/save', data)
+export const deleteIntent = (id) => request.delete(`/system/intent/delete/${id}`)
+
+// ===== AI 与自动化：多轮填槽（base-service /system/slot）=====
+export const listSlots = (tenantCode) => request.get('/system/slot/listAll', { params: { tenantCode } })
+export const saveSlot = (data) => request.post('/system/slot/save', data)
+export const deleteSlot = (id) => request.delete(`/system/slot/delete/${id}`)
+
+// ===== AI 与自动化：数据保留策略（base-service /system/data-retention）=====
+export const listDataRetentions = (tenantCode) => request.get('/system/data-retention/list', { params: { tenantCode } })
+export const saveDataRetention = (data) => request.post('/system/data-retention/save', data)
+export const deleteDataRetention = (id) => request.delete(`/system/data-retention/delete/${id}`)
+
+// ===== 知识库管理：点赞点踩 + 未命中转问 =====
+export const faqFeedback = (id, type) => request.post(`/knowledge/feedback/${id}`, null, { params: { type } })
+export const convertMiss = (id, answer, category) => request.post(`/knowledge/miss/${id}/convert`, null, { params: { answer, category } })
+
+// ===== 对外帮助中心（knowledge /help-center，匿名）=====
+export const helpSearch = (question, tenantCode) => request.get('/help-center/search', { params: { question, tenantCode } })
+export const helpFaqs = (params) => request.get('/help-center/faqs', { params })
+export const helpCategories = (tenantCode) => request.get('/help-center/categories', { params: { tenantCode } })
+export const helpFeedback = (id, type) => request.post(`/help-center/feedback/${id}`, null, { params: { type } })
+export const helpView = (id) => request.post(`/help-center/view/${id}`)

@@ -6,6 +6,7 @@
         <el-button type="primary" @click="openAddDialog">新增FAQ</el-button>
         <el-button @click="handleBatchVectorize">批量向量化</el-button>
         <el-button @click="importVisible = true">导入 JSON</el-button>
+        <el-button @click="openHelpCenter">打开帮助中心</el-button>
         <el-upload class="upload-btn" :show-file-list="false" accept=".json,.txt,.md" :http-request="uploadFaqFile">
           <el-button type="success">上传文档</el-button>
         </el-upload>
@@ -65,6 +66,16 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="审核" width="80">
+        <template #default="scope">
+          <el-tag :type="auditType(scope.row.auditStatus)">{{ auditText(scope.row.auditStatus) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="赞/踩/浏览" width="110">
+        <template #default="scope">
+          <span class="stat-cell">{{ scope.row.likeCount || 0 }} / {{ scope.row.dislikeCount || 0 }} / {{ scope.row.viewCount || 0 }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="milvusId" label="Milvus ID" min-width="140" show-overflow-tooltip />
       <el-table-column prop="createTime" label="创建时间" width="180" />
       <el-table-column label="操作" width="210" fixed="right">
@@ -82,10 +93,23 @@
       <h4>未命中回收</h4>
     </div>
     <el-table :data="missList" size="small" stripe empty-text="暂无未命中记录">
-      <el-table-column prop="createTime" label="时间" width="180" />
-      <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
-      <el-table-column prop="topScore" label="最高分" width="90" />
-      <el-table-column prop="sessionId" label="会话" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="createTime" label="时间" width="170" />
+      <el-table-column prop="question" label="问题" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="topScore" label="最高分" width="80" />
+      <el-table-column label="状态" width="90">
+        <template #default="scope">
+          <el-tag :type="scope.row.status === 1 ? 'success' : 'info'" size="small">
+            {{ scope.row.status === 1 ? '已转问' : '待处理' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="90">
+        <template #default="scope">
+          <el-button v-if="scope.row.status !== 1" size="small" type="primary" @click="openConvertDialog(scope.row)">
+            转问
+          </el-button>
+        </template>
+      </el-table-column>
     </el-table>
     <div class="pager">
       <el-pagination
@@ -136,6 +160,25 @@
         <el-button type="primary" :loading="importing" @click="doImport">导入</el-button>
       </template>
     </el-dialog>
+
+    <!-- 未命中转问弹窗 -->
+    <el-dialog title="未命中转问学习" v-model="convertVisible" width="560px">
+      <p class="hint">问题：{{ convertRow?.question }}</p>
+      <el-form label-width="80px">
+        <el-form-item label="答案">
+          <el-input v-model="convertForm.answer" type="textarea" :rows="4" placeholder="必填，填写标准答案后转为正式FAQ并向量化" />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="convertForm.category" placeholder="请选择或输入" filterable allow-create default-first-option style="width: 100%">
+            <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="convertVisible = false">取消</el-button>
+        <el-button type="primary" :loading="converting" @click="handleConvert">确定转问</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -144,6 +187,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   batchVectorize as batchVectorizeApi,
+  convertMiss as convertMissApi,
   deleteFaq as deleteFaqApi,
   getKnowledgeHealth,
   importFaqs,
@@ -175,6 +219,10 @@ const importVisible = ref(false)
 const importText = ref('')
 const importing = ref(false)
 const health = ref(null)
+const convertVisible = ref(false)
+const converting = ref(false)
+const convertRow = ref(null)
+const convertForm = ref({ answer: '', category: '' })
 
 const defaultForm = () => ({
   id: '',
@@ -291,6 +339,10 @@ const handleBatchVectorize = async () => {
   }
 }
 
+const openHelpCenter = () => {
+  window.open('/help-center', '_blank')
+}
+
 const semanticSearch = async () => {
   if (!searchQuestion.value.trim()) {
     ElMessage.warning('请输入检索问题')
@@ -319,6 +371,34 @@ const loadMiss = async () => {
     missTotal.value = res.data?.total || 0
   } catch {
     missList.value = []
+  }
+}
+
+const auditText = (v) => (v === 2 ? '已发布' : v === 3 ? '已驳回' : '待审核')
+const auditType = (v) => (v === 2 ? 'success' : v === 3 ? 'danger' : 'info')
+
+const openConvertDialog = (row) => {
+  convertRow.value = row
+  convertForm.value = { answer: '', category: '' }
+  convertVisible.value = true
+}
+
+const handleConvert = async () => {
+  if (!convertForm.value.answer || !convertForm.value.answer.trim()) {
+    ElMessage.warning('请填写答案')
+    return
+  }
+  converting.value = true
+  try {
+    const res = await convertMissApi(convertRow.value.id, convertForm.value.answer.trim(), convertForm.value.category || undefined)
+    ElMessage.success(res?.data || '已转问为FAQ')
+    convertVisible.value = false
+    loadMiss()
+    loadFaqs()
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    converting.value = false
   }
 }
 
@@ -474,6 +554,10 @@ onMounted(() => {
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 8px;
+}
+.stat-cell {
+  font-size: 12px;
+  color: #6b7280;
 }
 @media (max-width: 640px) {
   .toolbar-actions {

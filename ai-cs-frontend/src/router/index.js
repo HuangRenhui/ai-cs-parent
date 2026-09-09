@@ -8,7 +8,11 @@ import KnowledgePage from '../views/KnowledgePage.vue'
 import SessionPage from '../views/SessionPage.vue'
 import AgentPage from '../views/AgentPage.vue'
 import AiModelPage from '../views/AiModelPage.vue'
+import IntentConfigPage from '../views/IntentConfigPage.vue'
+import SlotFillingPage from '../views/SlotFillingPage.vue'
+import DataRetentionPage from '../views/DataRetentionPage.vue'
 import OpenPage from '../views/OpenPage.vue'
+import HelpCenterPage from '../views/HelpCenterPage.vue'
 import WidgetPage from '../views/WidgetPage.vue'
 import OpsLayout from '../views/ops/OpsLayout.vue'
 import OpsOverviewPage from '../views/ops/OpsOverviewPage.vue'
@@ -29,6 +33,9 @@ const routes = [
   { path: '/knowledge', name: 'Knowledge', component: KnowledgePage, meta: { requiresAuth: true, title: '知识库管理' } },
   { path: '/agent', name: 'Agent', component: AgentPage, meta: { requiresAuth: true, title: '坐席管理' } },
   { path: '/ai-model', name: 'AiModel', component: AiModelPage, meta: { requiresAuth: true, title: 'AI模型管理' } },
+  { path: '/intent-config', name: 'IntentConfig', component: IntentConfigPage, meta: { requiresAuth: true, title: '意图配置' } },
+  { path: '/slot-config', name: 'SlotConfig', component: SlotFillingPage, meta: { requiresAuth: true, title: '填槽配置' } },
+  { path: '/data-retention', name: 'DataRetention', component: DataRetentionPage, meta: { requiresAuth: true, title: '数据保留' } },
   { path: '/open', name: 'Open', component: OpenPage, meta: { requiresAuth: true, title: '开放接入' } },
   {
     path: '/ops',
@@ -42,6 +49,7 @@ const routes = [
       { path: 'health', name: 'OpsHealth', component: OpsHealthPage, meta: { requiresAuth: true, title: '服务健康' } }
     ]
   },
+  { path: '/help-center', name: 'HelpCenter', component: HelpCenterPage, meta: { title: '帮助中心', blank: true } },
   { path: '/widget', name: 'Widget', component: WidgetPage, meta: { title: '在线客服', blank: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundPage, meta: { title: '页面不存在' } }
 ]
