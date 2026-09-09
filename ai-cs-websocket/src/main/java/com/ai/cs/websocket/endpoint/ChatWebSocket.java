@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -40,8 +42,27 @@ import java.util.concurrent.TimeUnit;
 @ServerEndpoint("/ws/{sessionId}")
 public class ChatWebSocket {
 
+    private static final int MAX_ONLINE_SESSIONS = 2000;
+
     /** 在线会话表：sessionId -> WebSocket 连接，用于消息推送与连接管理 */
     private static final Map<String, Session> ONLINE_SESSION = new ConcurrentHashMap<>();
+
+    private static final ScheduledExecutorService CLEANUP_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ws-session-cleanup");
+        t.setDaemon(true);
+        return t;
+    });
+
+    static {
+        CLEANUP_EXECUTOR.scheduleAtFixedRate(() -> {
+            int before = ONLINE_SESSION.size();
+            ONLINE_SESSION.entrySet().removeIf(entry -> entry.getValue() == null || !entry.getValue().isOpen());
+            int removed = before - ONLINE_SESSION.size();
+            if (removed > 0) {
+                log.info("清理已关闭的WebSocket连接 {} 个，当前在线 {}", removed, ONLINE_SESSION.size());
+            }
+        }, 10, 60, TimeUnit.SECONDS);
+    }
     // @ServerEndpoint 实例由 WebSocket 容器管理（非 Spring 单例），依赖通过 setter 注入到静态字段共享
     private static RedisTemplate<String, String> redisTemplate;
     private static AiAgentFeign aiAgentFeign;
@@ -73,13 +94,23 @@ public class ChatWebSocket {
      */
     @OnOpen
     public void onOpen(@PathParam("sessionId") String sessionId, Session session) {
+        if (ONLINE_SESSION.size() >= MAX_ONLINE_SESSIONS) {
+            log.warn("WebSocket 连接数已达上限 {}，拒绝新连接 sessionId={}", MAX_ONLINE_SESSIONS, sessionId);
+            try {
+                session.close(new CloseReason(CloseReason.CloseCodes.TRY_AGAIN_LATER, "max connections reached"));
+            } catch (Exception e) {
+                log.debug("关闭超限连接异常 sessionId={}", sessionId, e);
+            }
+            return;
+        }
         // 握手必须带合法 token，防止伪造 sessionId 窃听/冒用他人会话
         String token = firstQuery(session, "token");
         if (!JwtUtil.validateToken(token)) {
             log.warn("WebSocket 拒绝未授权连接 sessionId={}", sessionId);
             try {
                 session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "unauthorized"));
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                log.debug("关闭未授权连接异常 sessionId={}", sessionId, e);
             }
             return;
         }
@@ -92,7 +123,8 @@ public class ChatWebSocket {
         if (previous != null && previous.isOpen() && previous != session) {
             try {
                 previous.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "replaced"));
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                log.debug("关闭旧连接异常 sessionId={}", sessionId, e);
             }
         }
         bindMdc(session, sessionId);
@@ -206,7 +238,8 @@ public class ChatWebSocket {
             if (session != null && session.isOpen()) {
                 session.getBasicRemote().sendText(jsonPayload("error", "连接异常，请刷新后重试", "", false, null));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.debug("推送错误提示异常", e);
         }
     }
 
