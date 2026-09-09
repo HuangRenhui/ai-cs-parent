@@ -549,11 +549,17 @@ public class FileDecompressService {
      * 解压结果DTO
      */
     public static class DecompressResult {
+        /** 解压任务ID（UUID，同时作为输出子目录名） */
         private final String taskId;
+        /** 原始压缩文件名 */
         private final String originalFilename;
+        /** 解压输出目录的绝对路径 */
         private final String outputDirectory;
+        /** 解压出的文件绝对路径列表（不含目录） */
         private final List<String> extractedFiles;
+        /** 解压出的文件数量 */
         private final int fileCount;
+        /** 解压后文件总大小（字节） */
         private final long totalSize;
 
         public DecompressResult(String taskId, String originalFilename, String outputDirectory,
@@ -578,9 +584,13 @@ public class FileDecompressService {
      * 压缩包条目信息DTO
      */
     public static class ArchiveEntryInfo {
+        /** 条目名称（压缩包内相对路径） */
         private final String name;
+        /** 是否为目录条目 */
         private final boolean directory;
+        /** 解压后大小（字节，目录为0） */
         private final long size;
+        /** 压缩后大小（字节，目录为0） */
         private final long compressedSize;
 
         public ArchiveEntryInfo(String name, boolean directory, long size, long compressedSize) {

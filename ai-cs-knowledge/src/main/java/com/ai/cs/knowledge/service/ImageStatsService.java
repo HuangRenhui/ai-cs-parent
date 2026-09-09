@@ -124,11 +124,17 @@ public class ImageStatsService {
      * 图片统计数据
      */
     public static class ImageStats {
+        /** 图片文件ID */
         private String fileId;
+        /** 累计浏览次数 */
         private long views;
+        /** 累计下载次数 */
         private long downloads;
+        /** 累计分享次数 */
         private long shares;
+        /** 首次访问时间 */
         private LocalDateTime firstAccess;
+        /** 最近访问时间 */
         private LocalDateTime lastAccess;
 
         public ImageStats(String fileId) {

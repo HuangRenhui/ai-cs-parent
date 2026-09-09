@@ -25,6 +25,7 @@ public class NotificationService {
 
     /**
      * 发送通知（异步）
+     * 先入内存库置为 PENDING，再按渠道发送，成功/失败回写状态；发送异常不影响主流程返回。
      */
     public NotificationDTO send(NotificationDTO dto) {
         dto.setId(idGenerator.getAndIncrement());
@@ -42,6 +43,7 @@ public class NotificationService {
             dto.setStatus("SENT");
             log.info("通知发送成功: id={}, channel={}, receiver={}", dto.getId(), dto.getChannel(), dto.getReceiverId());
         } catch (Exception e) {
+            // 发送失败只标记状态，不抛给调用方（通知属弱依赖）
             dto.setStatus("FAILED");
             log.error("通知发送失败: id={}, error={}", dto.getId(), e.getMessage());
         }
@@ -95,14 +97,17 @@ public class NotificationService {
                 .count();
     }
 
+    /** 站内信发送（当前仅记录日志，占位实现） */
     private void sendInApp(NotificationDTO dto) {
         log.info("[站内信] 发送通知: title={}, receiver={}", dto.getTitle(), dto.getReceiverId());
     }
 
+    /** 邮件发送（当前仅记录日志，占位实现） */
     private void sendEmail(NotificationDTO dto) {
         log.info("[邮件] 发送通知: title={}, receiver={}", dto.getTitle(), dto.getReceiverId());
     }
 
+    /** 短信发送（当前仅记录日志，占位实现） */
     private void sendSms(NotificationDTO dto) {
         log.info("[短信] 发送通知: title={}, receiver={}", dto.getTitle(), dto.getReceiverId());
     }

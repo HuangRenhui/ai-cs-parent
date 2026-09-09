@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiAgentFeignFallback implements AiAgentFeign {
 
+    /** 降级：AI 服务不可用时返回 503 提示，调用方需按失败结果走兜底话术 */
     @Override
     public Result<ChatReplyDTO> chat(ChatDTO dto) {
         log.error("AI智能体服务调用失败，触发熔断降级");

@@ -14,12 +14,17 @@ import java.time.LocalDateTime;
  */
 @Component
 public class MyMetaObjectHandler implements MetaObjectHandler {
+    /**
+     * 新增时填充：createTime / updateTime 均取当前时间。
+     * strictInsertFill 仅在实体字段为 null 时填充，不覆盖调用方显式赋的值。
+     */
     @Override
     public void insertFill(MetaObject metaObject) {
         this.strictInsertFill(metaObject, "createTime", LocalDateTime.class, LocalDateTime.now());
         this.strictInsertFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
     }
 
+    /** 更新时填充：只刷新 updateTime */
     @Override
     public void updateFill(MetaObject metaObject) {
         this.strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());

@@ -26,11 +26,17 @@ public class OpenSceneConfigController {
     @Resource
     private OpenPlatformService openPlatformService;
 
+    /**
+     * 查询全部场景配置（按排序号升序）。
+     */
     @GetMapping("/list")
     public Result<List<SceneConfig>> list() {
         return Result.success(openPlatformService.listScenes());
     }
 
+    /**
+     * 新增场景配置；强制清空 ID，防止调用方伪装成更新。
+     */
     @PostMapping("/save")
     public Result<Void> save(@RequestBody SceneConfig config) {
         config.setId(null);
@@ -38,18 +44,27 @@ public class OpenSceneConfigController {
         return Result.success();
     }
 
+    /**
+     * 更新场景配置（按 ID 全量更新）。
+     */
     @PutMapping("/update")
     public Result<Void> update(@RequestBody SceneConfig config) {
         openPlatformService.saveScene(config);
         return Result.success();
     }
 
+    /**
+     * 启用/停用场景；停用后该场景入口回退到 GENERAL 默认配置。
+     */
     @PutMapping("/{id}/enabled")
     public Result<Void> enabled(@PathVariable Long id, @RequestParam Integer enabled) {
         openPlatformService.setSceneEnabled(id, enabled);
         return Result.success();
     }
 
+    /**
+     * 删除场景配置。
+     */
     @DeleteMapping("/delete/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         openPlatformService.deleteScene(id);

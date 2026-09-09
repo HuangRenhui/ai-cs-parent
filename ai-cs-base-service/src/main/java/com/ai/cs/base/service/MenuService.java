@@ -25,15 +25,18 @@ public class MenuService extends ServiceImpl<MenuMapper, Menu> {
      * 获取菜单树
      */
     public List<Menu> getMenuTree() {
+        // 只取启用且未删除的菜单
         List<Menu> allMenus = this.list(new LambdaQueryWrapper<Menu>()
                 .eq(Menu::getStatus, 1)
                 .eq(Menu::getDelFlag, 0)
                 .orderByAsc(Menu::getSortNum));
 
+        // 按父ID分组，便于 O(1) 查找子菜单
         Map<Long, List<Menu>> parentMap = allMenus.stream()
                 .filter(m -> m.getParentId() != null && m.getParentId() > 0)
                 .collect(Collectors.groupingBy(Menu::getParentId));
 
+        // parentId 为空或 0 视为根节点
         List<Menu> rootMenus = allMenus.stream()
                 .filter(m -> m.getParentId() == null || m.getParentId() == 0)
                 .collect(Collectors.toList());
@@ -41,6 +44,7 @@ public class MenuService extends ServiceImpl<MenuMapper, Menu> {
         return buildTree(rootMenus, parentMap);
     }
 
+    /** 递归组装菜单树，并按 sortNum 排序（null 按 0 处理） */
     private List<Menu> buildTree(List<Menu> menus, Map<Long, List<Menu>> parentMap) {
         List<Menu> result = new ArrayList<>();
         for (Menu menu : menus) {

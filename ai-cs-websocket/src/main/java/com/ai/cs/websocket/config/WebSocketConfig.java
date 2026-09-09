@@ -12,6 +12,9 @@ import org.springframework.web.socket.server.standard.ServerEndpointExporter;
  */
 @Configuration
 public class WebSocketConfig {
+    /**
+     * 注册 ServerEndpointExporter，使 @ServerEndpoint 注解的端点被自动扫描并暴露
+     */
     @Bean
     public ServerEndpointExporter serverEndpointExporter() {
         return new ServerEndpointExporter();

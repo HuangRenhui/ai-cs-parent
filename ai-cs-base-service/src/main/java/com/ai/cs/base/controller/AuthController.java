@@ -27,6 +27,9 @@ public class AuthController {
     @Resource
     private UserService userService;
 
+    /**
+     * 用户登录：校验账密并签发 JWT（免鉴权接口）
+     */
     @NoAuth
     @PostMapping("/login")
     public Result<LoginDTO.Result> login(@RequestBody LoginDTO dto) {
@@ -34,17 +37,23 @@ public class AuthController {
             LoginDTO.Result result = userService.login(dto.getUsername(), dto.getPassword());
             return Result.success(result);
         } catch (RuntimeException e) {
+            // 登录失败统一返回 401，消息由业务异常给出（如"用户名或密码错误"）
             return Result.fail(401, e.getMessage());
         }
     }
 
+    /**
+     * 获取当前登录用户信息（基本信息 + 角色 + 权限）
+     */
     @GetMapping("/userinfo")
     public Result<Map<String, Object>> userinfo() {
+        // 用户ID由网关解析 JWT 后写入上下文
         Long userId = JwtContext.getCurrentUserId();
         User user = userService.getCurrentUserInfo(userId);
         if (user == null) {
             return Result.fail(401, "用户不存在");
         }
+        // 手动挑选返回字段，避免密码等敏感字段外泄
         Map<String, Object> info = new java.util.HashMap<>();
         info.put("id", user.getId());
         info.put("username", user.getUsername());
@@ -56,12 +65,18 @@ public class AuthController {
         return Result.success(info);
     }
 
+    /**
+     * 获取当前用户的菜单列表（用于前端动态路由）
+     */
     @GetMapping("/menus")
     public Result<List<com.ai.cs.base.entity.Menu>> menus() {
         Long userId = JwtContext.getCurrentUserId();
         return Result.success(userService.getUserMenus(userId));
     }
 
+    /**
+     * 退出登录：清理线程上下文（JWT 无状态，实际失效依赖前端丢弃 token）
+     */
     @PostMapping("/logout")
     public Result<String> logout() {
         JwtContext.clear();

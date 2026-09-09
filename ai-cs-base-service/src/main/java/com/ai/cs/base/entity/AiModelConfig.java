@@ -80,5 +80,6 @@ public class AiModelConfig extends BaseEntity {
     /** 健康状态 UNKNOWN/HEALTHY/DOWN */
     private String health;
 
+    /** 备注 */
     private String remark;
 }

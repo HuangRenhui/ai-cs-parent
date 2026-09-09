@@ -227,7 +227,9 @@ public class FileDownloadService {
      * 用于断点续传场景
      */
     private static class RangeResource extends FileSystemResource {
+        /** 读取起始字节位置 */
         private final long start;
+        /** 本次返回的内容长度（Range片段长度） */
         private final long contentLength;
 
         public RangeResource(Resource delegate, long start, long contentLength) {
@@ -259,7 +261,9 @@ public class FileDownloadService {
      * 限制读取长度的InputStream包装器
      */
     private static class BoundedInputStream extends InputStream {
+        /** 被包装的实际输入流 */
         private final InputStream delegate;
+        /** 剩余可读取字节数（读到0即返回EOF） */
         private long remaining;
 
         public BoundedInputStream(InputStream delegate, long maxLength) {

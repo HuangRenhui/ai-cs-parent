@@ -226,6 +226,13 @@ public class MediaTagService {
         return suggestions;
     }
 
+    /**
+     * 向标签列表追加一条自动推断的标签（来源标记为 auto）
+     * @param tags 目标标签列表
+     * @param name 标签名
+     * @param category 标签分类
+     * @param confidence 置信度（0~1，规则推断越可靠值越高）
+     */
     private void addTag(List<MediaTag> tags, String name, String category, double confidence) {
         MediaTag tag = new MediaTag();
         tag.setName(name);
@@ -240,10 +247,15 @@ public class MediaTagService {
      * 媒体标签实体
      */
     public static class MediaTag {
+        /** 标签名称 */
         private String name;
+        /** 标签分类（如：场景/内容/风格/格式等） */
         private String category;
+        /** 置信度（0~1，手动添加的标签固定为1.0） */
         private double confidence;
+        /** 标签来源：auto=自动推断，manual=人工添加 */
         private String source; // auto/manual
+        /** 标签创建时间 */
         private LocalDateTime createdTime;
 
         public String getName() { return name; }

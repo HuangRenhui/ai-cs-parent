@@ -42,19 +42,33 @@ public class KnowledgeGraphProperties {
      */
     private Extraction extraction = new Extraction();
 
+    /**
+     * Neo4j图数据库连接配置
+     */
     @Data
     public static class Neo4j {
+        /** Bolt协议连接地址 */
         private String uri = "bolt://localhost:7687";
+        /** 登录用户名 */
         private String username = "neo4j";
+        /** 登录密码 */
         private String password = "password";
+        /** 目标数据库名 */
         private String database = "neo4j";
     }
 
+    /**
+     * NebulaGraph图数据库连接配置
+     */
     @Data
     public static class Nebula {
+        /** 图服务地址（host:port） */
         private String address = "localhost:9669";
+        /** 登录用户名 */
         private String username = "root";
+        /** 登录密码 */
         private String password = "nebula";
+        /** 图空间名称 */
         private String space = "knowledge_graph";
     }
 

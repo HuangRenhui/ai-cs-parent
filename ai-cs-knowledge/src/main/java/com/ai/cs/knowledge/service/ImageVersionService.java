@@ -231,12 +231,19 @@ public class ImageVersionService {
      * 图片版本实体
      */
     public static class ImageVersion {
+        /** 版本号（从1开始递增） */
         private int versionNumber;
+        /** 原始图片文件ID */
         private String fileId;
+        /** 本版本的唯一文件ID */
         private String versionFileId;
+        /** 本版本文件的存储路径 */
         private String filePath;
+        /** 本次变更描述 */
         private String changeDescription;
+        /** 版本创建时间 */
         private LocalDateTime createdTime;
+        /** 是否为当前生效版本（同一fileId下只有一个活跃版本） */
         private boolean active;
 
         // Getters and Setters
@@ -260,13 +267,21 @@ public class ImageVersionService {
      * 版本差异对比结果
      */
     public static class VersionDiff {
+        /** 原始图片文件ID */
         private String fileId;
+        /** 对比的版本号1 */
         private int version1;
+        /** 对比的版本号2 */
         private int version2;
+        /** 版本1创建时间 */
         private LocalDateTime createdTime1;
+        /** 版本2创建时间 */
         private LocalDateTime createdTime2;
+        /** 版本1变更描述 */
         private String description1;
+        /** 版本2变更描述 */
         private String description2;
+        /** 文件大小差值（版本2 - 版本1，单位字节） */
         private long sizeDiff;
 
         // Getters and Setters

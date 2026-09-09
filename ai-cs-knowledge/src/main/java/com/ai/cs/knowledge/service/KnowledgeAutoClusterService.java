@@ -34,12 +34,19 @@ public class KnowledgeAutoClusterService {
      * 知识聚类结果
      */
     public static class KnowledgeCluster {
+        /** 聚类簇ID（cluster_N 格式） */
         public String clusterId;
+        /** 聚类簇名称（取中心关键词） */
         public String clusterName;
+        /** 聚类簇描述 */
         public String description;
+        /** 簇内成员的知识ID列表 */
         public List<String> memberIds;
+        /** 簇内各模态的成员数量分布 */
         public Map<String, Integer> modalityDistribution;
+        /** 簇内高频公共关键词（最多10个） */
         public List<String> commonKeywords;
+        /** 凝聚度：簇内成员两两关键词Jaccard相似度的均值，0-1，越高越紧密 */
         public double cohesion; // 凝聚度 0-1
     }
 
@@ -47,12 +54,19 @@ public class KnowledgeAutoClusterService {
      * 跨模态关联结果
      */
     public static class CrossModalLink {
+        /** 关联源知识ID */
         public String sourceId;
+        /** 关联目标知识ID */
         public String targetId;
+        /** 源知识所属模态 */
         public String sourceModality;
+        /** 目标知识所属模态 */
         public String targetModality;
+        /** 关联类型：SIMILAR(相似), COMPLEMENTARY(互补), CAUSAL(因果), TEMPORAL(时序) */
         public String linkType; // SIMILAR, COMPLEMENTARY, CAUSAL, TEMPORAL
+        /** 关联置信度（0~1） */
         public double confidence;
+        /** 关联理由说明（如相似的关键词或图谱关系路径） */
         public String reason;
     }
 
@@ -252,6 +266,10 @@ public class KnowledgeAutoClusterService {
 
     // ========== 辅助方法 ==========
 
+    /**
+     * 分析两条不同模态知识之间的关联（基于关键词Jaccard相似度）
+     * @return 相似度超过0.2时返回关联结果，否则返回null
+     */
     private CrossModalLink analyzePairwiseLink(MultimodalKnowledge a, MultimodalKnowledge b) {
         // 基于关键词、标签、描述的相似度分析
         Set<String> keywordsA = extractKeywordSet(a);
@@ -284,6 +302,7 @@ public class KnowledgeAutoClusterService {
         return null;
     }
 
+    /** 提取知识条目的关键词集合（关键词+标签，统一转小写去重） */
     private Set<String> extractKeywordSet(MultimodalKnowledge mk) {
         Set<String> keywords = new LinkedHashSet<>();
         if (mk.getKeywords() != null) {
@@ -301,6 +320,7 @@ public class KnowledgeAutoClusterService {
         return keywords;
     }
 
+    /** 计算聚类簇凝聚度：簇内成员两两关键词Jaccard相似度的平均值 */
     private double calculateClusterCohesion(KnowledgeCluster cluster,
                                              Map<String, Set<String>> knowledgeKeywords) {
         if (cluster.memberIds.size() <= 1) return 1.0;
@@ -326,6 +346,7 @@ public class KnowledgeAutoClusterService {
         return pairs > 0 ? totalSimilarity / pairs : 0;
     }
 
+    /** 找出簇内高频公共关键词（出现次数≥阈值，最多返回10个） */
     private List<String> findCommonKeywords(KnowledgeCluster cluster,
                                              Map<String, Set<String>> knowledgeKeywords) {
         Map<String, Integer> freq = new HashMap<>();
@@ -347,6 +368,7 @@ public class KnowledgeAutoClusterService {
                 .collect(Collectors.toList());
     }
 
+    /** 为未分配的知识条目寻找关键词重合度最高的聚类簇 */
     private KnowledgeCluster findNearestCluster(MultimodalKnowledge mk,
                                                   List<KnowledgeCluster> clusters,
                                                   Map<String, Set<String>> knowledgeKeywords) {
@@ -377,6 +399,7 @@ public class KnowledgeAutoClusterService {
         return best;
     }
 
+    /** 按实体名模糊匹配知识条目（在关键词/描述/实体字段中查找） */
     private List<MultimodalKnowledge> findKnowledgeByEntity(String entityName) {
         if (entityName == null) return Collections.emptyList();
         return knowledgeMapper.selectList(

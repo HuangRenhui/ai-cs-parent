@@ -29,6 +29,15 @@ public class ModelCallResult implements Serializable {
     /** 耗时(毫秒) */
     private Long latencyMs;
 
+    /**
+     * 便捷构造调用结果
+     *
+     * @param text             输出文本（embedding 场景下为向量 JSON 串，由调用方解析）
+     * @param promptTokens     输入 token
+     * @param completionTokens 输出 token
+     * @param totalTokens      总 token
+     * @param latencyMs        耗时(毫秒)
+     */
     public static ModelCallResult of(String text, Integer promptTokens, Integer completionTokens, Integer totalTokens, Long latencyMs) {
         ModelCallResult r = new ModelCallResult();
         r.setText(text);

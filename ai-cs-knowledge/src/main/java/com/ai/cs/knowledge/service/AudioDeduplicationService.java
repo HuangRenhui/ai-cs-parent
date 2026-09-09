@@ -232,6 +232,9 @@ public class AudioDeduplicationService {
         fingerprintStore.remove(fileId);
     }
 
+    /**
+     * 读取音频流全部字节（用于指纹计算的PCM数据提取）
+     */
     private byte[] readAllBytes(AudioInputStream audioStream) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
@@ -246,14 +249,24 @@ public class AudioDeduplicationService {
      * 去重检测结果
      */
     public static class DeduplicationResult {
+        /** 是否判定为重复 */
         private boolean duplicate;
+        /** 匹配类型：EXACT=MD5完全相同，SIMILAR=指纹相似，NONE=不重复 */
         private MatchType matchType;
+        /** 命中的已存在文件ID */
         private String matchedFileId;
+        /** 命中的已存在文件名 */
         private String matchedFilename;
+        /** 相似度（百分比，0~100） */
         private double similarity;
 
         public enum MatchType {
-            EXACT, SIMILAR, NONE
+            /** 精确匹配（MD5相同） */
+            EXACT,
+            /** 指纹相似匹配 */
+            SIMILAR,
+            /** 不重复 */
+            NONE
         }
 
         public boolean isDuplicate() { return duplicate; }
@@ -272,8 +285,11 @@ public class AudioDeduplicationService {
      * 相似结果
      */
     public static class SimilarResult {
+        /** 相似音频文件ID */
         private String fileId;
+        /** 相似音频文件名 */
         private String filename;
+        /** 相似度（百分比，0~100） */
         private double similarity;
 
         public String getFileId() { return fileId; }
@@ -288,9 +304,13 @@ public class AudioDeduplicationService {
      * 音频指纹
      */
     private static class AudioFingerprint {
+        /** 音频文件ID */
         private String fileId;
+        /** 音频文件名 */
         private String filename;
+        /** 文件内容MD5精确哈希 */
         private String md5Hash;
+        /** 音频指纹特征向量（能量+过零率的组合特征） */
         private double[] fingerprint;
 
         public String getFileId() { return fileId; }

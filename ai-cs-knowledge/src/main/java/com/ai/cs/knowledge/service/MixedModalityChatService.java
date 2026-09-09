@@ -242,6 +242,7 @@ public class MixedModalityChatService {
         return response;
     }
 
+    /** 计算整体置信度：取各知识来源检索分数的平均值，无来源时给中性的0.5 */
     private double calculateConfidence(List<Map<String, Object>> sources) {
         if (sources.isEmpty()) return 0.5;
         return sources.stream()

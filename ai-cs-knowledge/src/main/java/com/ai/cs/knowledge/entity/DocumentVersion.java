@@ -17,9 +17,10 @@ import lombok.EqualsAndHashCode;
 @TableName("cs_document_version")
 public class DocumentVersion extends BaseEntity {
     
+    /** 主键ID（自增） */
     @TableId(type = IdType.AUTO)
     private Long id;
-    
+
     /**
      * 文档唯一标识（文件名或文档ID）
      */
@@ -90,6 +91,7 @@ public class DocumentVersion extends BaseEntity {
      */
     private String uploaderName;
     
+    /** 逻辑删除标记：0-正常，1-已删除 */
     @TableLogic
     private Integer delFlag;
 }

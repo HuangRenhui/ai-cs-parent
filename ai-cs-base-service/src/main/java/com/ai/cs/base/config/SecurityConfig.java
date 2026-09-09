@@ -19,11 +19,15 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /** 密码加密器 Bean（BCrypt 算法） */
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * 安全过滤链：无状态会话 + 关闭 CSRF；JWT 校验在网关完成，本服务默认放行
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -36,6 +40,7 @@ public class SecurityConfig {
                         // 其他请求需要认证（Gateway已经做了JWT校验，这里默认放行）
                         .anyRequest().permitAll()
                 )
+                // 关闭 X-Frame-Options，便于内嵌 H2 控制台/文档页面等场景
                 .headers(headers -> headers.frameOptions(frame -> frame.disable()));
 
         return http.build();

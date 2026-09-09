@@ -29,6 +29,7 @@ import java.util.*;
 @ConditionalOnProperty(name = "flowable.enabled", havingValue = "true", matchIfMissing = false)
 public class WorkOrderFlowService {
 
+    /** BPMN 流程定义 Key，对应流程定义文件中的 process id */
     private static final String PROCESS_DEFINITION_KEY = "workOrderProcess";
 
     @Resource
@@ -48,6 +49,9 @@ public class WorkOrderFlowService {
 
     /**
      * 启动工单流程
+     *
+     * @param workOrderId 工单ID
+     * @return 包含流程实例ID、工单ID和启动状态的结果
      */
     public Map<String, Object> startProcess(Long workOrderId) {
         WorkOrder order = workOrderMapper.selectById(workOrderId);
@@ -55,14 +59,15 @@ public class WorkOrderFlowService {
             throw new RuntimeException("工单不存在");
         }
 
-        // 设置流程变量
+        // 设置流程变量：供 BPMN 中的网关条件与任务分配表达式使用
         Map<String, Object> variables = new HashMap<>();
         variables.put("workOrderId", workOrderId);
         variables.put("orderType", order.getOrderType());
+        // 已分配坐席则指派给具体坐席，否则进入坐席池待领取
         variables.put("assignee", "agent_" + (order.getAgentId() != null ? order.getAgentId() : "pool"));
         variables.put("reviewer", "reviewer_pool");
 
-        // 启动流程
+        // 按流程定义 Key 启动实例，业务键采用 "WO_工单ID"，便于后续反查
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 PROCESS_DEFINITION_KEY, "WO_" + workOrderId, variables);
 
@@ -81,6 +86,9 @@ public class WorkOrderFlowService {
 
     /**
      * 查询工单当前流程状态
+     *
+     * @param workOrderId 工单ID
+     * @return status 为 running（含当前任务列表）/ completed（含结束时间）/ not_started 三种之一
      */
     public Map<String, Object> getProcessStatus(Long workOrderId) {
         Map<String, Object> result = new HashMap<>();
@@ -127,7 +135,10 @@ public class WorkOrderFlowService {
     }
 
     /**
-     * 完成指定任务
+     * 完成指定任务（审批/处理动作，驱动流程向下流转）
+     *
+     * @param taskId    流程任务ID
+     * @param variables 流程变量；质检审核任务若未显式传 qualityPassed，则默认置为 true 直接通过
      */
     public void completeTask(String taskId, Map<String, Object> variables) {
         Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
@@ -150,6 +161,9 @@ public class WorkOrderFlowService {
 
     /**
      * 获取待办任务列表
+     *
+     * @param assignee 处理人标识；为空时返回全部待办，按创建时间倒序
+     * @return 待办任务列表
      */
     public List<Map<String, Object>> getPendingTasks(String assignee) {
         List<Task> tasks;
@@ -179,7 +193,9 @@ public class WorkOrderFlowService {
     }
 
     /**
-     * 获取流程定义列表
+     * 获取流程定义列表（仅返回每个 Key 的最新版本）
+     *
+     * @return 流程定义列表（id/key/name/version）
      */
     public List<Map<String, Object>> getProcessDefinitions() {
         List<ProcessDefinition> definitions = repositoryService.createProcessDefinitionQuery()
@@ -201,6 +217,9 @@ public class WorkOrderFlowService {
 
     /**
      * 获取流程历史记录
+     *
+     * @param workOrderId 工单ID
+     * @return 该工单流程实例下全部历史任务（按开始时间升序）；流程未启动时返回空列表
      */
     public List<Map<String, Object>> getProcessHistory(Long workOrderId) {
         HistoricProcessInstance historic = historyService.createHistoricProcessInstanceQuery()
@@ -234,8 +253,12 @@ public class WorkOrderFlowService {
 
     /**
      * 取消工单流程
+     *
+     * @param workOrderId 工单ID
+     * @param reason      取消原因（会记录到流程实例的删除原因中）
      */
     public void cancelProcess(Long workOrderId, String reason) {
+        // 删除该工单下所有仍在运行的流程实例
         List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery()
                 .processInstanceBusinessKey("WO_" + workOrderId)
                 .list();

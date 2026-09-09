@@ -29,7 +29,7 @@ public class StatisticsService extends ServiceImpl<StatisticsMapper, Statistics>
         String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
         String weekAgo = LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_LOCAL_DATE);
 
-        // 今日数据
+        // 今日数据（size 为命中天数，当天只有一行，等价于是否有数据）
         overview.put("todaySessions", baseMapper.countChatSessions(today, today).size());
         overview.put("todayOrders", baseMapper.countWorkOrders(today, today).size());
         overview.put("todayCustomers", baseMapper.countNewCustomers(today, today).size());

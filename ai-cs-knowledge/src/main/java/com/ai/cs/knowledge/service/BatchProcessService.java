@@ -27,11 +27,17 @@ public class BatchProcessService {
      * 批量处理结果
      */
     public static class BatchResult {
+        /** 批次ID（UUID） */
         private String batchId;
+        /** 本批次文件总数 */
         private int totalFiles;
+        /** 处理成功数量 */
         private int successCount;
+        /** 处理失败数量 */
         private int failCount;
+        /** 每个文件的处理结果明细 */
         private List<FileResult> results;
+        /** 整批处理耗时（毫秒） */
         private long duration;
 
         public String getBatchId() { return batchId; }
@@ -52,10 +58,15 @@ public class BatchProcessService {
      * 单个文件处理结果
      */
     public static class FileResult {
+        /** 原始文件名 */
         private String originalFilename;
+        /** 处理成功后分配的文件ID */
         private String fileId;
+        /** 是否处理成功 */
         private boolean success;
+        /** 失败原因（成功时为null） */
         private String errorMessage;
+        /** 处理产出的元数据（如压缩信息、向量化结果等） */
         private Map<String, Object> metadata;
 
         public String getOriginalFilename() { return originalFilename; }
@@ -74,12 +85,19 @@ public class BatchProcessService {
      * 批量处理进度
      */
     public static class BatchProgress {
+        /** 批次ID */
         private String batchId;
+        /** 文件总数 */
         private int total;
+        /** 已处理数量 */
         private int processed;
+        /** 成功数量 */
         private int success;
+        /** 失败数量 */
         private int failed;
+        /** 是否已全部完成 */
         private boolean completed;
+        /** 完成百分比（0~100） */
         private double percentage;
 
         public String getBatchId() { return batchId; }

@@ -11,6 +11,10 @@ import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfi
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
+/**
+ * 运营中心服务启动类：提供健康探测、日志/链路查询、告警等运营能力。
+ * 当前为纯「内存 + 本地文件」实现，无数据库与 Redis 依赖，故排除相关自动装配。
+ */
 @SpringBootApplication(
         scanBasePackages = {"com.ai.cs.ops", "com.ai.cs.common"},
         exclude = {

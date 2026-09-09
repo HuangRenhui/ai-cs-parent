@@ -25,6 +25,9 @@ public class WorkOrderProcessService {
 
     /**
      * 自动分类（由 Flowable serviceTask 调用）
+     * 按工单内容中的关键词依次匹配 退款→投诉→咨询→物流→建议，命中即更新 order_type
+     *
+     * @param workOrderId 工单ID
      */
     public void autoClassify(Long workOrderId) {
         log.info("[Flowable] 工单 {} 自动分类", workOrderId);
@@ -34,6 +37,7 @@ public class WorkOrderProcessService {
             return;
         }
 
+        // 统一转小写以兼容中英文关键词
         String content = order.getOrderContent().toLowerCase();
 
         if (content.contains("退款") || content.contains("退货") || content.contains("refund")) {
@@ -52,7 +56,10 @@ public class WorkOrderProcessService {
     }
 
     /**
-     * AI自动回复（咨询类工单）
+     * AI自动回复（咨询类工单，由 Flowable serviceTask 调用）
+     * 咨询类问题默认已由 AI 在线解答，流程走到这里直接置为已完成
+     *
+     * @param workOrderId 工单ID
      */
     public void autoReply(Long workOrderId) {
         log.info("[Flowable] 工单 {} AI自动回复", workOrderId);
@@ -66,7 +73,9 @@ public class WorkOrderProcessService {
     }
 
     /**
-     * 完成工单
+     * 完成工单（流程终点调用，将工单置为已关闭）
+     *
+     * @param workOrderId 工单ID
      */
     public void completeWorkOrder(Long workOrderId) {
         log.info("[Flowable] 工单 {} 流程完成", workOrderId);

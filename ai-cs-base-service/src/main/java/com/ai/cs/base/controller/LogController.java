@@ -20,6 +20,9 @@ public class LogController {
     @Resource
     private OperationLogService logService;
 
+    /**
+     * 分页查询操作日志（可按用户、模块过滤）
+     */
     @GetMapping("/page")
     public Result<Page<OperationLog>> page(@RequestParam(defaultValue = "1") int pageNum,
                                             @RequestParam(defaultValue = "10") int pageSize,

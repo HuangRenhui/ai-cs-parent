@@ -35,9 +35,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiModelConfig> {
 
+    /** 本地模型路由（按能力选择可用模型，带熔断/重试） */
     @Resource
     private ModelRouter modelRouter;
 
+    /** Redis 客户端，用于把模型注册表广播给各消费服务 */
     @Resource
     private StringRedisTemplate redisTemplate;
 
@@ -213,6 +215,7 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
 
     // ==================== 内部 ====================
 
+    /** 模型变更后的统一收尾：重新发布注册表（modelType 预留，当前全量发布） */
     private void afterChanged(String modelType) {
         publishRegistry();
     }
@@ -251,6 +254,7 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         modelRouter.registerLocal(routes);
     }
 
+    /** 查询全部启用模型并转为路由对象列表 */
     private List<AiModelRoute> allEnabledForRoute() {
         List<AiModelConfig> enabled = this.list(new LambdaQueryWrapper<AiModelConfig>()
                 .eq(AiModelConfig::getEnabled, 1));
@@ -276,6 +280,7 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         }
     }
 
+    /** 按 ID 取模型，不存在则抛业务异常 */
     private AiModelConfig requireModel(Long id) {
         AiModelConfig config = this.getById(id);
         if (config == null) {
@@ -284,6 +289,7 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         return config;
     }
 
+    /** 保存前的字段合法性校验（必填项、数值范围） */
     private void validate(AiModelConfig c) {
         if (!StringUtils.hasText(c.getModelName())) {
             throw new BusinessException("模型名称不能为空");
@@ -357,6 +363,7 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
         }
     }
 
+    /** 密钥脱敏：保留前4后2，中间打星；过短则全打星 */
     private String mask(String secret) {
         if (secret == null || secret.length() <= 6) {
             return "******";

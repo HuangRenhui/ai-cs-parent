@@ -14,6 +14,7 @@ import lombok.EqualsAndHashCode;
 @TableName("cs_knowledge_graph_node")
 public class KnowledgeGraphNode extends BaseEntity {
 
+    /** 主键ID（自增） */
     @TableId(type = IdType.AUTO)
     private Long id;
 
@@ -67,6 +68,7 @@ public class KnowledgeGraphNode extends BaseEntity {
      */
     private Integer status;
 
+    /** 逻辑删除标记：0-正常，1-已删除 */
     @TableLogic
     private Integer delFlag;
 }

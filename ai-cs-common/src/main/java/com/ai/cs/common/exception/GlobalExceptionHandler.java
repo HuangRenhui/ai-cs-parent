@@ -22,6 +22,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /** 业务异常：按异常自带 code 返回（默认 400），message 直接透传给前端 */
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleBusinessException(BusinessException e) {
@@ -30,6 +31,7 @@ public class GlobalExceptionHandler {
         return Result.fail(code, e.getMessage());
     }
 
+    /** 模型调用异常：HTTP 503，对外隐藏具体模型错误细节，只给友好提示 */
     @ExceptionHandler(ModelCallException.class)
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public Result<?> handleModelCall(ModelCallException e) {
@@ -37,6 +39,7 @@ public class GlobalExceptionHandler {
         return Result.fail(503, "模型服务暂时不可用，请稍后重试");
     }
 
+    /** 请求参数类异常：参数缺失、类型不匹配、非法参数，统一 400 */
     @ExceptionHandler({IllegalArgumentException.class, MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -45,6 +48,7 @@ public class GlobalExceptionHandler {
         return Result.fail(400, e.getMessage());
     }
 
+    /** Bean Validation 校验失败：取第一个字段错误信息返回（校验注解上已写好中文提示） */
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleValid(Exception e) {
@@ -57,6 +61,7 @@ public class GlobalExceptionHandler {
         return Result.fail(400, msg);
     }
 
+    /** 兜底：未预期的系统异常，记完整堆栈，对外只给通用提示（不泄露内部细节） */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<?> handleException(Exception e) {

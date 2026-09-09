@@ -24,7 +24,7 @@ public class WorkOrderController {
     @Resource
     private WorkOrderService workOrderService;
 
-    /** 创建工单 */
+    /** 创建工单（校验参数后生成 WO_ 前缀工单号，初始状态为待处理） */
     @PostMapping("/create")
     public Result<String> create(@RequestBody WorkOrderDTO dto) {
         String orderNo = workOrderService.createOrder(dto);
@@ -69,14 +69,14 @@ public class WorkOrderController {
         return Result.success("状态更新成功");
     }
 
-    /** 完成工单 */
+    /** 完成工单（状态置为 3-已完成） */
     @PutMapping("/complete/{id}")
     public Result<String> complete(@PathVariable Long id) {
         workOrderService.updateStatus(id, 3);
         return Result.success("工单已完成");
     }
 
-    /** 关闭工单 */
+    /** 关闭工单（状态置为 4-已关闭，关闭为终态不再流转） */
     @PutMapping("/close/{id}")
     public Result<String> close(@PathVariable Long id) {
         workOrderService.updateStatus(id, 4);

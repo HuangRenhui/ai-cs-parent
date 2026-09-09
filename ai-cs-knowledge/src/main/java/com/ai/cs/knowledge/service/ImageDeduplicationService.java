@@ -234,11 +234,17 @@ public class ImageDeduplicationService {
      * 去重检测结果
      */
     public static class DeduplicationResult {
+        /** 是否判定为重复 */
         private boolean duplicate;
+        /** 匹配类型 */
         private MatchType matchType;
+        /** 命中的已存在文件ID */
         private String matchedFileId;
+        /** 命中的已存在文件名 */
         private String matchedFilename;
+        /** 相似度（百分比，0~100） */
         private double similarity;
+        /** 感知哈希的汉明距离（越小越相似） */
         private int hammingDistance;
 
         public enum MatchType {
@@ -266,9 +272,13 @@ public class ImageDeduplicationService {
      * 相似图片结果
      */
     public static class SimilarImageResult {
+        /** 相似图片文件ID */
         private String fileId;
+        /** 相似图片文件名 */
         private String filename;
+        /** 感知哈希的汉明距离（越小越相似） */
         private int hammingDistance;
+        /** 相似度（百分比，0~100） */
         private double similarity;
 
         // Getters and Setters
@@ -286,9 +296,13 @@ public class ImageDeduplicationService {
      * 图片哈希信息
      */
     private static class ImageHashInfo {
+        /** 图片文件ID */
         private String fileId;
+        /** 图片文件名 */
         private String filename;
+        /** 文件内容MD5精确哈希 */
         private String md5Hash;
+        /** 感知哈希（64位01字符串，基于简化DCT） */
         private String perceptualHash;
 
         public String getFileId() { return fileId; }

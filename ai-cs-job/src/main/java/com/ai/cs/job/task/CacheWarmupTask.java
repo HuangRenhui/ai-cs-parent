@@ -29,9 +29,15 @@ public class CacheWarmupTask {
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
 
+    /** 缓存预热开关 */
     @Value("${job.cache-warmup:true}")
     private boolean warmupEnabled;
 
+    /**
+     * 缓存预热入口（cron：每天凌晨 3 点执行）
+     * 意图：在业务早高峰到来前，把热点数据（热门 FAQ、系统配置、工单统计）提前加载进 Redis，
+     * 避免早高峰大量缓存miss回源数据库
+     */
     @Scheduled(cron = "0 0 3 * * ?")
     public void warmupCache() {
         if (!warmupEnabled) {

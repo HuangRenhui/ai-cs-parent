@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ModelRouter {
 
+    /** 默认对话能力类型：chat() 不带类型时使用 */
     private static final String DEFAULT_LLM_TYPE = ModelTypeEnum.LLM.getCode();
 
     /** type -> 该能力下已启用模型列表（按 priority 升序 + active 优先） */
@@ -57,6 +58,7 @@ public class ModelRouter {
     /** 最近一次从 Redis 拉取注册表的时间戳（毫秒），用于防抖 */
     private volatile long lastRefresh = 0L;
 
+    /** 注册表刷新防抖间隔(毫秒)：5 秒内多次请求只拉一次 Redis */
     private static final long REFRESH_INTERVAL_MS = 5000L;
 
     /**
@@ -130,6 +132,9 @@ public class ModelRouter {
 
     /**
      * 向量化：选用 EMBEDDING 类型模型；未登记向量模型时回退 {@link #legacyClient}。
+     *
+     * @param text 待向量化文本
+     * @return 向量
      */
     public List<Float> embed(String text) {
         return embed(text, null);
@@ -207,16 +212,20 @@ public class ModelRouter {
      * base-service 在启动预热与配置变更后调用（同时写 Redis）。
      */
     public void registerLocal(List<AiModelRoute> routes) {
+        // 整体重建路由池：配置以"全量覆盖"语义下发，不做增量合并
         candidates.clear();
         if (routes == null || routes.isEmpty()) {
             return;
         }
         for (AiModelRoute r : routes) {
+            // 跳过未启用的模型
             if (r == null || !isEnabled(r)) {
                 continue;
             }
+            // 按能力类型分组
             candidates.computeIfAbsent(r.getModelType(), k -> new ArrayList<>()).add(r);
         }
+        // 每组内部排序：生效模型最前、DOWN 最后、其余按优先级升序
         candidates.values().forEach(this::sortAndEnsureActiveFirst);
     }
 
@@ -259,13 +268,16 @@ public class ModelRouter {
      */
     private void ensureLoaded() {
         long now = System.currentTimeMillis();
+        // 防抖：间隔未到直接返回（先无锁快速判断，避免每次请求都抢锁）
         if (redisTemplate == null || now - lastRefresh < REFRESH_INTERVAL_MS) {
             return;
         }
         synchronized (this) {
+            // 双重检查：抢锁期间可能已有其它线程刷新过
             if (System.currentTimeMillis() - lastRefresh < REFRESH_INTERVAL_MS) {
                 return;
             }
+            // 先更新时间戳再拉取：即使拉取失败也不会造成每请求都访问 Redis
             lastRefresh = now;
             refreshFromRedis();
         }
@@ -295,6 +307,7 @@ public class ModelRouter {
      * 注意：超时后重试对付费模型可能重复计费，maxRetries 建议 0~2。
      */
     private ModelCallResult callChatWithRetry(AiModelRoute route, List<Map<String, String>> messages) {
+        // 重试次数上限硬钳制为 5，防止配置错误导致长时间卡死
         int attempts = 1 + Math.max(0, route.getMaxRetries() == null ? 0 : Math.min(route.getMaxRetries(), 5));
         Exception last = null;
         for (int i = 0; i < attempts; i++) {
@@ -311,6 +324,7 @@ public class ModelRouter {
         throw last instanceof ModelCallException mce ? mce : new ModelCallException("模型调用失败: " + last.getMessage(), last);
     }
 
+    /** 向量调用的同模型失败重试，语义同 {@link #callChatWithRetry} */
     private ModelCallResult callEmbedWithRetry(AiModelRoute route, String text) {
         int attempts = 1 + Math.max(0, route.getMaxRetries() == null ? 0 : Math.min(route.getMaxRetries(), 5));
         Exception last = null;
@@ -355,11 +369,13 @@ public class ModelRouter {
             }
             return over;
         } catch (Exception e) {
+            // 读取配额失败时放行，避免 Redis 抖动导致全部模型被误判超限
             log.warn("读取模型当日配额失败，按未超限处理: {}", e.getMessage());
             return false;
         }
     }
 
+    /** Redis hash 值安全转 long，非法值按 0 处理 */
     private long parseLong(Object v) {
         if (v == null) {
             return 0L;
@@ -388,6 +404,7 @@ public class ModelRouter {
         });
     }
 
+    /** 优先级 null 安全取值（null 视为 0，即最优先） */
     private int prio(Integer p) {
         return p == null ? 0 : p;
     }

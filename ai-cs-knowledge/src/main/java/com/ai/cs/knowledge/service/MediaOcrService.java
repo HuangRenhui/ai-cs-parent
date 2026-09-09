@@ -25,8 +25,11 @@ public class MediaOcrService {
      * OCR结果
      */
     public static class OcrResult {
+        /** 识别出的完整文本 */
         private String text;
+        /** 整体置信度（0~1） */
         private double confidence;
+        /** 检测到的文字区域列表 */
         private List<TextRegion> regions;
 
         public OcrResult() {
@@ -47,8 +50,11 @@ public class MediaOcrService {
      * 文字区域
      */
     public static class TextRegion {
+        /** 该区域识别出的文本 */
         private String text;
+        /** 文字区域在图片中的位置（矩形框） */
         private Rectangle boundingBox;
+        /** 该区域识别置信度（0~1） */
         private double confidence;
 
         public String getText() { return text; }
@@ -220,6 +226,7 @@ public class MediaOcrService {
 
     // ========== 图像预处理 ==========
 
+    /** 灰度化：OCR前预处理第一步，去除颜色干扰 */
     private BufferedImage toGrayscale(BufferedImage image) {
         BufferedImage gray = new BufferedImage(image.getWidth(), image.getHeight(),
                 BufferedImage.TYPE_BYTE_GRAY);
@@ -229,6 +236,7 @@ public class MediaOcrService {
         return gray;
     }
 
+    /** 二值化：按阈值将灰度图转为黑白图，突出文字笔画便于区域检测 */
     private BufferedImage binarize(BufferedImage grayImage, int threshold) {
         int width = grayImage.getWidth();
         int height = grayImage.getHeight();
@@ -286,6 +294,7 @@ public class MediaOcrService {
         return regions;
     }
 
+    /** 读取文件全部字节（用于远程OCR的Base64编码） */
     private byte[] readFileBytes(File file) throws IOException {
         try (FileInputStream fis = new FileInputStream(file);
              ByteArrayOutputStream bos = new ByteArrayOutputStream()) {

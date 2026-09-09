@@ -298,6 +298,7 @@ public class RetrievalOptimizerService {
         return count;
     }
 
+    /** 判断字符是否为中文汉字（中文文本也应计入有效信息量） */
     private boolean isChineseChar(char c) {
         return Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN;
     }
@@ -325,6 +326,7 @@ public class RetrievalOptimizerService {
         return totalWindows > 0 ? (double) duplicateCount / totalWindows : 0.0;
     }
 
+    /** 文本归一化（压缩空白+转小写），用于去重比较 */
     private String normalize(String text) {
         return text.replaceAll("\\s+", " ").trim().toLowerCase();
     }

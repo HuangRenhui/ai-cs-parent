@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class ModelUsageRecorder {
 
+    /** 用量事件 Redis Stream key（ai-cs-job 消费后落库） */
     public static final String STREAM_KEY = "ai:model:usage:stream";
+    /** Stream 最大长度，超出截断，防止消费端故障时内存膨胀 */
     private static final long MAX_LEN = 100000;
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyyMMdd");
     /** 成本计数精度：元 × 10^6 */
@@ -34,6 +36,7 @@ public class ModelUsageRecorder {
     /** 配额预警水位 */
     private static final double ALERT_RATIO = 0.8;
 
+    /** 允许无 Redis 环境启动（required=false）：无 Redis 时记录直接跳过，不影响主链路 */
     @Autowired(required = false)
     private StringRedisTemplate redisTemplate;
 
@@ -76,15 +79,18 @@ public class ModelUsageRecorder {
         }
     }
 
+    /** 累计当日 token/成本计数（Redis hash 自增），并做 80% 配额预警 */
     private void accumulateDaily(AiModelRoute route, ModelUsageEvent event) {
         try {
             String key = dailyKey(route.getId());
             long tokens = redisTemplate.opsForHash().increment(key, "tokens", event.getTotalTokens());
             long costMicro = 0L;
+            // 成本按 元×10^6 的整数存储，避免浮点累计误差
             if (event.getCost() != null) {
                 costMicro = redisTemplate.opsForHash().increment(key, "costMicro",
                         event.getCost().multiply(COST_SCALE_BD).longValue());
             }
+            // 过期时间 50 小时：覆盖当天计数 + 跨天缓冲，避免 key 永久残留
             redisTemplate.expire(key, 50, TimeUnit.HOURS);
             alertIfNearQuota(route, tokens, costMicro);
         } catch (Exception e) {
@@ -103,6 +109,7 @@ public class ModelUsageRecorder {
             return;
         }
         String key = alertKey(route.getId());
+        // setIfAbsent 保证同一模型当天只预警一次，避免日志刷屏
         Boolean first = redisTemplate.opsForValue().setIfAbsent(key, "1", 26, TimeUnit.HOURS);
         if (Boolean.TRUE.equals(first)) {
             log.warn("[模型配额预警] 模型[{}]当日用量已达 80%：tokens={}/{}, cost={}/{} 元，超过配额后将自动降级到其它候选模型",
@@ -158,10 +165,12 @@ public class ModelUsageRecorder {
         fill(e, route, sessionId);
         e.setSuccess(0);
         e.setLatencyMs(latencyMs);
+        // 错误信息截断到 480 字符，防止超长堆栈撑爆 Redis 流与库表字段
         e.setErrorMsg(errorMsg == null ? "unknown" : (errorMsg.length() > 480 ? errorMsg.substring(0, 480) : errorMsg));
         return e;
     }
 
+    /** 填充事件的模型快照字段（route 为 null 时只填会话ID） */
     private static void fill(ModelUsageEvent e, AiModelRoute route, String sessionId) {
         if (route != null) {
             e.setModelId(route.getId());

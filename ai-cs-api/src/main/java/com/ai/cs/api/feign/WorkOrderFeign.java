@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(value = "ai-cs-workorder", url = "${feign.workorder.url:http://localhost:8085}", fallback = WorkOrderFeignFallback.class)
 public interface WorkOrderFeign {
+
+    /** 创建工单，返回工单号或创建结果文案 */
     @PostMapping("/workorder/create")
     Result<String> createOrder(@RequestBody WorkOrderDTO dto);
 }

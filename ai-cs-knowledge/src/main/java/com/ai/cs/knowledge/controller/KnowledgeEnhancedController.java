@@ -33,6 +33,9 @@ public class KnowledgeEnhancedController {
 
     // ========== 3D 模型知识库 ==========
 
+    /**
+     * 导入3D模型
+     */
     @PostMapping("/3d-model/import")
     @Operation(summary = "导入3D模型", description = "将3D模型文件（OBJ/STL/GLTF/GLB/FBX等）导入知识库")
     public Result<MultimodalKnowledge> import3DModel(
@@ -41,6 +44,7 @@ public class KnowledgeEnhancedController {
             @Parameter(description = "模型描述") @RequestParam(required = false) String description,
             @Parameter(description = "标签列表(逗号分隔)") @RequestParam(required = false) String tags) {
         try {
+            // 逗号分隔的标签字符串拆分为列表，未传则给空列表
             List<String> tagList = tags != null ? List.of(tags.split(",")) : List.of();
             MultimodalKnowledge knowledge = model3DService.import3DModel(modelPath, modelName, description, tagList);
             return Result.success(knowledge);
@@ -49,6 +53,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 批量导入3D模型
+     */
     @PostMapping("/3d-model/batch-import")
     @Operation(summary = "批量导入3D模型")
     public Result<Map<String, Object>> batchImport3DModels(@RequestBody List<Map<String, Object>> modelInfos) {
@@ -59,6 +66,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 搜索3D模型
+     */
     @GetMapping("/3d-model/search")
     @Operation(summary = "搜索3D模型")
     public Result<List<MultimodalKnowledge>> search3DModels(
@@ -66,18 +76,27 @@ public class KnowledgeEnhancedController {
         return Result.success(model3DService.search3DModels(keyword));
     }
 
+    /**
+     * 获取所有3D模型
+     */
     @GetMapping("/3d-model/all")
     @Operation(summary = "获取所有3D模型")
     public Result<List<MultimodalKnowledge>> getAll3DModels() {
         return Result.success(model3DService.getAll3DModels());
     }
 
+    /**
+     * 按标签筛选3D模型
+     */
     @GetMapping("/3d-model/tag/{tag}")
     @Operation(summary = "按标签筛选3D模型")
     public Result<List<MultimodalKnowledge>> get3DModelsByTag(@PathVariable String tag) {
         return Result.success(model3DService.get3DModelsByTag(tag));
     }
 
+    /**
+     * 获取相似3D模型
+     */
     @GetMapping("/3d-model/similar/{knowledgeId}")
     @Operation(summary = "获取相似3D模型")
     public Result<List<MultimodalKnowledge>> getSimilar3DModels(
@@ -86,6 +105,9 @@ public class KnowledgeEnhancedController {
         return Result.success(model3DService.getSimilar3DModels(knowledgeId, limit));
     }
 
+    /**
+     * 获取3D模型分析报告
+     */
     @GetMapping("/3d-model/report/{knowledgeId}")
     @Operation(summary = "获取3D模型分析报告")
     public Result<Map<String, Object>> getModelReport(@PathVariable String knowledgeId) {
@@ -96,6 +118,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 比较两个3D模型
+     */
     @PostMapping("/3d-model/compare")
     @Operation(summary = "比较两个3D模型")
     public Result<Map<String, Object>> compare3DModels(
@@ -108,6 +133,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 3D模型知识问答
+     */
     @PostMapping("/3d-model/qa")
     @Operation(summary = "3D模型知识问答")
     public Result<String> modelQa(
@@ -116,6 +144,9 @@ public class KnowledgeEnhancedController {
         return Result.success(model3DService.modelQa(question, knowledgeId));
     }
 
+    /**
+     * 获取3D模型格式转换建议
+     */
     @GetMapping("/3d-model/conversion-advice/{knowledgeId}")
     @Operation(summary = "获取3D模型格式转换建议")
     public Result<Map<String, Object>> getConversionAdvice(
@@ -126,12 +157,18 @@ public class KnowledgeEnhancedController {
 
     // ========== Neo4j 图数据库集成 ==========
 
+    /**
+     * 检查Neo4j连接状态
+     */
     @GetMapping("/neo4j/status")
     @Operation(summary = "检查Neo4j连接状态")
     public Result<Boolean> checkNeo4jStatus() {
         return Result.success(neo4jService.isConnected());
     }
 
+    /**
+     * 执行Cypher查询
+     */
     @PostMapping("/neo4j/cypher")
     @Operation(summary = "执行Cypher查询")
     public Result<List<Map<String, Object>>> executeCypher(
@@ -143,12 +180,18 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 全量同步到Neo4j
+     */
     @PostMapping("/neo4j/sync")
     @Operation(summary = "全量同步到Neo4j")
     public Result<Map<String, Object>> fullSyncToNeo4j() {
         return Result.success(neo4jService.fullSyncToNeo4j());
     }
 
+    /**
+     * 查找最短路径
+     */
     @GetMapping("/neo4j/shortest-path")
     @Operation(summary = "查找最短路径")
     public Result<Map<String, Object>> findShortestPath(
@@ -158,6 +201,9 @@ public class KnowledgeEnhancedController {
         return Result.success(neo4jService.findShortestPath(startNodeId, endNodeId, maxDepth));
     }
 
+    /**
+     * 获取K度邻居
+     */
     @GetMapping("/neo4j/k-hop/{nodeId}")
     @Operation(summary = "获取K度邻居")
     public Result<Map<String, Object>> getKHopNeighbors(
@@ -166,12 +212,18 @@ public class KnowledgeEnhancedController {
         return Result.success(neo4jService.getKHopNeighbors(nodeId, depth));
     }
 
+    /**
+     * 社区检测
+     */
     @GetMapping("/neo4j/communities")
     @Operation(summary = "社区检测")
     public Result<Map<String, Object>> detectCommunities() {
         return Result.success(neo4jService.detectCommunities());
     }
 
+    /**
+     * PageRank中心性计算
+     */
     @GetMapping("/neo4j/pagerank")
     @Operation(summary = "PageRank中心性计算")
     public Result<List<Map<String, Object>>> computePageRank(
@@ -179,18 +231,27 @@ public class KnowledgeEnhancedController {
         return Result.success(neo4jService.computePageRank(topK));
     }
 
+    /**
+     * 查找桥接节点
+     */
     @GetMapping("/neo4j/bridge-nodes")
     @Operation(summary = "查找桥接节点")
     public Result<List<Map<String, Object>>> findBridgeNodes() {
         return Result.success(neo4jService.findBridgeNodes());
     }
 
+    /**
+     * 查找环形依赖
+     */
     @GetMapping("/neo4j/circular-deps")
     @Operation(summary = "查找环形依赖")
     public Result<List<Map<String, Object>>> findCircularDependencies() {
         return Result.success(neo4jService.findCircularDependencies());
     }
 
+    /**
+     * 获取Neo4j图统计
+     */
     @GetMapping("/neo4j/stats")
     @Operation(summary = "获取Neo4j图统计")
     public Result<Map<String, Object>> getNeo4jStats() {
@@ -199,23 +260,33 @@ public class KnowledgeEnhancedController {
 
     // ========== 图谱推理引擎 ==========
 
+    /**
+     * 获取所有推理规则
+     */
     @GetMapping("/reasoning/rules")
     @Operation(summary = "获取所有推理规则")
     public Result<List<GraphReasoningEngine.Rule>> getReasoningRules() {
         return Result.success(reasoningEngine.getBuiltinRules());
     }
 
+    /**
+     * 执行所有推理规则
+     */
     @PostMapping("/reasoning/execute-all")
     @Operation(summary = "执行所有推理规则")
     public Result<Map<String, Object>> executeAllRules() {
         return Result.success(reasoningEngine.executeAllRules());
     }
 
+    /**
+     * 执行指定推理规则
+     */
     @PostMapping("/reasoning/execute/{ruleName}")
     @Operation(summary = "执行指定推理规则")
     public Result<GraphReasoningEngine.ReasoningResult> executeRule(
             @PathVariable String ruleName) {
         try {
+            // 按规则名在内置规则列表中匹配，找到才执行
             List<GraphReasoningEngine.Rule> rules = reasoningEngine.getBuiltinRules();
             for (GraphReasoningEngine.Rule rule : rules) {
                 if (rule.getName().equals(ruleName)) {
@@ -228,6 +299,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 查找两实体间所有路径
+     */
     @GetMapping("/reasoning/paths")
     @Operation(summary = "查找两实体间所有路径")
     public Result<List<Map<String, Object>>> findAllPaths(
@@ -237,6 +311,9 @@ public class KnowledgeEnhancedController {
         return Result.success(reasoningEngine.findAllPaths(sourceName, targetName, maxDepth));
     }
 
+    /**
+     * 查找概念层级路径
+     */
     @GetMapping("/reasoning/hierarchy")
     @Operation(summary = "查找概念层级路径")
     public Result<Map<String, Object>> findHierarchyPath(
@@ -245,12 +322,18 @@ public class KnowledgeEnhancedController {
         return Result.success(reasoningEngine.findHierarchyPath(nodeName, direction));
     }
 
+    /**
+     * 实体消歧
+     */
     @GetMapping("/reasoning/disambiguation")
     @Operation(summary = "实体消歧")
     public Result<List<Map<String, Object>>> entityDisambiguation() {
         return Result.success(reasoningEngine.entityDisambiguation());
     }
 
+    /**
+     * 合并实体
+     */
     @PostMapping("/reasoning/merge-entities")
     @Operation(summary = "合并实体")
     public Result<Map<String, Object>> mergeEntities(
@@ -263,6 +346,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 生成推理链
+     */
     @GetMapping("/reasoning/chain")
     @Operation(summary = "生成推理链")
     public Result<Map<String, Object>> generateReasoningChain(
@@ -273,6 +359,9 @@ public class KnowledgeEnhancedController {
 
     // ========== 时序知识图谱 ==========
 
+    /**
+     * 创建时序关系
+     */
     @PostMapping("/temporal/relation")
     @Operation(summary = "创建时序关系")
     public Result<?> createTemporalRelation(
@@ -283,6 +372,7 @@ public class KnowledgeEnhancedController {
             @RequestParam(required = false) String validFrom,
             @RequestParam(required = false) String validUntil) {
         try {
+            // 生效/失效时间为可选的ISO日期时间字符串，未传则为null表示不限
             var validFromTime = validFrom != null ? java.time.LocalDateTime.parse(validFrom) : null;
             var validUntilTime = validUntil != null ? java.time.LocalDateTime.parse(validUntil) : null;
             temporalService.createTemporalRelation(sourceNodeId, targetNodeId, relationType, description, validFromTime, validUntilTime);
@@ -292,6 +382,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 获取指定时间点图谱快照
+     */
     @GetMapping("/temporal/snapshot")
     @Operation(summary = "获取指定时间点图谱快照")
     public Result<Map<String, Object>> getSnapshot(
@@ -304,6 +397,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 获取两时间点间图谱变化
+     */
     @GetMapping("/temporal/changes")
     @Operation(summary = "获取两时间点间图谱变化")
     public Result<Map<String, Object>> getGraphChanges(
@@ -318,12 +414,18 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 获取实体关系变化时间线
+     */
     @GetMapping("/temporal/timeline/{nodeId}")
     @Operation(summary = "获取实体关系变化时间线")
     public Result<List<Map<String, Object>>> getEntityTimeline(@PathVariable String nodeId) {
         return Result.success(temporalService.getEntityTimeline(nodeId));
     }
 
+    /**
+     * 获取全局时间线
+     */
     @GetMapping("/temporal/global-timeline")
     @Operation(summary = "获取全局时间线")
     public Result<List<Map<String, Object>>> getGlobalTimeline(
@@ -331,18 +433,27 @@ public class KnowledgeEnhancedController {
         return Result.success(temporalService.getGlobalTimeline(limit));
     }
 
+    /**
+     * 分析关系演化模式
+     */
     @GetMapping("/temporal/evolution/{nodeId}")
     @Operation(summary = "分析关系演化模式")
     public Result<Map<String, Object>> analyzeRelationEvolution(@PathVariable String nodeId) {
         return Result.success(temporalService.analyzeRelationEvolution(nodeId));
     }
 
+    /**
+     * 预测关系演化趋势
+     */
     @GetMapping("/temporal/predict-trend")
     @Operation(summary = "预测关系演化趋势")
     public Result<Map<String, Object>> predictRelationTrend(@RequestParam String relationType) {
         return Result.success(temporalService.predictRelationTrend(relationType));
     }
 
+    /**
+     * 验证时序一致性
+     */
     @GetMapping("/temporal/validate")
     @Operation(summary = "验证时序一致性")
     public Result<Map<String, Object>> validateTemporalConsistency() {
@@ -351,6 +462,9 @@ public class KnowledgeEnhancedController {
 
     // ========== 多语言知识图谱融合 ==========
 
+    /**
+     * 查找多语言等价实体
+     */
     @GetMapping("/multilingual/equivalents")
     @Operation(summary = "查找多语言等价实体")
     public Result<Map<String, Object>> findMultilingualEquivalents(
@@ -359,6 +473,9 @@ public class KnowledgeEnhancedController {
         return Result.success(multilingualService.findMultilingualEquivalents(entityName, sourceLang));
     }
 
+    /**
+     * 创建跨语言实体链接
+     */
     @PostMapping("/multilingual/link")
     @Operation(summary = "创建跨语言实体链接")
     public Result<String> createCrossLingualLink(
@@ -374,6 +491,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 融合两个语言的知识图谱
+     */
     @PostMapping("/multilingual/fuse")
     @Operation(summary = "融合两个语言的知识图谱")
     public Result<Map<String, Object>> fuseLanguageGraphs(
@@ -382,6 +502,9 @@ public class KnowledgeEnhancedController {
         return Result.success(multilingualService.fuseLanguageGraphs(sourceLang, targetLang));
     }
 
+    /**
+     * 查找跨语言关联实体
+     */
     @GetMapping("/multilingual/cross-lingual-relations")
     @Operation(summary = "查找跨语言关联实体")
     public Result<List<Map<String, Object>>> findCrossLingualRelations(
@@ -392,12 +515,18 @@ public class KnowledgeEnhancedController {
         return Result.success(multilingualService.findCrossLingualRelations(entityName, sourceLang, targetLang, maxDepth));
     }
 
+    /**
+     * 检测语言分布
+     */
     @GetMapping("/multilingual/language-distribution")
     @Operation(summary = "检测语言分布")
     public Result<Map<String, Object>> detectLanguageDistribution() {
         return Result.success(multilingualService.detectLanguageDistribution());
     }
 
+    /**
+     * 为实体添加语言标签
+     */
     @PostMapping("/multilingual/tag-language")
     @Operation(summary = "为实体添加语言标签")
     public Result<String> tagNodeLanguage(
@@ -411,6 +540,9 @@ public class KnowledgeEnhancedController {
         }
     }
 
+    /**
+     * 添加多语言别名
+     */
     @PostMapping("/multilingual/aliases")
     @Operation(summary = "添加多语言别名")
     public Result<String> addMultilingualAliases(
@@ -426,12 +558,18 @@ public class KnowledgeEnhancedController {
 
     // ========== Graph Embedding ==========
 
+    /**
+     * 生成所有节点嵌入向量
+     */
     @PostMapping("/embedding/generate")
     @Operation(summary = "生成所有节点嵌入向量")
     public Result<Map<String, Object>> generateAllEmbeddings() {
         return Result.success(embeddingService.generateAllEmbeddings());
     }
 
+    /**
+     * 链接预测
+     */
     @GetMapping("/embedding/predict-link")
     @Operation(summary = "链接预测")
     public Result<Map<String, Object>> predictLink(
@@ -440,6 +578,9 @@ public class KnowledgeEnhancedController {
         return Result.success(embeddingService.predictLink(nodeId1, nodeId2));
     }
 
+    /**
+     * 预测缺失链接
+     */
     @GetMapping("/embedding/missing-links")
     @Operation(summary = "预测缺失链接")
     public Result<List<Map<String, Object>>> predictMissingLinks(
@@ -447,6 +588,9 @@ public class KnowledgeEnhancedController {
         return Result.success(embeddingService.predictMissingLinks(topK));
     }
 
+    /**
+     * 查找相似节点
+     */
     @GetMapping("/embedding/similar-nodes/{nodeId}")
     @Operation(summary = "查找相似节点")
     public Result<List<Map<String, Object>>> findSimilarNodes(
@@ -455,6 +599,9 @@ public class KnowledgeEnhancedController {
         return Result.success(embeddingService.findSimilarNodes(nodeId, topK));
     }
 
+    /**
+     * 节点聚类
+     */
     @PostMapping("/embedding/cluster")
     @Operation(summary = "节点聚类")
     public Result<Map<String, Object>> clusterNodes(
@@ -462,12 +609,18 @@ public class KnowledgeEnhancedController {
         return Result.success(embeddingService.clusterNodes(numClusters));
     }
 
+    /**
+     * 获取节点嵌入向量
+     */
     @GetMapping("/embedding/node/{nodeId}")
     @Operation(summary = "获取节点嵌入向量")
     public Result<Map<String, Object>> getNodeEmbedding(@PathVariable String nodeId) {
         return Result.success(embeddingService.getNodeEmbeddingData(nodeId));
     }
 
+    /**
+     * 导出所有节点嵌入
+     */
     @GetMapping("/embedding/export")
     @Operation(summary = "导出所有节点嵌入")
     public Result<Map<String, List<Double>>> exportAllEmbeddings() {
@@ -476,6 +629,9 @@ public class KnowledgeEnhancedController {
 
     // ========== GraphRAG ==========
 
+    /**
+     * GraphRAG问答
+     */
     @PostMapping("/graphrag/qa")
     @Operation(summary = "GraphRAG问答", description = "融合知识图谱和向量检索的增强问答")
     public Result<Map<String, Object>> graphRagQa(
@@ -484,12 +640,18 @@ public class KnowledgeEnhancedController {
         return Result.success(graphRagService.graphRagQa(question, topK));
     }
 
+    /**
+     * 实体增强检索
+     */
     @PostMapping("/graphrag/entity-enhanced-retrieval")
     @Operation(summary = "实体增强检索")
     public Result<Map<String, Object>> entityEnhancedRetrieval(@RequestParam String question) {
         return Result.success(graphRagService.entityEnhancedRetrieval(question));
     }
 
+    /**
+     * 图谱引导的检索路径
+     */
     @PostMapping("/graphrag/guided-retrieval")
     @Operation(summary = "图谱引导的检索路径")
     public Result<Map<String, Object>> graphGuidedRetrieval(
@@ -498,6 +660,9 @@ public class KnowledgeEnhancedController {
         return Result.success(graphRagService.graphGuidedRetrieval(question, maxPathLength));
     }
 
+    /**
+     * 图谱增强排序融合
+     */
     @PostMapping("/graphrag/enhanced-ranking")
     @Operation(summary = "图谱增强排序融合")
     public Result<List<Map<String, Object>>> graphEnhancedRanking(
@@ -506,6 +671,9 @@ public class KnowledgeEnhancedController {
         return Result.success(graphRagService.graphEnhancedRanking(question, vectorResults));
     }
 
+    /**
+     * 获取GraphRAG统计信息
+     */
     @GetMapping("/graphrag/stats")
     @Operation(summary = "获取GraphRAG统计信息")
     public Result<Map<String, Object>> getGraphRagStats() {
@@ -514,6 +682,9 @@ public class KnowledgeEnhancedController {
 
     // ========== 图谱演化 ==========
 
+    /**
+     * 增量更新知识图谱
+     */
     @PostMapping("/evolution/incremental-update")
     @Operation(summary = "增量更新知识图谱")
     public Result<Map<String, Object>> incrementalUpdate(
@@ -523,12 +694,18 @@ public class KnowledgeEnhancedController {
         return Result.success(evolutionService.incrementalUpdate(text, documentId, documentName));
     }
 
+    /**
+     * 重新计算核心节点
+     */
     @PostMapping("/evolution/recalculate-core")
     @Operation(summary = "重新计算核心节点")
     public Result<Map<String, Object>> recalculateCoreNodes() {
         return Result.success(evolutionService.recalculateCoreNodes());
     }
 
+    /**
+     * 清理低置信度关系
+     */
     @PostMapping("/evolution/cleanup-relations")
     @Operation(summary = "清理低置信度关系")
     public Result<Map<String, Object>> cleanupRelations(
@@ -536,18 +713,27 @@ public class KnowledgeEnhancedController {
         return Result.success(evolutionService.cleanupLowConfidenceRelations(threshold));
     }
 
+    /**
+     * 清理孤立节点
+     */
     @PostMapping("/evolution/cleanup-isolated")
     @Operation(summary = "清理孤立节点")
     public Result<Map<String, Object>> cleanupIsolatedNodes() {
         return Result.success(evolutionService.cleanupIsolatedNodes());
     }
 
+    /**
+     * 检查图谱健康度
+     */
     @GetMapping("/evolution/health")
     @Operation(summary = "检查图谱健康度")
     public Result<Map<String, Object>> checkGraphHealth() {
         return Result.success(evolutionService.checkGraphHealth());
     }
 
+    /**
+     * 获取演化日志
+     */
     @GetMapping("/evolution/log")
     @Operation(summary = "获取演化日志")
     public Result<List<Map<String, Object>>> getEvolutionLog(
@@ -555,12 +741,18 @@ public class KnowledgeEnhancedController {
         return Result.success(evolutionService.getEvolutionLog(limit));
     }
 
+    /**
+     * 获取图谱演化趋势
+     */
     @GetMapping("/evolution/trend")
     @Operation(summary = "获取图谱演化趋势")
     public Result<Map<String, Object>> getEvolutionTrend() {
         return Result.success(evolutionService.getEvolutionTrend());
     }
 
+    /**
+     * 手动触发全量演化
+     */
     @PostMapping("/evolution/trigger-full")
     @Operation(summary = "手动触发全量演化")
     public Result<Map<String, Object>> triggerFullEvolution() {

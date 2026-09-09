@@ -22,6 +22,7 @@ import java.util.Map;
 @Service
 public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, ModelUsageRecord> {
 
+    /** 入参时间格式（yyyy-MM-dd HH:mm:ss） */
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     /**
@@ -65,6 +66,7 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
         }
         List<ModelUsageRecord> list = this.list(wrapper);
         Map<String, Object> result = new HashMap<>();
+        // 内存中做汇总（记录量受时间范围约束，数据可控）
         long total = list.size();
         long success = list.stream().filter(r -> r.getSuccess() != null && r.getSuccess() == 1).count();
         long fail = total - success;
@@ -79,6 +81,7 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
         result.put("promptTokens", promptTokens);
         result.put("completionTokens", completionTokens);
         result.put("avgLatencyMs", Math.round(avgLatency));
+        // 成本求和，保留 4 位小数（单次成本极小，需足够精度）
         java.math.BigDecimal totalCost = list.stream()
                 .map(r -> r.getCost() == null ? java.math.BigDecimal.ZERO : r.getCost())
                 .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);

@@ -25,20 +25,29 @@ public enum IntentEnum {
         return name;
     }
 
+    /** 全部意图名拼接（顿号分隔），用于拼进意图识别提示词 */
     public static String allowedValues() {
         return Arrays.stream(values()).map(IntentEnum::getName).collect(Collectors.joining("、"));
     }
 
+    /**
+     * 把模型输出的意图文本解析为枚举。
+     * 解析策略：精确匹配（中文名/英文枚举名）→ 关键词兜底 → 默认「咨询」，
+     * 保证模型输出不规范时链路也不中断。
+     */
     public static IntentEnum fromName(String raw) {
+        // 模型没输出意图时按咨询处理
         if (raw == null || raw.isBlank()) {
             return CONSULT;
         }
         String text = raw.trim();
+        // 第一轮：精确匹配中文名或英文枚举名（忽略大小写）
         for (IntentEnum item : values()) {
             if (item.name.equals(text) || item.name().equalsIgnoreCase(text)) {
                 return item;
             }
         }
+        // 第二轮：关键词兜底，兼容模型输出了带解释的文本（如"用户想查物流"）
         if (text.contains("物流") || text.contains("快递") || text.contains("发货")) {
             return QUERY_LOGISTICS;
         }
@@ -51,6 +60,7 @@ public enum IntentEnum {
         if (text.contains("转人工") || text.contains("人工客服") || text.contains("转接")) {
             return TO_AGENT;
         }
+        // 都不命中时按咨询走知识库问答，是最安全的默认路由
         return CONSULT;
     }
 }

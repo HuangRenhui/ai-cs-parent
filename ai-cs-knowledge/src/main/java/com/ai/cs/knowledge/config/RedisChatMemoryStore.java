@@ -30,6 +30,9 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
         this.ragProperties = ragProperties;
     }
 
+    /**
+     * 初始化序列化器与Value操作句柄
+     */
     @PostConstruct
     public void init() {
         // 设置序列化，避免乱码
@@ -38,16 +41,25 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
         ops = redisTemplate.opsForValue();
     }
 
+    /**
+     * 拼接Redis存储key（统一前缀，便于批量管理与隔离）
+     */
     private String getKey(String memoryId) {
         return KEY_PREFIX + memoryId;
     }
 
+    /**
+     * 读取指定会话的对话历史
+     */
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         String key = getKey((String) memoryId);
         return (List<ChatMessage>) ops.get(key);
     }
 
+    /**
+     * 更新指定会话的对话历史，并按配置刷新过期时间
+     */
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
         String key = getKey((String) memoryId);
@@ -55,6 +67,9 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
         ops.set(key, messages, Duration.ofSeconds(ttl));
     }
 
+    /**
+     * 删除指定会话的对话历史；传入"*"时清空全部会话记忆
+     */
     @Override
     public void deleteMessages(Object memoryId) {
         String key = getKey((String) memoryId);

@@ -52,13 +52,21 @@ public class HybridRetrievalService {
      * 混合检索结果条目
      */
     public static class HybridSearchResult {
+        /** 结果条目ID（向量ID或知识ID） */
         public String id;
+        /** 命中的文本内容（文档片段/图片描述/音频描述） */
         public String content;
+        /** 所属模态 */
         public String modality;   // TEXT, IMAGE, AUDIO, VIDEO
+        /** 数据来源类型 */
         public String sourceType; // faq, document, image_knowledge, audio_knowledge
+        /** 来源业务ID（FAQ主键/资源ID等） */
         public String sourceId;
+        /** 来源标题（FAQ问题/知识标题） */
         public String sourceTitle;
+        /** 相关性分数（融合排序后会被改写为融合分） */
         public double score;
+        /** 附加元数据（存储路径、标签等） */
         public Map<String, Object> metadata;
 
         public HybridSearchResult(String id, String content, String modality, double score) {
@@ -563,6 +571,7 @@ public class HybridRetrievalService {
         return false;
     }
 
+    /** 获取模态的中文名称（用于Prompt与日志展示） */
     private String getModalityName(String modality) {
         return switch (modality != null ? modality.toUpperCase() : "") {
             case "TEXT" -> "文本";

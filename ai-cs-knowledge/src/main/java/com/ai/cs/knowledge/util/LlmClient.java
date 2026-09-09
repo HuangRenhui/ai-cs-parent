@@ -24,6 +24,12 @@ public class LlmClient {
     @Resource
     private ModelRouter modelRouter;
 
+    /**
+     * 单轮对话调用（仅用户提示词）
+     * @param prompt 用户提示词
+     * @return 模型回答文本
+     * @throws IOException 提示词为空或模型调用失败时抛出
+     */
     public String call(String prompt) throws IOException {
         if (!StringUtils.hasText(prompt)) {
             throw new IOException("调用大模型异常: 提示词为空");
@@ -31,12 +37,21 @@ public class LlmClient {
         try {
             return modelRouter.chat(List.of(Map.of("role", "user", "content", prompt)));
         } catch (ModelCallException e) {
+            // 包装为IOException，保持对上层Service的异常语义不变
             throw new IOException("调用大模型异常: " + e.getMessage(), e);
         }
     }
 
+    /**
+     * 带系统提示词的对话调用
+     * @param systemPrompt 系统提示词（可为空，空则不携带system消息）
+     * @param userPrompt 用户提示词
+     * @return 模型回答文本
+     * @throws IOException 用户提示词为空或模型调用失败时抛出
+     */
     public String callWithSystem(String systemPrompt, String userPrompt) throws IOException {
         List<Map<String, String>> messages = new ArrayList<>();
+        // 系统提示词非空才加入消息列表
         if (StringUtils.hasText(systemPrompt)) {
             messages.add(Map.of("role", "system", "content", systemPrompt));
         }
@@ -51,10 +66,18 @@ public class LlmClient {
         }
     }
 
+    /**
+     * 多消息列表对话调用
+     * 将宽松的Map消息结构归一化为role/content字符串对，role缺省按user处理
+     * @param messages 消息列表（每条含role、content键）
+     * @return 模型回答文本
+     * @throws IOException 消息为空或模型调用失败时抛出
+     */
     public String callWithMessages(List<Map<String, Object>> messages) throws IOException {
         if (messages == null || messages.isEmpty()) {
             throw new IOException("调用大模型异常: 提示词为空");
         }
+        // 归一化消息结构，防止role/content为非字符串类型导致模型接口报错
         List<Map<String, String>> converted = new ArrayList<>();
         for (Map<String, Object> msg : messages) {
             Object role = msg.get("role");

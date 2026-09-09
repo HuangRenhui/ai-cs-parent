@@ -42,6 +42,10 @@ public class FaqController {
     @Resource
     private AiModelProperties aiModelProperties;
 
+    /**
+     * 知识库健康检查
+     * 汇总Milvus连通状态、集合名与当前Embedding模型，供前端探活展示
+     */
     @GetMapping("/health")
     @Operation(summary = "知识库健康检查")
     public Result<KnowledgeHealthVO> health() {
@@ -53,6 +57,10 @@ public class FaqController {
         return Result.success(vo);
     }
 
+    /**
+     * 查询FAQ列表
+     * 兼容三种用法：传page走分页；只传keyword/status时按条件查询（最多500条）；都不传返回全部启用FAQ
+     */
     @GetMapping("/list")
     @Operation(summary = "查询FAQ列表", description = "无分页时返回数组；传入 page 时返回分页结构")
     public Result<?> list(
@@ -61,15 +69,22 @@ public class FaqController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long page,
             @RequestParam(required = false) Long size) {
+        // 显式分页请求
         if (page != null) {
             return Result.success(faqService.pageList(tenantCode, keyword, status, page, size == null ? 20 : size));
         }
+        // 带筛选条件但不分页：用大页拉取记录列表
         if (StringUtils.hasText(keyword) || status != null) {
             return Result.success(faqService.pageList(tenantCode, keyword, status, 1, 500).getRecords());
         }
+        // 无参数：返回全部启用状态的FAQ
         return Result.success(faqService.getEnableFaqList(tenantCode));
     }
 
+    /**
+     * 知识未命中回收
+     * 分页查询用户提问但未命中知识库的记录，用于运营补充知识
+     */
     @GetMapping("/miss")
     @Operation(summary = "知识未命中回收")
     public Result<PageResult<KnowledgeMiss>> miss(
@@ -79,9 +94,14 @@ public class FaqController {
         return Result.success(missService.pageList(tenantCode, page, size));
     }
 
+    /**
+     * 新增FAQ
+     * 先落库再向量化写入Milvus，向量化失败不影响落库结果（返回提示）
+     */
     @PostMapping("/save")
     @Operation(summary = "新增FAQ", description = "创建新的FAQ并自动向量化存入Milvus")
     public Result<String> save(@RequestBody KnowledgeFaq faq) {
+        // 租户编码归一化，避免大小写/空格导致的数据隔离错乱
         faq.setTenantCode(KnowledgeFaqService.normalizeTenant(faq.getTenantCode()));
         faqService.save(faq);
         
@@ -99,6 +119,10 @@ public class FaqController {
         }
     }
 
+    /**
+     * 更新FAQ
+     * 先带出旧的milvusId以便更新向量时定位旧记录，再落库并增量更新向量
+     */
     @PutMapping("/update")
     @Operation(summary = "更新FAQ", description = "修改FAQ信息并增量更新Milvus向量")
     public Result<String> update(@RequestBody KnowledgeFaq faq) {
@@ -127,6 +151,10 @@ public class FaqController {
         }
     }
 
+    /**
+     * 删除FAQ
+     * 同步删除Milvus中对应的向量，避免残留脏数据
+     */
     @DeleteMapping("/delete/{id}")
     @Operation(summary = "删除FAQ", description = "删除FAQ及其在Milvus中的向量数据")
     public Result<String> delete(@PathVariable Long id) {
@@ -141,13 +169,17 @@ public class FaqController {
         return Result.success("删除成功");
     }
 
-    // 语义检索接口（对接Milvus）
+    /**
+     * 语义检索问答（对接Milvus）
+     * 带租户/会话参数时走租户隔离检索，否则走全局语义问答
+     */
     @GetMapping("/search")
     @Operation(summary = "语义检索问答", description = "基于Milvus向量数据库的语义检索和RAG问答")
     public Result<String> search(@Parameter(description = "用户问题") @RequestParam String question,
                                  @RequestParam(required = false) String tenantCode,
                                  @RequestParam(required = false) String sessionId) {
         try {
+            // 有租户或会话标识时按租户隔离检索，保证多租户数据安全
             if (StringUtils.hasText(tenantCode) || StringUtils.hasText(sessionId)) {
                 RagSearchResultDTO data = ragSearchService.semanticSearch(question, tenantCode, sessionId);
                 if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
@@ -164,6 +196,10 @@ public class FaqController {
         }
     }
 
+    /**
+     * 租户隔离 RAG 检索
+     * 与/search不同，返回包含命中状态、答复与引用的完整结构
+     */
     @GetMapping("/rag/search")
     @Operation(summary = "租户隔离 RAG 检索", description = "返回命中状态、答复与引用")
     public Result<RagSearchResultDTO> ragSearch(@RequestParam String question,
@@ -179,6 +215,9 @@ public class FaqController {
         return Result.success(data);
     }
 
+    /**
+     * 按 ID 查询 FAQ
+     */
     @GetMapping("/faq/{id}")
     @Operation(summary = "按 ID 查询 FAQ")
     public Result<KnowledgeFaq> getFaqById(@PathVariable Long id) {
@@ -189,18 +228,24 @@ public class FaqController {
         return Result.success(faq);
     }
 
+    /**
+     * 批量导入FAQ
+     * 逐条落库并向量化，单条向量化失败不影响整体导入
+     */
     @PostMapping("/import")
     @Operation(summary = "批量导入FAQ")
     public Result<String> importFaqs(@RequestBody List<KnowledgeFaq> faqs) {
         if (faqs == null || faqs.isEmpty()) {
             throw new BusinessException("导入列表不能为空");
         }
+        // 限制单批次数量，防止大批量导入拖垮Embedding服务
         if (faqs.size() > 200) {
             throw new BusinessException("单次最多导入 200 条");
         }
         int saved = 0;
         int indexed = 0;
         for (KnowledgeFaq faq : faqs) {
+            // 强制清空ID确保是新增而非更新；租户归一化；状态默认启用
             faq.setId(null);
             faq.setTenantCode(KnowledgeFaqService.normalizeTenant(faq.getTenantCode()));
             if (faq.getStatus() == null) {

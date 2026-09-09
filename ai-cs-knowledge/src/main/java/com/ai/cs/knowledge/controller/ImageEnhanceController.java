@@ -63,17 +63,22 @@ public class ImageEnhanceController {
 
     // ========== 批量上传处理 ==========
 
+    /**
+     * 批量上传图片
+     */
     @PostMapping("/batch/upload")
     @Operation(summary = "批量上传图片", description = "一次上传多张图片并批量处理")
     public Result<BatchProcessService.BatchResult> batchUpload(
             @Parameter(description = "图片文件列表") @RequestParam("files") MultipartFile[] files) {
         try {
+            // 委托批量处理服务逐文件处理，单文件失败不影响整批
             BatchProcessService.BatchResult result = batchProcessService.processBatch(files, file -> {
                 BatchProcessService.FileResult fr = new BatchProcessService.FileResult();
                 fr.setOriginalFilename(file.getOriginalFilename());
                 // 调用现有上传处理逻辑
                 var metadata = imageProcessService.uploadAndProcess(file);
                 fr.setFileId(metadata.getFileId());
+                // 提取关键元数据返回给前端展示
                 Map<String, Object> meta = new HashMap<>();
                 meta.put("format", metadata.getFormat());
                 meta.put("width", metadata.getWidth());
@@ -91,6 +96,9 @@ public class ImageEnhanceController {
         }
     }
 
+    /**
+     * 查询批量处理进度
+     */
     @GetMapping("/batch/progress/{batchId}")
     @Operation(summary = "查询批量处理进度", description = "查询批量上传处理的实时进度")
     public Result<BatchProcessService.BatchProgress> batchProgress(
@@ -104,17 +112,23 @@ public class ImageEnhanceController {
 
     // ========== 图片去重检测 ==========
 
+    /**
+     * 图片去重检测
+     * 同时计算MD5（精确重复）与感知哈希（视觉相似）两种指纹进行判定
+     */
     @PostMapping("/dedup/check")
     @Operation(summary = "图片去重检测", description = "基于感知哈希检测图片是否重复")
     public Result<ImageDeduplicationService.DeduplicationResult> checkDuplicate(
             @Parameter(description = "图片文件") @RequestParam("file") MultipartFile file) {
         try {
             byte[] fileBytes = file.getBytes();
+            // 先尝试解码为图片，无法解析则说明不是有效图片文件
             BufferedImage image = ImageIO.read(new java.io.ByteArrayInputStream(fileBytes));
             if (image == null) {
                 return Result.fail("无法解析图片");
             }
 
+            // MD5用于检测字节级完全相同的文件，感知哈希用于检测视觉相似的图片
             String md5Hash = deduplicationService.computeMd5Hash(fileBytes);
             String perceptualHash = deduplicationService.computePerceptualHash(image);
             String fileId = UUID.randomUUID().toString();
@@ -132,6 +146,9 @@ public class ImageEnhanceController {
         }
     }
 
+    /**
+     * 查找相似图片
+     */
     @GetMapping("/dedup/similar")
     @Operation(summary = "查找相似图片", description = "查找与指定图片视觉上相似的图片")
     public Result<List<ImageDeduplicationService.SimilarImageResult>> findSimilar(
@@ -142,6 +159,7 @@ public class ImageEnhanceController {
             if (image == null) {
                 return Result.fail("无法解析图片");
             }
+            // 仅用感知哈希做相似检索（MD5相同仅代表完全相同，不属于"相似"）
             String perceptualHash = deduplicationService.computePerceptualHash(image);
             List<ImageDeduplicationService.SimilarImageResult> results =
                     deduplicationService.findSimilar(perceptualHash, topK);
@@ -154,6 +172,9 @@ public class ImageEnhanceController {
 
     // ========== 版本管理 ==========
 
+    /**
+     * 获取图片版本列表
+     */
     @GetMapping("/version/{fileId}")
     @Operation(summary = "获取图片版本列表", description = "获取图片的所有历史版本")
     public Result<List<ImageVersionService.ImageVersion>> getVersions(
@@ -161,6 +182,9 @@ public class ImageEnhanceController {
         return Result.success(versionService.getVersions(fileId));
     }
 
+    /**
+     * 切换图片版本
+     */
     @PostMapping("/version/{fileId}/switch")
     @Operation(summary = "切换图片版本", description = "切换到指定的历史版本")
     public Result<ImageVersionService.ImageVersion> switchVersion(
@@ -174,6 +198,9 @@ public class ImageEnhanceController {
         }
     }
 
+    /**
+     * 回退图片版本
+     */
     @PostMapping("/version/{fileId}/rollback")
     @Operation(summary = "回退图片版本", description = "回退到上一个版本")
     public Result<ImageVersionService.ImageVersion> rollbackVersion(
@@ -186,6 +213,9 @@ public class ImageEnhanceController {
         }
     }
 
+    /**
+     * 对比版本差异
+     */
     @GetMapping("/version/{fileId}/diff")
     @Operation(summary = "对比版本差异", description = "比较两个版本的差异")
     public Result<ImageVersionService.VersionDiff> compareVersions(
@@ -202,12 +232,18 @@ public class ImageEnhanceController {
 
     // ========== 访问统计 ==========
 
+    /**
+     * 获取图片统计
+     */
     @GetMapping("/stats/{fileId}")
     @Operation(summary = "获取图片统计", description = "获取图片的浏览量、下载量等统计数据")
     public Result<ImageStatsService.ImageStats> getStats(@PathVariable String fileId) {
         return Result.success(statsService.getStats(fileId));
     }
 
+    /**
+     * 热门图片排行
+     */
     @GetMapping("/stats/hot")
     @Operation(summary = "热门图片排行", description = "获取浏览量或下载量最高的图片排行")
     public Result<List<ImageStatsService.ImageStats>> getHotImages(
@@ -216,12 +252,18 @@ public class ImageEnhanceController {
         return Result.success(statsService.getHotImages(topN, sortBy));
     }
 
+    /**
+     * 图片统计汇总
+     */
     @GetMapping("/stats/summary")
     @Operation(summary = "图片统计汇总", description = "获取所有图片的统计数据汇总")
     public Result<Map<String, Object>> getStatsSummary() {
         return Result.success(statsService.getSummary(null, null));
     }
 
+    /**
+     * 记录图片浏览
+     */
     @PostMapping("/stats/{fileId}/view")
     @Operation(summary = "记录图片浏览", description = "记录一次图片浏览事件")
     public Result<Void> recordView(@PathVariable String fileId) {
@@ -229,6 +271,9 @@ public class ImageEnhanceController {
         return Result.success();
     }
 
+    /**
+     * 记录图片下载
+     */
     @PostMapping("/stats/{fileId}/download")
     @Operation(summary = "记录图片下载", description = "记录一次图片下载事件")
     public Result<Void> recordDownload(@PathVariable String fileId) {
@@ -238,6 +283,9 @@ public class ImageEnhanceController {
 
     // ========== 防盗链 ==========
 
+    /**
+     * 生成访问Token
+     */
     @PostMapping("/hotlink/token")
     @Operation(summary = "生成访问Token", description = "为图片生成防盗链访问Token")
     public Result<Map<String, String>> generateToken(
@@ -251,11 +299,15 @@ public class ImageEnhanceController {
         return Result.success(result);
     }
 
+    /**
+     * 生成签名URL
+     */
     @PostMapping("/hotlink/signed-url")
     @Operation(summary = "生成签名URL", description = "生成带签名的防盗链URL")
     public Result<Map<String, String>> generateSignedUrl(
             @RequestParam String fileId,
             @RequestParam(defaultValue = "3600") long expireSeconds) {
+        // 基于下载接口路径生成带时效签名的URL，过期或被篡改则拒绝访问
         String signedUrl = hotlinkService.generateSignedUrl("/api/image/download/" + fileId, fileId, expireSeconds);
         Map<String, String> result = new HashMap<>();
         result.put("fileId", fileId);
@@ -264,12 +316,18 @@ public class ImageEnhanceController {
         return Result.success(result);
     }
 
+    /**
+     * 获取Referer白名单
+     */
     @GetMapping("/hotlink/whitelist")
     @Operation(summary = "获取Referer白名单", description = "获取防盗链Referer白名单列表")
     public Result<Set<String>> getWhitelist() {
         return Result.success(hotlinkService.getRefererWhitelist());
     }
 
+    /**
+     * 添加Referer白名单
+     */
     @PostMapping("/hotlink/whitelist")
     @Operation(summary = "添加Referer白名单", description = "添加域名到Referer白名单")
     public Result<Void> addWhitelist(@RequestParam String domain) {
@@ -277,6 +335,9 @@ public class ImageEnhanceController {
         return Result.success();
     }
 
+    /**
+     * 移除Referer白名单
+     */
     @DeleteMapping("/hotlink/whitelist")
     @Operation(summary = "移除Referer白名单", description = "从Referer白名单中移除域名")
     public Result<Void> removeWhitelist(@RequestParam String domain) {
@@ -286,11 +347,15 @@ public class ImageEnhanceController {
 
     // ========== OCR文字识别 ==========
 
+    /**
+     * 图片OCR识别
+     */
     @PostMapping("/ocr")
     @Operation(summary = "图片OCR识别", description = "提取图片中的文字内容")
     public Result<MediaOcrService.OcrResult> performOcr(
             @Parameter(description = "图片文件") @RequestParam("file") MultipartFile file) {
         try {
+            // OCR服务需要本地文件，先落盘为临时文件，识别完成后立即删除
             File tempFile = saveTempFile(file);
             MediaOcrService.OcrResult result = ocrService.performImageOcr(tempFile);
             tempFile.delete();
@@ -303,11 +368,15 @@ public class ImageEnhanceController {
 
     // ========== AI内容审核 ==========
 
+    /**
+     * 图片内容审核
+     */
     @PostMapping("/moderate")
     @Operation(summary = "图片内容审核", description = "AI审核图片内容（涉黄涉暴检测）")
     public Result<MediaModerationService.ModerationResult> moderateImage(
             @Parameter(description = "图片文件") @RequestParam("file") MultipartFile file) {
         try {
+            // 审核服务需要本地文件，先落盘为临时文件，审核完成后立即删除
             File tempFile = saveTempFile(file);
             MediaModerationService.ModerationResult result = moderationService.moderateImage(tempFile);
             tempFile.delete();
@@ -320,6 +389,9 @@ public class ImageEnhanceController {
 
     // ========== 智能标签 ==========
 
+    /**
+     * 自动生成标签
+     */
     @PostMapping("/tags/auto")
     @Operation(summary = "自动生成标签", description = "基于图片元数据自动生成标签")
     public Result<List<MediaTagService.MediaTag>> autoTag(
@@ -332,12 +404,18 @@ public class ImageEnhanceController {
         return Result.success(tags);
     }
 
+    /**
+     * 获取图片标签
+     */
     @GetMapping("/tags/{fileId}")
     @Operation(summary = "获取图片标签", description = "获取图片的所有标签")
     public Result<List<MediaTagService.MediaTag>> getTags(@PathVariable String fileId) {
         return Result.success(tagService.getTags(fileId));
     }
 
+    /**
+     * 添加图片标签
+     */
     @PostMapping("/tags/{fileId}")
     @Operation(summary = "添加图片标签", description = "手动为图片添加标签")
     public Result<Void> addTag(
@@ -348,6 +426,9 @@ public class ImageEnhanceController {
         return Result.success();
     }
 
+    /**
+     * 移除图片标签
+     */
     @DeleteMapping("/tags/{fileId}")
     @Operation(summary = "移除图片标签", description = "移除图片的指定标签")
     public Result<Void> removeTag(
@@ -357,6 +438,9 @@ public class ImageEnhanceController {
         return Result.success();
     }
 
+    /**
+     * 按标签搜索图片
+     */
     @GetMapping("/tags/search")
     @Operation(summary = "按标签搜索图片", description = "根据标签名称搜索匹配的图片")
     public Result<List<String>> searchByTag(
@@ -365,12 +449,18 @@ public class ImageEnhanceController {
         return Result.success(tagService.searchByTag(tagName, category));
     }
 
+    /**
+     * 获取预定义标签库
+     */
     @GetMapping("/tags/predefined")
     @Operation(summary = "获取预定义标签库", description = "获取系统预定义的标签分类和选项")
     public Result<Map<String, List<String>>> getPredefinedTags() {
         return Result.success(tagService.getPredefinedTags());
     }
 
+    /**
+     * 推荐标签
+     */
     @GetMapping("/tags/suggest/{fileId}")
     @Operation(summary = "推荐标签", description = "基于已有标签推荐新的标签")
     public Result<List<String>> suggestTags(
@@ -381,6 +471,9 @@ public class ImageEnhanceController {
 
     // ========== 对象存储 ==========
 
+    /**
+     * 获取存储访问URL
+     */
     @GetMapping("/storage/url/{fileId}")
     @Operation(summary = "获取存储访问URL", description = "获取图片的存储访问URL（含CDN加速）")
     public Result<Map<String, String>> getStorageUrl(@PathVariable String fileId) {
@@ -393,6 +486,10 @@ public class ImageEnhanceController {
 
     // ========== 工具方法 ==========
 
+    /**
+     * 将上传文件保存为临时文件
+     * 文件名加时间戳前缀避免并发上传同名文件互相覆盖，调用方使用完需自行删除
+     */
     private File saveTempFile(MultipartFile file) throws Exception {
         String tempPath = System.getProperty("java.io.tmpdir") + "/" +
                 System.currentTimeMillis() + "_" + file.getOriginalFilename();

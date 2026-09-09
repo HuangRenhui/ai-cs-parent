@@ -22,35 +22,53 @@ public class UserController {
     @Resource
     private UserService userService;
 
+    /**
+     * 用户列表（全量）
+     */
     @GetMapping("/list")
     public Result<List<User>> list() {
         return Result.success(userService.list());
     }
 
+    /**
+     * 用户分页查询
+     */
     @GetMapping("/page")
     public Result<Page<User>> page(@RequestParam(defaultValue = "1") int pageNum,
                                     @RequestParam(defaultValue = "10") int pageSize) {
         return Result.success(userService.page(new Page<>(pageNum, pageSize)));
     }
 
+    /**
+     * 创建用户（密码在 service 层加密入库）
+     */
     @PostMapping("/save")
     public Result<String> save(@RequestBody User user) {
         userService.createUser(user);
         return Result.success("创建成功");
     }
 
+    /**
+     * 更新用户（密码留空表示不修改）
+     */
     @PutMapping("/update")
     public Result<String> update(@RequestBody User user) {
         userService.updateUser(user);
         return Result.success("更新成功");
     }
 
+    /**
+     * 删除用户（逻辑删除）
+     */
     @DeleteMapping("/delete/{id}")
     public Result<String> delete(@PathVariable Long id) {
         userService.removeById(id);
         return Result.success("删除成功");
     }
 
+    /**
+     * 用户详情
+     */
     @GetMapping("/info/{id}")
     public Result<User> info(@PathVariable Long id) {
         return Result.success(userService.getById(id));

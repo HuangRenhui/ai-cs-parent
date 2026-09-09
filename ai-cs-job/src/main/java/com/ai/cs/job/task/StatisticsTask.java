@@ -31,14 +31,17 @@ public class StatisticsTask {
     @Resource
     private JobLockService jobLockService;
 
+    /** 每小时统计开关 */
     @Value("${job.statistics-hourly:true}")
     private boolean hourlyEnabled;
 
+    /** 每日统计开关 */
     @Value("${job.statistics-daily:true}")
     private boolean dailyEnabled;
 
     /**
      * 每小时统计：汇总当前小时的新增数据
+     * cron 含义：每小时整点（0 分 0 秒）触发，统计的是"当前小时"开头至今的数据（分钟级近似）
      */
     @Scheduled(cron = "0 0 * * * ?")
     public void hourlyStatistics() {
@@ -92,6 +95,7 @@ public class StatisticsTask {
 
     /**
      * 每日统计：凌晨0:05汇总前一天完整数据
+     * cron 含义：每天 00:05 触发；特意避开 0 点整，给跨天写入的数据留出落库时间
      */
     @Scheduled(cron = "0 5 0 * * ?")
     public void dailyStatistics() {
@@ -150,7 +154,13 @@ public class StatisticsTask {
     }
 
     /**
-     * 插入或更新统计记录（使用INSERT ON DUPLICATE KEY UPDATE）
+     * 插入或更新统计记录（使用INSERT ON DUPLICATE KEY UPDATE，依赖 stat_date+stat_key 唯一键，
+     * 任务重跑或锁失效时也不会产生重复行，天然幂等）
+     *
+     * @param statDate 统计日期（yyyy-MM-dd）
+     * @param statKey  统计指标键，如 DAILY_SESSION、SESSION_HOURLY_09
+     * @param remark   指标中文说明
+     * @param count    统计数量
      */
     private void upsertStat(String statDate, String statKey, String remark, long count) {
         try {

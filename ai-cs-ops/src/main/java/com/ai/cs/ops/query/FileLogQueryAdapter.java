@@ -26,11 +26,19 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * 本地滚动日志文件查询适配器（单机/POC 实现）。
+ * 扫描工作目录及配置目录下的 *.log 文件，兼容「普通文本行」与「JSON 行」两种格式，
+ * 支持多条件过滤与分页；所有 message 在入库到视图前都会经 LogRedactor 脱敏。
+ * 后续接入 Loki/ES 时只需新增适配器实现，上层接口形状不变。
+ */
 @Component
 public class FileLogQueryAdapter implements LogQueryAdapter {
 
+    /** 普通文本日志行格式：时间戳 + 级别 + 正文（如 2026-09-07 12:00:00.123 INFO ...） */
     private static final Pattern PLAIN = Pattern.compile(
             "^(?<ts>\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?)\\s+(?<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\b(?<rest>.*)$");
+    /** 从日志正文中提取 requestId/traceId/sessionId/tenantId 等键值对 */
     private static final Pattern KV = Pattern.compile("(?i)\\b(requestId|traceId|sessionId|tenantId)\\s*[=:]\\s*([A-Za-z0-9._\\-]+)");
 
     @Resource
@@ -48,6 +56,10 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return "当前为本地滚动日志适配器（单机/POC）。接上 Loki/ES 后只换适配器，接口形状不变。";
     }
 
+    /**
+     * 多条件分页搜索日志：全量加载 → 条件过滤 → 按时间倒序 → 内存分页。
+     * 页码最小 1，页大小限制在 1~200，防止一次拉取过多拖垮内存。
+     */
     @Override
     public OpsLogPageVO search(OpsLogQuery query) {
         int page = query.getPage() == null || query.getPage() < 1 ? 1 : query.getPage();
@@ -62,12 +74,16 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         pageVO.setTotal(all.size());
         pageVO.setPage(page);
         pageVO.setSize(size);
+        // 内存分页切片，from/to 均做越界保护
         int from = Math.min((page - 1) * size, all.size());
         int to = Math.min(from + size, all.size());
         pageVO.setList(all.subList(from, to));
         return pageVO;
     }
 
+    /**
+     * 按请求 ID 查询全链路日志，按时间正序返回，便于还原一次请求的完整处理过程。
+     */
     @Override
     public List<OpsLogEntryVO> byRequestId(String requestId) {
         if (!StringUtils.hasText(requestId)) {
@@ -81,11 +97,17 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 扫描到的日志文件数。
+     */
     @Override
     public int fileCount() {
         return resolveFiles().size();
     }
 
+    /**
+     * 近期 WARN/ERROR 级别日志条数，供总览大盘展示。
+     */
     @Override
     public int recentErrorCount() {
         return (int) loadAll().stream()
@@ -93,6 +115,10 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
                 .count();
     }
 
+    /**
+     * 单条日志是否命中查询条件：ID 类字段模糊包含、级别精确匹配、
+     * 关键词匹配内容或 Logger 名、时间范围按字符串比较（日志时间格式统一时可比）。
+     */
     private boolean match(OpsLogEntryVO item, OpsLogQuery query) {
         if (!contains(item.getRequestId(), query.getRequestId())) {
             return false;
@@ -125,6 +151,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return true;
     }
 
+    /**
+     * 加载全部日志文件的尾部若干行并逐行解析；单文件读取失败时跳过，不影响其他文件。
+     */
     private List<OpsLogEntryVO> loadAll() {
         List<OpsLogEntryVO> rows = new ArrayList<>();
         int limit = Math.max(opsProperties.getMaxLinesPerFile(), 100);
@@ -144,6 +173,10 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return rows;
     }
 
+    /**
+     * 汇总待扫描的日志文件清单：配置目录（相对路径基于工作目录解析）
+     * + 工作目录/logs + 上级目录/logs，按文件名含 .log 过滤，去重保序。
+     */
     private List<Path> resolveFiles() {
         Set<Path> files = new LinkedHashSet<>();
         Path cwd = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
@@ -152,6 +185,7 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
             Path configured = Path.of(dir);
             dirs.add(configured.isAbsolute() ? configured : cwd.resolve(configured));
         }
+        // 兜底再扫工作目录及其父目录下的 logs，覆盖从项目根/模块目录两种启动方式
         dirs.add(cwd.resolve("logs"));
         if (cwd.getParent() != null) {
             dirs.add(cwd.getParent().resolve("logs"));
@@ -172,6 +206,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return new ArrayList<>(files);
     }
 
+    /**
+     * 读取文件尾部 limit 行：全量读入后截尾（POC 实现，大文件由 maxLinesPerFile 控制上限）。
+     */
     private static List<String> tailLines(Path file, int limit) throws IOException {
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
         if (lines.size() <= limit) {
@@ -180,6 +217,13 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return lines.subList(lines.size() - limit, lines.size());
     }
 
+    /**
+     * 解析单行日志：
+     * 1) 以 { 开头的按 JSON 行解析，JSON 损坏时降级为正则提取关键字段；
+     * 2) 普通文本行按「时间戳+级别+正文」格式匹配；
+     * 3) 都不匹配时整行作为 message。
+     * 无论哪种格式，message 都会脱敏，服务名缺失时按文件名推断。
+     */
     private OpsLogEntryVO parse(String line, Path file) {
         if (!StringUtils.hasText(line)) {
             return null;
@@ -193,6 +237,7 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
                 fillFromJson(entry, json, file);
                 return entry;
             } catch (Exception ignored) {
+                // JSON 不完整（如写文件中途被读）：降级为正则提取，提到关键字段就算有效行
                 fillFromBrokenJson(entry, trimmed, file);
                 if (StringUtils.hasText(entry.getTimestamp()) || StringUtils.hasText(entry.getLevel())) {
                     return entry;
@@ -214,6 +259,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return entry;
     }
 
+    /**
+     * 从 JSON 日志行填充字段：同一含义兼容多种键名（如 ts/timestamp/time）。
+     */
     private void fillFromJson(OpsLogEntryVO entry, JSONObject json, Path file) {
         entry.setTimestamp(firstText(json, "ts", "timestamp", "time"));
         entry.setLevel(firstText(json, "level"));
@@ -230,6 +278,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         }
     }
 
+    /**
+     * JSON 解析失败时的降级填充：用正则从残破文本中提取 "key":"value" 形式的字段。
+     */
     private void fillFromBrokenJson(OpsLogEntryVO entry, String text, Path file) {
         entry.setTimestamp(extractQuoted(text, "ts", "timestamp", "time"));
         entry.setLevel(extractQuoted(text, "level"));
@@ -246,6 +297,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         }
     }
 
+    /**
+     * 从文本中提取首个命中的 "key":"value" 字符串值。
+     */
     private static String extractQuoted(String text, String... keys) {
         for (String key : keys) {
             Matcher matcher = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"([^\"]*)\"").matcher(text);
@@ -256,6 +310,10 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return "";
     }
 
+    /**
+     * 从日志正文提取 requestId/traceId/sessionId/tenantId 键值对补充到条目上；
+     * 已存在的字段不覆盖（JSON 字段优先于正文提取）。
+     */
     private static void fillFromText(OpsLogEntryVO entry, String text) {
         if (!StringUtils.hasText(text)) {
             return;
@@ -276,12 +334,18 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         }
     }
 
+    /**
+     * 按日志文件名推断服务名（取第一个 . 之前部分，如 ai-cs-agent.log → ai-cs-agent）。
+     */
     private static String guessService(Path file) {
         String name = file.getFileName().toString();
         int dot = name.indexOf('.');
         return dot > 0 ? name.substring(0, dot) : name;
     }
 
+    /**
+     * 从 JSON 中按键名优先级取首个非空字符串值。
+     */
     private static String firstText(JSONObject json, String... keys) {
         for (String key : keys) {
             String value = json.getString(key);
@@ -292,6 +356,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return "";
     }
 
+    /**
+     * 模糊包含判断（不区分大小写）；条件为空时视为命中（即该条件不生效）。
+     */
     private static boolean contains(String value, String expect) {
         if (!StringUtils.hasText(expect)) {
             return true;
@@ -299,6 +366,9 @@ public class FileLogQueryAdapter implements LogQueryAdapter {
         return blank(value).toLowerCase(Locale.ROOT).contains(expect.trim().toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * null 转空串，避免后续比较出现 NPE。
+     */
     private static String blank(String value) {
         return value == null ? "" : value;
     }

@@ -16,6 +16,7 @@ import lombok.EqualsAndHashCode;
 @TableName("cs_scene_config")
 public class SceneConfig extends BaseEntity {
 
+    /** 主键 */
     @TableId(type = IdType.AUTO)
     private Long id;
 
@@ -37,5 +38,6 @@ public class SceneConfig extends BaseEntity {
     /** 1 启用 0 停用 */
     private Integer enabled;
 
+    /** 排序号，越小越靠前 */
     private Integer sortNum;
 }

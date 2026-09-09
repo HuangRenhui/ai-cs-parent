@@ -20,6 +20,12 @@ public class EmbeddingClient {
     @Resource
     private ModelRouter modelRouter;
 
+    /**
+     * 获取文本的Embedding向量
+     * @param text 待向量化文本
+     * @return 向量浮点数组
+     * @throws IOException 模型调用失败时抛出（包装ModelCallException，屏蔽上层对具体异常的依赖）
+     */
     public List<Float> getVector(String text) throws IOException {
         try {
             return modelRouter.embed(text);

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WorkOrderFeignFallback implements WorkOrderFeign {
 
+    /** 降级：建单失败返回 503，上层改用"工单服务繁忙"话术引导用户手动提交 */
     @Override
     public Result<String> createOrder(WorkOrderDTO dto) {
         log.error("工单服务调用失败，触发熔断降级");

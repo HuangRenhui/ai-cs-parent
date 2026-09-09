@@ -30,6 +30,7 @@ public class HealthCheckTask {
     @Resource
     private RedisTemplate<String, String> redisTemplate;
 
+    /** 健康检查开关 */
     @Value("${job.health-check:true}")
     private boolean healthCheckEnabled;
 
@@ -37,14 +38,20 @@ public class HealthCheckTask {
      * 健康检查计数器（连续失败次数）
      */
     private int consecutiveDbFailures = 0;
+    /** 连续失败告警阈值：达到该次数才输出 ERROR 告警，避免瞬时抖动误报 */
     private static final int MAX_CONSECUTIVE_FAILURES = 3;
 
+    /**
+     * 系统健康检查（fixedRate=300000，即每 5 分钟执行一次，从任务开始时间计频）
+     * 分别探测数据库与 Redis，连续失败达阈值时输出告警日志，并把每次结果写入操作日志表
+     */
     @Scheduled(fixedRate = 300000)
     public void healthCheck() {
         if (!healthCheckEnabled) {
             return;
         }
 
+        // 分别探测数据库与 Redis 连通性
         boolean dbHealthy = checkDatabase();
         boolean redisHealthy = checkRedis();
 
@@ -70,7 +77,9 @@ public class HealthCheckTask {
     }
 
     /**
-     * 检查数据库连接
+     * 检查数据库连接（执行 SELECT 1 探测）
+     *
+     * @return true 表示数据库可正常访问
      */
     private boolean checkDatabase() {
         try {
@@ -84,6 +93,8 @@ public class HealthCheckTask {
 
     /**
      * 检查Redis连接（通过尝试读写来验证连接）
+     *
+     * @return true 表示写入后能原样读回，Redis 读写正常
      */
     private boolean checkRedis() {
         try {
@@ -98,7 +109,10 @@ public class HealthCheckTask {
     }
 
     /**
-     * 记录健康检查状态到统计表
+     * 记录健康检查状态到统计表（实际写入 cs_operation_log 操作日志表）
+     *
+     * @param dbHealthy    数据库是否健康
+     * @param redisHealthy Redis 是否健康
      */
     private void recordHealthStatus(boolean dbHealthy, boolean redisHealthy) {
         try {

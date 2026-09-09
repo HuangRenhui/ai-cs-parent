@@ -14,9 +14,11 @@ import java.time.LocalDateTime;
  */
 @Data
 public class BaseEntity {
+    /** 创建时间：新增时由 MyMetaObjectHandler 自动填充 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
+    /** 更新时间：新增与更新时均自动填充 */
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }

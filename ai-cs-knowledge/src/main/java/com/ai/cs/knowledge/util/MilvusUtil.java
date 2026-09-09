@@ -45,24 +45,37 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 @Component
 public class MilvusUtil {
+    /** Milvus服务地址 */
     @Value("${milvus.host}")
     private String host;
+    /** Milvus服务端口 */
     @Value("${milvus.port}")
     private Integer port;
 
+    /** Milvus客户端连接 */
     private MilvusClient client;
+    /** 历史遗留的公共FAQ集合名（不带租户隔离） */
     public static final String COLLECTION_NAME = "cs_faq_collection";
+    /** 租户集合字段：FAQ主键ID */
     public static final String FIELD_FAQ_ID = "faq_id";
+    /** 租户集合字段：租户ID */
     public static final String FIELD_TENANT_ID = "tenant_id";
+    /** 租户集合字段：Embedding向量 */
     public static final String FIELD_EMBEDDING = "embedding";
+    /** 租户集合字段：FAQ文本内容 */
     public static final String FIELD_CONTENT = "content";
 
     @Resource
     private MilvusProperties milvusProperties;
 
+    /** 租户集合是否已初始化就绪（懒初始化标记） */
     private final AtomicBoolean tenantReady = new AtomicBoolean(false);
+    /** 租户集合最近一次初始化失败原因，用于健康检查展示 */
     private String tenantLastError = "租户集合未初始化";
 
+    /**
+     * 初始化Milvus客户端连接
+     */
     @PostConstruct
     public void init() {
         ConnectParam param = ConnectParam.newBuilder()
@@ -72,6 +85,9 @@ public class MilvusUtil {
         client = new MilvusServiceClient(param);
     }
 
+    /**
+     * 获取Milvus客户端
+     */
     public MilvusClient getClient() {
         return client;
     }
@@ -319,10 +335,16 @@ public class MilvusUtil {
         return null;
     }
 
+    /**
+     * 判断Milvus客户端是否已连接
+     */
     public boolean isReady() {
         return client != null;
     }
 
+    /**
+     * 获取健康检查状态描述（UP/DOWN及失败原因）
+     */
     public String statusMessage() {
         if (!isReady()) {
             return "DOWN: 未连接";
@@ -330,20 +352,35 @@ public class MilvusUtil {
         return tenantReady.get() ? "UP" : ("租户集合: " + tenantLastError);
     }
 
+    /**
+     * 获取租户隔离集合名（配置缺失时给默认值）
+     */
     public String tenantCollectionName() {
         return milvusProperties == null ? "cs_kb_faq" : milvusProperties.getCollectionName();
     }
 
+    /**
+     * 获取相似度命中阈值（配置缺失时给默认值0.40）
+     */
     public float scoreThreshold() {
         return milvusProperties == null ? 0.40f : milvusProperties.getScoreThreshold();
     }
 
+    /**
+     * 获取检索TopK（至少为1）
+     */
     public int topK() {
         return milvusProperties == null ? 5 : Math.max(1, milvusProperties.getTopK());
     }
 
+    /**
+     * 租户向量写入（先删后插实现upsert语义）
+     * 保证同一faqId在集合中只有一条最新向量
+     */
     public void upsertTenant(long faqId, String tenantId, List<Float> vector, String content) {
+        // 首次调用时按向量维度懒创建租户集合
         ensureTenantCollection(vector == null ? 0 : vector.size());
+        // 先删除旧向量，避免重复数据
         deleteByFaqId(faqId);
         String tenant = normalizeTenant(tenantId);
         String text = truncate(content);
@@ -361,6 +398,9 @@ public class MilvusUtil {
         }
     }
 
+    /**
+     * 按FAQ ID删除租户集合中的向量
+     */
     public boolean deleteByFaqId(Long faqId) {
         if (!isReady() || faqId == null) {
             return false;
@@ -373,8 +413,17 @@ public class MilvusUtil {
         return resp.getStatus() == R.Status.Success.getCode();
     }
 
+    /**
+     * 租户隔离的向量语义检索
+     * 通过过滤表达式限定租户，只返回本租户的FAQ命中结果
+     * @param tenantId 租户ID
+     * @param vector 问题向量
+     * @param topK 返回结果数
+     * @return 命中结果列表（含faqId、相似度分数、内容）
+     */
     public List<MilvusHit> search(String tenantId, List<Float> vector, int topK) {
         ensureTenantCollection(vector == null ? 0 : vector.size());
+        // 租户过滤表达式，保证跨租户数据不可见
         String expr = FIELD_TENANT_ID + " == \"" + escape(normalizeTenant(tenantId)) + "\"";
         SearchParam searchParam = SearchParam.newBuilder()
                 .withCollectionName(tenantCollectionName())
@@ -383,8 +432,10 @@ public class MilvusUtil {
                 .withVectorFieldName(FIELD_EMBEDDING)
                 .withTopK(topK)
                 .withExpr(expr)
+                // nprobe控制查询探测的簇数，至少为1
                 .withParams("{\"nprobe\":" + Math.max(1, milvusProperties.getNprobe()) + "}")
                 .withOutFields(List.of(FIELD_FAQ_ID, FIELD_CONTENT, FIELD_TENANT_ID))
+                // 强一致性级别，保证刚写入的向量立即可检索
                 .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                 .build();
         R<SearchResults> resp = getClient().search(searchParam);
@@ -410,15 +461,22 @@ public class MilvusUtil {
         return hits;
     }
 
+    /**
+     * 确保租户集合已创建并加载（懒初始化，线程安全）
+     * 集合不存在则按向量维度创建，随后Load到内存供检索
+     * @param dimHint 向量维度提示（0表示用配置值）
+     */
     private synchronized void ensureTenantCollection(int dimHint) {
         if (!isReady()) {
             throw new IllegalStateException("Milvus 未连接");
         }
+        // 已初始化过则直接返回，避免重复Load
         if (tenantReady.get()) {
             return;
         }
         try {
             String name = tenantCollectionName();
+            // 优先用实际向量维度，兜底用配置维度且不小于8
             int dim = dimHint > 0 ? dimHint : Math.max(8, milvusProperties.getDimension());
             MilvusServiceClient milvus = (MilvusServiceClient) getClient();
             R<Boolean> has = milvus.hasCollection(HasCollectionParam.newBuilder().withCollectionName(name).build());
@@ -428,6 +486,7 @@ public class MilvusUtil {
             if (Boolean.FALSE.equals(has.getData())) {
                 createTenantCollection(name, dim);
             }
+            // Milvus集合必须Load后才能检索
             R<RpcStatus> load = milvus.loadCollection(LoadCollectionParam.newBuilder().withCollectionName(name).build());
             if (load.getStatus() != R.Status.Success.getCode()) {
                 throw new IllegalStateException("Load 租户集合失败: " + load.getMessage());
@@ -435,12 +494,17 @@ public class MilvusUtil {
             tenantReady.set(true);
             tenantLastError = "";
         } catch (Exception e) {
+            // 记录失败原因供健康检查展示，并原样抛出
             tenantReady.set(false);
             tenantLastError = e.getMessage();
             throw e instanceof RuntimeException re ? re : new IllegalStateException(e);
         }
     }
 
+    /**
+     * 创建租户隔离集合（faq_id主键 + tenant_id + embedding向量 + content文本）
+     * 并对向量字段建IVF_FLAT索引（COSINE距离）
+     */
     private void createTenantCollection(String name, int dim) {
         FieldType faqId = FieldType.newBuilder()
                 .withName(FIELD_FAQ_ID)
@@ -490,20 +554,32 @@ public class MilvusUtil {
         log.info("已创建租户 Milvus 集合 {} dim={}", name, dim);
     }
 
+    /**
+     * 截断超长文本，防止超过集合content字段的最大长度限制
+     */
     private String truncate(String content) {
         String text = content == null ? "" : content;
         int max = milvusProperties.getContentMaxLength();
         return text.length() <= max ? text : text.substring(0, max);
     }
 
+    /**
+     * 租户ID归一化：去空格，空值归为"default"租户
+     */
     private String normalizeTenant(String tenantId) {
         return StringUtils.hasText(tenantId) ? tenantId.trim() : "default";
     }
 
+    /**
+     * 转义过滤表达式中的特殊字符（反斜杠与双引号），防止表达式注入/语法错误
+     */
     private String escape(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    /**
+     * 将字段值安全转为long，失败时回退为检索结果自带的ID
+     */
     private long toLong(List<?> faqIds, int index, long fallback) {
         if (faqIds == null || index >= faqIds.size() || faqIds.get(index) == null) {
             return fallback;

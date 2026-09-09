@@ -198,6 +198,7 @@ public class ImageHotlinkService {
         return removed;
     }
 
+    /** 计算字符串的MD5十六进制摘要（用于URL签名） */
     private String md5(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -216,9 +217,13 @@ public class ImageHotlinkService {
      * Token信息
      */
     private static class TokenInfo {
+        /** 完整Token串（tokenId.sign.expireTime） */
         private String token;
+        /** 绑定的图片文件ID */
         private String fileId;
+        /** 创建时间戳（秒） */
         private long createTime;
+        /** 过期时间戳（秒） */
         private long expireTime;
 
         public String getToken() { return token; }

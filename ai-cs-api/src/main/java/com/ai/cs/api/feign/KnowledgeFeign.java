@@ -14,16 +14,19 @@ import org.springframework.web.bind.annotation.RequestParam;
 @FeignClient(value = "ai-cs-knowledge", url = "${feign.knowledge.url:http://localhost:8083}", fallback = KnowledgeFeignFallback.class)
 public interface KnowledgeFeign {
 
+    /** 知识库全文检索（兼容旧接口，返回纯文本答案） */
     @GetMapping("/knowledge/search")
     Result<String> search(@RequestParam("question") String question,
                           @RequestParam(value = "tenantCode", required = false) String tenantCode,
                           @RequestParam(value = "sessionId", required = false) String sessionId);
 
+    /** RAG 检索：返回命中状态、生成回复与引用来源 */
     @GetMapping("/knowledge/rag/search")
     Result<RagSearchResultDTO> ragSearch(@RequestParam("question") String question,
                                          @RequestParam(value = "tenantCode", required = false) String tenantCode,
                                          @RequestParam(value = "sessionId", required = false) String sessionId);
 
+    /** 按 ID 查询 FAQ 详情 */
     @GetMapping("/knowledge/faq/{id}")
     Result<Object> getFaqById(@PathVariable("id") Long id);
 }

@@ -33,6 +33,9 @@ public class OpenAiCompatClient {
 
     private final OkHttpClient http;
 
+    /**
+     * @param timeoutSeconds 默认读超时(秒)，下限 5 秒；单次调用可用 timeoutMs 覆盖
+     */
     public OpenAiCompatClient(int timeoutSeconds) {
         int sec = Math.max(5, timeoutSeconds);
         this.http = new OkHttpClient.Builder()
@@ -95,6 +98,7 @@ public class OpenAiCompatClient {
             throw new ModelCallException("对话模型返回空文本");
         }
 
+        // usage 字段并非所有实现都返回（部分本地模型缺省），按可空处理
         JSONObject usage = json.getJSONObject("usage");
         Integer promptTokens = usage == null ? null : usage.getInteger("prompt_tokens");
         Integer completionTokens = usage == null ? null : usage.getInteger("completion_tokens");
@@ -165,6 +169,10 @@ public class OpenAiCompatClient {
         return JSON.parseArray(result.getText(), Float.class);
     }
 
+    /**
+     * 发起 POST 请求。API Key 非空才带 Authorization 头（本地 Ollama 通常无密钥）。
+     * timeoutMs 非空时基于共享 client 派生一个自定义超时的新 client（OkHttp 支持共享连接池）。
+     */
     private String post(String url, String apiKey, JSONObject body, Integer timeoutMs) {
         Request.Builder builder = new Request.Builder()
                 .url(url)
@@ -173,6 +181,7 @@ public class OpenAiCompatClient {
             builder.header("Authorization", "Bearer " + apiKey.trim());
         }
         OkHttpClient client = this.http;
+        // 单次调用超时覆盖：连接/写超时取 timeoutMs 与 10s 的较小值，避免连接阶段等太久
         if (timeoutMs != null && timeoutMs > 0) {
             client = this.http.newBuilder()
                     .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
@@ -194,6 +203,7 @@ public class OpenAiCompatClient {
         }
     }
 
+    /** 去掉 baseUrl 末尾多余的斜杠，避免拼出 ".../v1//chat/completions" */
     private static String trimSlash(String url) {
         if (url == null) {
             return "";

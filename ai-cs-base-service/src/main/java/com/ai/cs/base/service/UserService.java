@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 @Service
 public class UserService extends ServiceImpl<UserMapper, User> {
 
+    /** 密码加密器（BCrypt） */
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
@@ -106,6 +107,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
      * 更新用户（如果密码有变化则加密）
      */
     public boolean updateUser(User user) {
+        // 密码非空且不是 BCrypt 密文（$2a$ 前缀）时视为新密码，需重新加密；
+        // 空密码/密文则原样保留，避免重复加密导致密文被二次加密
         if (user.getPassword() != null && !user.getPassword().isBlank()
                 && !user.getPassword().startsWith("$2a$")) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));

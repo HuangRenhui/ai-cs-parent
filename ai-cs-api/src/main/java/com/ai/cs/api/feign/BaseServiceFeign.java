@@ -15,9 +15,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 @FeignClient(value = "ai-cs-base-service", url = "${feign.base-service.url:http://localhost:8084}", fallback = BaseServiceFeignFallback.class)
 public interface BaseServiceFeign {
 
+    /** 按 ID 查询客户信息 */
     @GetMapping("/customer/{id}")
     Result<Object> getCustomerById(@PathVariable("id") Long id);
 
+    /** 获取当前登录用户信息（依赖网关注入的认证上下文） */
     @GetMapping("/auth/userinfo")
     Result<Object> getUserInfo();
 }

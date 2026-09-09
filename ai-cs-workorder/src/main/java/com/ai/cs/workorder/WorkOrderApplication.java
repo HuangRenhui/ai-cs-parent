@@ -14,6 +14,10 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 @SpringBootApplication(scanBasePackages = "com.ai.cs", exclude = SecurityAutoConfiguration.class)
 @EnableDiscoveryClient
 public class WorkOrderApplication {
+
+    /**
+     * 工单服务入口；排除 Security 自动装配，接口鉴权由网关统一处理
+     */
     public static void main(String[] args) {
         SpringApplication.run(WorkOrderApplication.class, args);
     }

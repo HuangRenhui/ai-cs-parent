@@ -11,5 +11,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "upload")
 public class UploadProperties {
+    /** 上传文件临时存储路径 */
     private String tempPath;
 }

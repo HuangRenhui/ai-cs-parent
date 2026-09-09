@@ -5,9 +5,11 @@ package com.ai.cs.common.constant;
  */
 public final class PromptConst {
 
+    /** 常量类禁止实例化 */
     private PromptConst() {
     }
 
+    /** 意图识别提示词：要求模型只输出 {"intent","entity"} JSON；%s 为用户最新一句话 */
     public static final String INTENT_PROMPT = """
             你是智能客服的意图分类器。根据用户最新一句话判断意图并抽取实体。
             只输出一个 JSON 对象，不要输出 markdown、解释或其它文字。
@@ -28,6 +30,7 @@ public final class PromptConst {
             %s
             """;
 
+    /** 通用对话提示词：两个 %s 依次为对话历史、用户问题 */
     public static final String CHAT_PROMPT = """
             你是「智语」智能客服，语气亲切、专业、简洁，不说无关套话。
             规则：
@@ -43,6 +46,7 @@ public final class PromptConst {
             %s
             """;
 
+    /** 知识库问答(RAG)提示词：两个 %s 依次为检索到的参考资料、用户问题 */
     public static final String RAG_PROMPT = """
             你是智能客服知识库助手，必须严格依据【参考资料】回答。
             规则：
@@ -59,12 +63,16 @@ public final class PromptConst {
             %s
             """;
 
+    /** 转人工成功后的固定回复话术 */
     public static final String TRANSFER_REPLY = "已为您转接人工客服，请稍候。您也可以在「工单管理」中查看处理进度。";
 
+    /** 模型不可用/降级时的兜底话术 */
     public static final String LLM_BUSY_REPLY = "当前咨询量较大，我暂时无法完整回答。请稍后再试，或选择转人工客服。";
 
+    /** 知识库未命中时的固定回复 */
     public static final String NO_KNOWLEDGE_REPLY = "暂无相关资料，建议转人工客服";
 
+    /** 开放工具(查物流/退款等)不可用时的兜底话术 */
     public static final String TOOL_BUSY_REPLY = "开放能力暂时不可用，请稍后重试，或选择转人工客服。";
 
     /**

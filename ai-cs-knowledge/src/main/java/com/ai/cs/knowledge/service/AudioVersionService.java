@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AudioVersionService {
 
+    /** 版本存储（内存缓存，key=原始文件ID，value=该文件的版本列表；生产环境应使用数据库） */
     private final Map<String, List<AudioVersion>> versionStore = new ConcurrentHashMap<>();
 
     /**
@@ -112,13 +113,23 @@ public class AudioVersionService {
         }
     }
 
+    /**
+     * 音频版本实体
+     */
     public static class AudioVersion {
+        /** 版本号（从1开始递增） */
         private int versionNumber;
+        /** 原始音频文件ID */
         private String fileId;
+        /** 本版本的唯一文件ID */
         private String versionFileId;
+        /** 本版本文件的存储路径 */
         private String filePath;
+        /** 本次变更描述 */
         private String changeDescription;
+        /** 版本创建时间 */
         private LocalDateTime createdTime;
+        /** 是否为当前生效版本（同一fileId下只有一个活跃版本） */
         private boolean active;
 
         public int getVersionNumber() { return versionNumber; }

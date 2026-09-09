@@ -24,14 +24,19 @@ import java.util.Base64;
 @Slf4j
 public final class SecretCipherUtil {
 
+    /** 密文前缀标识：用于区分密文与历史明文存量数据 */
     public static final String PREFIX = "enc:";
 
+    /** GCM 认证标签长度(位)：128 是推荐值 */
     private static final int GCM_TAG_BITS = 128;
+    /** GCM 初始向量长度(字节)：12 是推荐值 */
     private static final int IV_BYTES = 12;
     private static final String TRANSFORM = "AES/GCM/NoPadding";
 
+    /** 内置默认密钥：仅为本机/演示兜底，生产必须通过 AI_MODEL_SECRET 覆盖 */
     private static final String DEFAULT_SECRET = "AiCsModelSecretKey_2026_Demo_Only_ChangeMe!";
 
+    /** 工具类禁止实例化 */
     private SecretCipherUtil() {
     }
 
@@ -79,6 +84,7 @@ public final class SecretCipherUtil {
         }
     }
 
+    /** 构造 AES-256 密钥：非 32 字节时补齐/截断，保证任意长度密钥串都可用 */
     private static SecretKeySpec key() {
         String secret = resolveSecret();
         byte[] raw = secret.getBytes(StandardCharsets.UTF_8);
@@ -86,6 +92,7 @@ public final class SecretCipherUtil {
         return new SecretKeySpec(keyBytes, "AES");
     }
 
+    /** 字节数组定长化：超长截断、不足右侧补零 */
     private static byte[] padOrSlice(byte[] src, int len) {
         byte[] out = new byte[len];
         if (src.length >= len) {
@@ -96,6 +103,7 @@ public final class SecretCipherUtil {
         return out;
     }
 
+    /** 解析密钥：环境变量 AI_MODEL_SECRET → 系统属性 ai.model.secret → 内置默认 */
     private static String resolveSecret() {
         String env = System.getenv("AI_MODEL_SECRET");
         if (StringUtils.hasText(env)) {

@@ -21,6 +21,7 @@ public class RateLimitConfig {
      */
     @Bean
     KeyResolver ipKeyResolver() {
+        // 取客户端真实 IP 作为限流维度；取不到（如本地调用）时统一归入 "unknown" 桶
         return exchange -> Mono.just(
                 exchange.getRequest().getRemoteAddress() != null
                         ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()
@@ -33,6 +34,7 @@ public class RateLimitConfig {
      */
     @Bean
     KeyResolver userKeyResolver() {
+        // 以网关注入的 X-User-Id 为限流维度；未登录请求统一归入 "anonymous" 桶
         return exchange -> Mono.just(
                 exchange.getRequest().getHeaders().getFirst("X-User-Id") != null
                         ? exchange.getRequest().getHeaders().getFirst("X-User-Id")
@@ -45,6 +47,7 @@ public class RateLimitConfig {
      */
     @Bean
     RedisRateLimiter defaultRateLimiter() {
+        // 参数依次为：补充速率、突发容量、每次请求消耗令牌数
         return new RedisRateLimiter(10, 20, 1);
     }
 }

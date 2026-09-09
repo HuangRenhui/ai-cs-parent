@@ -74,6 +74,7 @@ public class DataExportService {
 
     /**
      * CSV 字段转义（处理包含逗号、引号、换行的情况）
+     * 规则：含特殊字符时整体加双引号，内部双引号双写（RFC 4180）
      */
     private String escapeCsv(String value) {
         if (value == null) {

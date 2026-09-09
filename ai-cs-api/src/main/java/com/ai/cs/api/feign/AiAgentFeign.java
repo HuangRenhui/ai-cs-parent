@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 @FeignClient(value = "ai-cs-agent", url = "${feign.agent.url:http://localhost:8082}", fallback = AiAgentFeignFallback.class)
 public interface AiAgentFeign {
 
+    /** 发起 AI 对话，返回包含回复、意图、引用等信息的完整结果 */
     @PostMapping("/ai/chat/send")
     Result<ChatReplyDTO> chat(@RequestBody ChatDTO dto);
 }

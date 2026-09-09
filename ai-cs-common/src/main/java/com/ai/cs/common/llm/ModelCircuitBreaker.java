@@ -22,11 +22,15 @@ public class ModelCircuitBreaker {
     /** 熔断冷却期(毫秒)，到期后允许一次探测 */
     private static final long COOLDOWN_MS = 60_000;
 
+    /** 单模型的熔断状态：连续失败计数 + 熔断截止时间 */
     private static class State {
+        /** 连续失败次数（成功即清零） */
         final AtomicInteger consecutiveFails = new AtomicInteger(0);
+        /** 熔断截止时间点(毫秒)，当前时间小于该值则拒绝调用；0 表示未熔断 */
         volatile long openUntil = 0L;
     }
 
+    /** 模型ID -> 熔断状态（按实例内存保存，进程重启即重置） */
     private final Map<Long, State> states = new ConcurrentHashMap<>();
 
     /**
@@ -41,6 +45,7 @@ public class ModelCircuitBreaker {
             return true;
         }
         long now = System.currentTimeMillis();
+        // 冷却期内直接拒绝；冷却期过后放行一次调用作为探测（半开）
         if (s.openUntil > now) {
             return false;
         }
@@ -68,6 +73,7 @@ public class ModelCircuitBreaker {
         if (route == null || route.getId() == null) {
             return false;
         }
+        // 模型未单独配置阈值时用默认值
         int threshold = route.getFailThreshold() != null && route.getFailThreshold() > 0
                 ? route.getFailThreshold() : DEFAULT_FAIL_THRESHOLD;
         State s = states.computeIfAbsent(route.getId(), k -> new State());

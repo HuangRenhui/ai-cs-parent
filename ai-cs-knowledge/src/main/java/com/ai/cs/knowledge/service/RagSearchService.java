@@ -51,15 +51,22 @@ public class RagSearchService {
 
     /**
      * 租户隔离语义检索：命中/未命中/不可用 + 引用回传
+     * 流程：问题向量化 → Milvus租户集合检索 → 阈值/状态/租户三重过滤 → LLM组织答案（失败降级为FAQ原文）
+     * @param question 用户问题
+     * @param tenantCode 租户编码（空时归一化为default）
+     * @param sessionId 会话ID（用于未命中记录追溯）
+     * @return 检索结果（hit带引用 / miss / unavailable三态）
      */
     public RagSearchResultDTO semanticSearch(String question, String tenantCode, String sessionId) {
         String tenant = KnowledgeFaqService.normalizeTenant(tenantCode);
         if (!StringUtils.hasText(question)) {
             return RagSearchResultDTO.miss(PromptConst.NO_KNOWLEDGE_REPLY);
         }
+        // 前置检查：向量库未就绪时直接返回不可用，避免后续调用空转
         if (!milvusUtil.isReady()) {
             return RagSearchResultDTO.unavailable("向量库不可用: " + milvusUtil.statusMessage());
         }
+        // 第一步：问题向量化（外部Embedding服务调用，失败视为服务不可用）
         List<Float> vector;
         try {
             vector = embeddingClient.getVector(question.trim());
@@ -67,6 +74,7 @@ public class RagSearchService {
             log.warn("Embedding 失败: {}", e.getMessage());
             return RagSearchResultDTO.unavailable("Embedding 不可用: " + e.getMessage());
         }
+        // 第二步：在租户隔离集合中做向量相似度检索
         List<MilvusHit> hits;
         try {
             hits = milvusUtil.search(tenant, vector, milvusUtil.topK());
@@ -74,12 +82,14 @@ public class RagSearchService {
             log.warn("租户 Milvus 检索失败: {}", e.getMessage());
             return RagSearchResultDTO.unavailable("向量检索失败: " + e.getMessage());
         }
+        // 第三步：三重过滤——相似度阈值、FAQ启用状态、租户一致性（防串租）
         float threshold = milvusUtil.scoreThreshold();
         List<KnowledgeFaq> faqs = new ArrayList<>();
         List<RagCitationDTO> citations = new ArrayList<>();
         Float bestBelow = null;
         for (MilvusHit hit : hits) {
             if (hit.getScore() < threshold) {
+                // 记录阈值以下的最高分，用于未命中分析（判断阈值是否设置过高）
                 if (bestBelow == null || hit.getScore() > bestBelow) {
                     bestBelow = hit.getScore();
                 }
@@ -89,6 +99,7 @@ public class RagSearchService {
             if (faq == null || faq.getStatus() == null || faq.getStatus() != 1) {
                 continue;
             }
+            // 二次校验租户，防止向量库中残留的其他租户数据串租
             if (!tenant.equals(KnowledgeFaqService.normalizeTenant(faq.getTenantCode()))) {
                 continue;
             }
@@ -97,22 +108,27 @@ public class RagSearchService {
             citation.setFaqId(faq.getId());
             citation.setQuestion(faq.getQuestion());
             citation.setCategory(faq.getCategory());
+            // 分数保留4位小数，便于前端展示
             citation.setScore(Math.round(hit.getScore() * 10000f) / 10000f);
             citations.add(citation);
         }
+        // 未命中：记录知识盲区（携带最高相似度供运营参考），返回兜底话术
         if (faqs.isEmpty()) {
             missService.record(tenant, question, sessionId, bestBelow == null && !hits.isEmpty()
                     ? Math.round(hits.get(0).getScore() * 10000f) / 10000f
                     : (bestBelow == null ? null : Math.round(bestBelow * 10000f) / 10000f));
             return RagSearchResultDTO.miss(PromptConst.NO_KNOWLEDGE_REPLY);
         }
+        // 第四步：LLM基于FAQ上下文组织自然语言答案
         String reply;
         try {
             reply = llmClient.call(PromptConst.fill(PromptConst.RAG_PROMPT, buildFaqContext(faqs), question));
             if (!StringUtils.hasText(reply) || reply.contains(PromptConst.NO_KNOWLEDGE_REPLY)) {
+                // LLM返回空或兜底话术时，降级为相似度最高的FAQ原文答案
                 reply = faqs.get(0).getAnswer();
             }
         } catch (Exception e) {
+            // LLM调用失败降级：直接返回首条FAQ原文，保证用户能拿到答案
             log.warn("RAG 生成失败，回退为首条 FAQ 原文: {}", e.getMessage());
             reply = faqs.get(0).getAnswer();
         }
@@ -281,6 +297,7 @@ public class RagSearchService {
         return milvusIds.size();
     }
 
+    /** 将命中的FAQ列表拼接为编号上下文文本，供RAG Prompt引用 */
     private String buildFaqContext(List<KnowledgeFaq> faqs) {
         StringBuilder context = new StringBuilder();
         for (int i = 0; i < faqs.size(); i++) {
@@ -289,6 +306,7 @@ public class RagSearchService {
         return context.toString();
     }
 
+    /** 拼接单条FAQ的展示内容（分类+问+答），用于向量库存储与Prompt上下文 */
     private String buildFaqContent(KnowledgeFaq faq) {
         String category = StringUtils.hasText(faq.getCategory()) ? faq.getCategory() : "未分类";
         return "【分类】" + category + "\n【问】" + faq.getQuestion() + "\n【答】" + faq.getAnswer();

@@ -14,7 +14,9 @@ public enum AiToolEnum {
     TRANSFER_AGENT("transferAgent", "转人工"),
     QUERY_KNOWLEDGE("queryKnowledge", "查询知识库");
 
+    /** 工具编码（对外暴露的工具名） */
     private final String code;
+    /** 工具中文描述 */
     private final String desc;
 
     AiToolEnum(String code, String desc) {
@@ -30,6 +32,7 @@ public enum AiToolEnum {
         return desc;
     }
 
+    /** 工具名与编码一致，供按名查找/展示使用 */
     public String getName() {
         return code;
     }

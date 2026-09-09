@@ -1,5 +1,10 @@
 package com.ai.cs.common.enums;
 
+/**
+ * 客服（人工坐席）状态枚举
+ *
+ * @author huangrenhui
+ */
 public enum AgentStatusEnum {
     OFFLINE(0, "离线"),
     ONLINE(1, "在线"),
@@ -21,6 +26,7 @@ public enum AgentStatusEnum {
         return label;
     }
 
+    /** 按 code 取中文标签，未匹配返回「未知」 */
     public static String labelOf(Integer code) {
         for (AgentStatusEnum item : values()) {
             if (item.code.equals(code)) {

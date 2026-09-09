@@ -17,6 +17,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
         this.fileProperties = fileProperties;
     }
 
+    /**
+     * 注册静态资源映射
+     * 将磁盘上的上传目录暴露为HTTP可访问路径，供前端直接预览/下载文件
+     */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // 映射上传文件根目录

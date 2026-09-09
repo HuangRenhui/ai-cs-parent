@@ -6,9 +6,15 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * MyBatis-Plus 配置：为本模块注册 MySQL 分页插件。
+ */
 @Configuration
 public class MybatisPlusConfig {
 
+    /**
+     * 分页拦截器 Bean；Bean 名加 open 前缀，避免与其他模块的同类型 Bean 冲突。
+     */
     @Bean
     public MybatisPlusInterceptor openMybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();

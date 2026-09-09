@@ -15,6 +15,7 @@ import lombok.Data;
 @TableName("cs_model_usage")
 public class ModelUsageRecord extends BaseEntity {
 
+    /** 主键ID */
     @TableId(type = IdType.AUTO)
     private Long id;
 

@@ -201,11 +201,17 @@ public class MultimodalSearchService {
      * 多模态搜索结果
      */
     public static class MultimodalSearchResult {
+        /** 原始查询文本 */
         private String query;
+        /** 本次检索覆盖的模态列表（image/audio/text） */
         private List<String> modalities;
+        /** 总命中数 */
         private int totalHits;
+        /** 融合排序后的命中列表 */
         private List<ModalHit> hits;
+        /** 各模态命中数统计 */
         private Map<String, Long> modalityCount;
+        /** 检索耗时（毫秒） */
         private long duration;
 
         public String getQuery() { return query; }
@@ -226,9 +232,13 @@ public class MultimodalSearchService {
      * 模态命中结果
      */
     public static class ModalHit {
+        /** 命中所属模态（image/audio/text） */
         private String modality;
+        /** 相似度分数 */
         private double score;
+        /** 命中的文本内容（图片描述/音频描述/文档片段） */
         private String content;
+        /** 命中条目的元数据（fileId、存储路径等） */
         private Map<String, String> metadata;
 
         public String getModality() { return modality; }
