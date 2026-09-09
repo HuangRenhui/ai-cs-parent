@@ -11,17 +11,23 @@ import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.dto.RagSearchResultDTO;
+import com.ai.cs.common.dto.SlotFillResultDTO;
 import com.ai.cs.common.dto.ToolInvokeDTO;
 import com.ai.cs.common.dto.ToolInvokeResultDTO;
 import com.ai.cs.common.dto.WorkOrderDTO;
 import com.ai.cs.common.enums.IntentEnum;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.util.ContentSafetyChecker;
+import com.ai.cs.common.util.PromptInjectionProtection;
 import com.ai.cs.common.util.ValidateUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * AI智能体服务
@@ -38,6 +44,12 @@ public class AiAgentService {
     private LlmUtil llmUtil;
 
     @Resource
+    private ConfigurableIntentService configurableIntentService;
+
+    @Resource
+    private SlotFillingService slotFillingService;
+
+    @Resource
     private WorkOrderFeign workOrderFeign;
 
     @Resource
@@ -50,6 +62,13 @@ public class AiAgentService {
     private SessionFeign sessionFeign;
 
     /**
+     * 敏感操作列表，用于检测绕过尝试
+     */
+    private static final List<String> SENSITIVE_ACTIONS = Arrays.asList(
+        "退款", "冻卡", "销户", "删除", "修改", "转账", "支付"
+    );
+
+    /**
      * 机器人自动回复（兼容原有字符串接口）
      */
     public String chat(ChatDTO dto) {
@@ -57,7 +76,7 @@ public class AiAgentService {
     }
 
     /**
-     * AI 对话主流程：参数校验 → 意图识别 → 按意图路由到对应处理器 → 组装回复
+     * AI 对话主流程：参数校验 → 安全检查 → 意图识别 → 填槽检查 → 按意图路由到对应处理器 → 组装回复
      *
      * @param dto 对话请求（消息、会话 ID、租户、实体等）
      * @return 包含回复文本、意图、实体、是否转人工、引用来源的完整结果
@@ -69,14 +88,41 @@ public class AiAgentService {
         // 消息长度限制 1~2000，防止超长输入打爆模型上下文
         ValidateUtil.requireLength(dto.getMsg(), "消息内容", 1, 2000);
         dto.setMsg(ValidateUtil.trimToNull(dto.getMsg()));
+        
+        // 安全检查：提示词注入防护
+        PromptInjectionProtection.SecurityCheckResult securityCheck = 
+            PromptInjectionProtection.performSecurityCheck(dto.getMsg(), 2000, SENSITIVE_ACTIONS);
+        if (!securityCheck.isSafe()) {
+            ChatReplyDTO result = new ChatReplyDTO();
+            result.setSessionId(dto.getSessionId());
+            result.setIntent("咨询");
+            result.setEntity("");
+            result.setReply("您的输入包含不安全内容，请重新表述。");
+            return result;
+        }
+        
+        // 内容安全检查
+        ContentSafetyChecker.SafetyCheckResult safetyCheck = ContentSafetyChecker.check(dto.getMsg());
+        if (!safetyCheck.isSafe()) {
+            ChatReplyDTO result = new ChatReplyDTO();
+            result.setSessionId(dto.getSessionId());
+            result.setIntent("咨询");
+            result.setEntity("");
+            result.setReply(safetyCheck.getReason() + "，请遵守社区规范。");
+            return result;
+        }
+        
+        // 清理输入
+        dto.setMsg(PromptInjectionProtection.sanitizeInput(dto.getMsg()));
+        
         // 未传会话 ID 时自动生成，保证后续上下文、幂等键都有稳定标识
         if (!StringUtils.hasText(dto.getSessionId())) {
             dto.setSessionId("sess_" + UUID.randomUUID().toString(true));
         }
         ValidateUtil.optionalSessionId(dto.getSessionId());
 
-        // 第一步：调用大模型做意图识别
-        IntentDTO intentDTO = llmUtil.getIntent(dto.getMsg());
+        // 第一步：调用大模型做意图识别（优先使用可配置意图服务）
+        IntentDTO intentDTO = recognizeIntent(dto);
         ChatReplyDTO result = new ChatReplyDTO();
         result.setSessionId(dto.getSessionId());
         // 模型降级（调用失败/解析失败）时直接返回繁忙文案，不再走后续业务路由
@@ -88,27 +134,89 @@ public class AiAgentService {
         }
 
         // 第二步：意图与实体归一化；模型没抽出实体时，回退使用请求方携带的实体（如场景入口传入的订单号）
-        IntentEnum intent = IntentEnum.fromName(intentDTO.getIntent());
+        String intentName = intentDTO.getIntent();
         String entity = intentDTO.getEntity() == null ? "" : intentDTO.getEntity().trim();
         if (!StringUtils.hasText(entity) && dto.getEntities() != null && !dto.getEntities().isEmpty()
                 && dto.getEntities().get(0) != null) {
             entity = dto.getEntities().get(0).getId() == null ? "" : dto.getEntities().get(0).getId();
         }
 
-        result.setIntent(intent.getName());
+        result.setIntent(intentName);
         result.setEntity(entity);
-        result.setTransferred(intent == IntentEnum.TO_AGENT);
+        result.setTransferred("转人工".equals(intentName));
 
-        // 第三步：意图分支路由——转人工、物流/退款走开放工具、投诉建工单、其余走知识库咨询
-        String reply = switch (intent) {
-            case TO_AGENT -> handleTransfer(dto);
-            case QUERY_LOGISTICS -> handleByTool(intent, entity, dto);
-            case REFUND -> handleByTool(intent, entity, dto);
-            case COMPLAINT -> handleComplaint(dto, entity);
-            default -> handleConsult(dto, result);
-        };
+        // 第三步：填槽检查（如果配置了槽位）
+        SlotFillResultDTO slotResult = checkSlotFilling(dto, intentName);
+        if (!slotResult.isComplete()) {
+            result.setReply(slotResult.getPrompt());
+            return result;
+        }
+        
+        // 更新实体值（从填槽结果中获取）
+        if (slotResult.getSlots() != null && !slotResult.getSlots().isEmpty()) {
+            if (!StringUtils.hasText(entity) && slotResult.getSlots().containsKey("entity")) {
+                entity = slotResult.getSlots().get("entity");
+                result.setEntity(entity);
+            }
+        }
+
+        // 第四步：意图分支路由——转人工、物流/退款走开放工具、投诉建工单、其余走知识库咨询
+        String reply = routeByIntent(intentName, entity, dto, result);
         result.setReply(reply);
         return result;
+    }
+
+    /**
+     * 意图识别（优先使用可配置意图服务，失败时回退到硬编码意图）
+     */
+    private IntentDTO recognizeIntent(ChatDTO dto) {
+        try {
+            String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
+            return configurableIntentService.getIntent(dto.getMsg(), tenantCode);
+        } catch (Exception e) {
+            log.warn("可配置意图识别失败，回退到硬编码意图", e);
+            return llmUtil.getIntent(dto.getMsg());
+        }
+    }
+
+    /**
+     * 填槽检查
+     */
+    private SlotFillResultDTO checkSlotFilling(ChatDTO dto, String intentName) {
+        try {
+            return slotFillingService.checkAndFillSlots(dto, intentName);
+        } catch (Exception e) {
+            log.warn("填槽检查失败", e);
+            return SlotFillResultDTO.complete();
+        }
+    }
+
+    /**
+     * 按意图路由
+     */
+    private String routeByIntent(String intentName, String entity, ChatDTO dto, ChatReplyDTO result) {
+        // 转人工
+        if ("转人工".equals(intentName)) {
+            return handleTransfer(dto);
+        }
+        
+        // 查物流
+        if ("查物流".equals(intentName)) {
+            return handleByTool("查物流", entity, dto);
+        }
+        
+        // 退款
+        if ("退款".equals(intentName)) {
+            return handleByTool("退款", entity, dto);
+        }
+        
+        // 投诉
+        if ("投诉".equals(intentName)) {
+            return handleComplaint(dto, entity);
+        }
+        
+        // 其他意图走知识库咨询
+        return handleConsult(dto, result);
     }
 
     /**
@@ -177,31 +285,31 @@ public class AiAgentService {
     /**
      * 通过开放工具处理物流查询/退款意图：构造工具调用请求并走幂等控制
      *
-     * @param intent 意图（QUERY_LOGISTICS / REFUND）
+     * @param intentName 意图名称（查物流 / 退款）
      * @param entity 业务实体（通常为订单号）
      * @param dto    原始对话请求
      * @return 工具执行结果文案；缺少实体或服务不可用时返回引导话术
      */
-    private String handleByTool(IntentEnum intent, String entity, ChatDTO dto) {
+    private String handleByTool(String intentName, String entity, ChatDTO dto) {
         // 没有订单号无法执行工具，先向用户追问
         if (!StringUtils.hasText(entity)) {
-            return intent == IntentEnum.REFUND
+            return "退款".equals(intentName)
                     ? "请告诉我需要退款的订单编号"
                     : "请提供您的订单号，我马上为您查询物流进度";
         }
         if (openToolFeign == null) {
-            return toolUnavailable(intent, entity);
+            return toolUnavailable(intentName, entity);
         }
         try {
             ToolInvokeDTO invoke = new ToolInvokeDTO();
-            invoke.setIntentBind(intent.getName());
+            invoke.setIntentBind(intentName);
             invoke.setEntityId(entity);
             invoke.setSessionId(dto.getSessionId());
             // 退款等敏感操作需要用户消息里出现"确认"才真正执行，防止误触
             invoke.setConfirmed(dto.getMsg() != null && dto.getMsg().contains("确认"));
             // 幂等键 = 会话+意图+实体，重复提交/网络重试不会重复执行
             if (StringUtils.hasText(dto.getSessionId())) {
-                invoke.setIdempotencyKey(dto.getSessionId() + ":" + intent.getName() + ":" + entity);
+                invoke.setIdempotencyKey(dto.getSessionId() + ":" + intentName + ":" + entity);
             }
             // 请求方携带了实体信息时补充实体类型与实体 ID
             if (dto.getEntities() != null && !dto.getEntities().isEmpty() && dto.getEntities().get(0) != null) {
@@ -229,17 +337,17 @@ public class AiAgentService {
         } catch (Exception e) {
             log.warn("开放工具调用失败: {}", e.getMessage());
         }
-        return toolUnavailable(intent, entity);
+        return toolUnavailable(intentName, entity);
     }
 
     /**
      * 开放工具不可用时的兜底话术：按意图给出具体引导，避免生硬报错
      */
-    private String toolUnavailable(IntentEnum intent, String entity) {
-        if (intent == IntentEnum.QUERY_LOGISTICS) {
+    private String toolUnavailable(String intentName, String entity) {
+        if ("查物流".equals(intentName)) {
             return "开放能力暂时不可用，无法查询订单【" + entity + "】的物流。请稍后重试，或选择转人工客服。";
         }
-        if (intent == IntentEnum.REFUND) {
+        if ("退款".equals(intentName)) {
             return "开放能力暂时不可用，无法为订单【" + entity + "】提交退款。请稍后重试，或选择转人工客服。";
         }
         return PromptConst.TOOL_BUSY_REPLY;

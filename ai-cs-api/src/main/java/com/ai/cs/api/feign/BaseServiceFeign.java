@@ -1,10 +1,15 @@
 package com.ai.cs.api.feign;
 
 import com.ai.cs.api.feign.fallback.BaseServiceFeignFallback;
+import com.ai.cs.base.entity.IntentConfig;
+import com.ai.cs.base.entity.SlotFilling;
 import com.ai.cs.common.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 /**
  * 基础服务 Feign 接口
@@ -22,4 +27,13 @@ public interface BaseServiceFeign {
     /** 获取当前登录用户信息（依赖网关注入的认证上下文） */
     @GetMapping("/auth/userinfo")
     Result<Object> getUserInfo();
+
+    /** 获取租户启用的意图列表 */
+    @GetMapping("/system/intent/list")
+    Result<List<IntentConfig>> getEnabledIntents(@RequestParam(required = false) String tenantCode);
+
+    /** 获取意图关联的槽位列表 */
+    @GetMapping("/system/slot/list")
+    Result<List<SlotFilling>> getSlotsByIntent(@RequestParam(required = false) String tenantCode,
+                                              @RequestParam(required = false) String intentCode);
 }
