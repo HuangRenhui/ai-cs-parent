@@ -1,11 +1,16 @@
 package com.ai.cs.aiagent.service;
 
 import com.ai.cs.aiagent.enums.AiToolEnum;
+import com.ai.cs.api.feign.OpenToolFeign;
 import com.ai.cs.api.feign.WorkOrderFeign;
+import com.ai.cs.common.dto.ToolInvokeDTO;
+import com.ai.cs.common.dto.ToolInvokeResultDTO;
 import com.ai.cs.common.dto.WorkOrderDTO;
 import com.ai.cs.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import jakarta.annotation.Resource;
 
 import java.util.ArrayList;
@@ -13,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Agent工具增强服务
@@ -28,8 +34,17 @@ public class AgentToolService {
     @Resource
     private WorkOrderFeign workOrderFeign;
 
-    /** 工具执行结果缓存：key 为 "工具名:消息哈希"，避免相同输入重复调用下游服务 */
-    private final Map<String, String> toolCache = new ConcurrentHashMap<>();
+    @Resource
+    private OpenToolFeign openToolFeign;
+
+    @Resource
+    private RedisTemplate<String, String> redisTemplate;
+
+    private static final String TOOL_CACHE_PREFIX = "tool:cache:";
+    private static final long TOOL_CACHE_TTL_MINUTES = 5;
+
+    /** 本地进程内缓存（Redis不可用时的降级方案） */
+    private final Map<String, String> localCache = new ConcurrentHashMap<>();
 
     /**
      * 获取当前可用的工具列表（供前端或上游展示/选择）
@@ -79,20 +94,15 @@ public class AgentToolService {
      * @return 工具执行结果文本；未知工具返回提示文案
      */
     public String executeTool(String sessionId, String userMsg, String toolName) {
-        // 用消息哈希做缓存键的一部分，相同工具+相同消息直接复用结果
         String cacheKey = toolName + ":" + (userMsg == null ? 0 : userMsg.hashCode());
-        String cached = toolCache.get(cacheKey);
+        String cached = getFromCache(cacheKey);
         if (cached != null) {
             log.debug("工具执行结果命中缓存: {}", toolName);
             return cached;
         }
 
         String result = doExecuteTool(sessionId, userMsg, toolName);
-        // 缓存无限增长时整体清空，防止内存膨胀（简单的容量保护策略）
-        if (toolCache.size() > 200) {
-            toolCache.clear();
-        }
-        toolCache.put(cacheKey, result);
+        putToCache(cacheKey, result);
         return result;
     }
 
@@ -102,17 +112,59 @@ public class AgentToolService {
     private String doExecuteTool(String sessionId, String userMsg, String toolName) {
         AiToolEnum tool = AiToolEnum.fromName(toolName);
         if (tool == null) {
-            return "未知工具: " + toolName;
+            String openResult = invokeOpenTool(toolName, userMsg, sessionId);
+            return openResult != null ? openResult : "未知工具: " + toolName;
         }
 
-        // 按工具类型分支：只有 CREATE_ORDER 真正调用下游服务，其余为占位提示文案
         return switch (tool) {
             case CREATE_ORDER -> createWorkOrder(sessionId, userMsg);
-            case QUERY_ORDER -> "工单查询功能: 请输入工单号进行查询";
+            case QUERY_ORDER -> invokeOpenToolOrFallback("queryOrder", userMsg, sessionId, "工单查询功能: 请输入工单号进行查询");
+            case QUERY_LOGISTICS -> invokeOpenToolOrFallback("queryLogistics", userMsg, sessionId, "物流查询功能: 请提供订单号查询物流进度");
             case QUERY_FAQ -> "FAQ查询功能: 请描述您的问题";
             case TRANSFER_AGENT -> "已为您转接人工客服，请耐心等待~";
-            default -> "工具 " + toolName + " 暂未实现";
+            case QUERY_KNOWLEDGE -> "知识库查询: 请描述您的问题";
+            default -> invokeOpenToolOrFallback(toolName, userMsg, sessionId, "工具 " + toolName + " 暂未实现");
         };
+    }
+
+    /**
+     * 优先调用开放工具，失败时返回降级文案
+     */
+    private String invokeOpenToolOrFallback(String toolName, String userMsg, String sessionId, String fallback) {
+        String result = invokeOpenTool(toolName, userMsg, sessionId);
+        return result != null ? result : fallback;
+    }
+
+    /**
+     * 调用开放工具平台（接入主对话链路）
+     */
+    private String invokeOpenTool(String toolName, String userMsg, String sessionId) {
+        if (openToolFeign == null) {
+            return null;
+        }
+        try {
+            ToolInvokeDTO invoke = new ToolInvokeDTO();
+            invoke.setIntentBind(toolName);
+            invoke.setEntityId(userMsg);
+            invoke.setSessionId(sessionId);
+            invoke.setConfirmed(false);
+            if (StringUtils.hasText(sessionId)) {
+                invoke.setIdempotencyKey(sessionId + ":" + toolName + ":" + (userMsg == null ? 0 : userMsg.hashCode()));
+            }
+            Result<ToolInvokeResultDTO> res = openToolFeign.invoke(invoke);
+            if (res != null && res.isOk() && res.getData() != null) {
+                ToolInvokeResultDTO data = res.getData();
+                if (data.isSuccess() && StringUtils.hasText(data.getOutput())) {
+                    return data.getOutput();
+                }
+                if (!data.isSuccess() && StringUtils.hasText(data.getOutput())) {
+                    return data.getOutput();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("开放工具调用失败: tool={}, error={}", toolName, e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -145,7 +197,34 @@ public class AgentToolService {
      * 清空工具结果缓存
      */
     public void clearCache() {
-        toolCache.clear();
-        log.info("工具缓存已清除");
+        localCache.clear();
+        log.info("工具本地缓存已清除");
+    }
+
+    private String getFromCache(String cacheKey) {
+        if (redisTemplate != null) {
+            try {
+                return redisTemplate.opsForValue().get(TOOL_CACHE_PREFIX + cacheKey);
+            } catch (Exception e) {
+                log.debug("Redis工具缓存读取失败，降级到本地缓存");
+            }
+        }
+        return localCache.get(cacheKey);
+    }
+
+    private void putToCache(String cacheKey, String value) {
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(TOOL_CACHE_PREFIX + cacheKey, value,
+                        TOOL_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+                return;
+            } catch (Exception e) {
+                log.debug("Redis工具缓存写入失败，降级到本地缓存");
+            }
+        }
+        if (localCache.size() > 200) {
+            localCache.clear();
+        }
+        localCache.put(cacheKey, value);
     }
 }
