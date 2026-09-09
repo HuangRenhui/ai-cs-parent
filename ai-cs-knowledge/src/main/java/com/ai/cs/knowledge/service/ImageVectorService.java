@@ -1,5 +1,6 @@
 package com.ai.cs.knowledge.service;
 
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.knowledge.config.ImageProperties;
 import com.ai.cs.knowledge.entity.ImageMetadata;
 import dev.langchain4j.data.embedding.Embedding;
@@ -74,7 +75,7 @@ public class ImageVectorService {
 
         } catch (Exception e) {
             log.error("图片向量化失败: fileId={}", metadata.getFileId(), e);
-            throw new RuntimeException("图片向量化失败: " + e.getMessage(), e);
+            throw new BusinessException(503, "图片向量化失败: " + e.getMessage());
         }
     }
 
@@ -132,7 +133,7 @@ public class ImageVectorService {
 
         } catch (Exception e) {
             log.error("批量图片向量化失败", e);
-            throw new RuntimeException("批量图片向量化失败: " + e.getMessage(), e);
+            throw new BusinessException(503, "批量图片向量化失败: " + e.getMessage());
         }
     }
 
@@ -181,7 +182,7 @@ public class ImageVectorService {
 
         } catch (Exception e) {
             log.error("图片语义搜索失败: query={}", query, e);
-            throw new RuntimeException("图片语义搜索失败: " + e.getMessage(), e);
+            throw new BusinessException(503, "图片语义搜索失败: " + e.getMessage());
         }
     }
 

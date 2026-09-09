@@ -1,5 +1,6 @@
 package com.ai.cs.knowledge.service;
 
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.knowledge.entity.DocumentVersion;
 import com.ai.cs.knowledge.mapper.DocumentVersionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -87,7 +88,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return version;
         } catch (Exception e) {
             log.error("创建文档版本失败: documentId={}", documentId, e);
-            throw new RuntimeException("创建文档版本失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "创建文档版本失败: " + e.getMessage());
         }
     }
     
@@ -127,7 +128,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             );
             
             if (targetVersionRecord == null) {
-                throw new RuntimeException("目标版本不存在");
+                throw new BusinessException(404, "目标版本不存在");
             }
             
             // 将所有版本的is_current设为0
@@ -143,7 +144,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return "版本回退成功，当前版本: " + targetVersion;
         } catch (Exception e) {
             log.error("文档版本回退失败: documentId={}, targetVersion={}", documentId, targetVersion, e);
-            throw new RuntimeException("版本回退失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "版本回退失败: " + e.getMessage());
         }
     }
     
@@ -157,7 +158,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
         try {
             DocumentVersion version = documentVersionMapper.selectById(id);
             if (version == null) {
-                throw new RuntimeException("版本不存在");
+                throw new BusinessException(404, "版本不存在");
             }
             
             // 如果删除的是当前版本，需要先设置其他版本为当前版本
@@ -187,7 +188,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return "版本删除成功";
         } catch (Exception e) {
             log.error("删除文档版本失败: id={}", id, e);
-            throw new RuntimeException("删除版本失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "删除版本失败: " + e.getMessage());
         }
     }
     
@@ -202,7 +203,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
         DocumentVersion version2 = documentVersionMapper.selectById(version2Id);
         
         if (version1 == null || version2 == null) {
-            throw new RuntimeException("版本不存在");
+            throw new BusinessException(404, "版本不存在");
         }
         
         StringBuilder result = new StringBuilder();
@@ -248,7 +249,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return sb.toString();
         } catch (Exception e) {
             log.error("计算文件MD5失败: filePath={}", filePath, e);
-            throw new RuntimeException("计算文件MD5失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "计算文件MD5失败: " + e.getMessage());
         }
     }
     

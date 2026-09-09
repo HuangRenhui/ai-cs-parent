@@ -1,5 +1,6 @@
 package com.ai.cs.knowledge.util;
 
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.knowledge.config.MilvusProperties;
 import io.milvus.client.MilvusClient;
 import io.milvus.client.MilvusServiceClient;
@@ -118,7 +119,7 @@ public class MilvusUtil {
             
             if (resp.getStatus() != R.Status.Success.getCode()) {
                 log.error("Milvus插入失败: {}", resp.getMessage());
-                throw new RuntimeException("Milvus插入失败: " + resp.getMessage());
+                throw new BusinessException(503, "Milvus插入失败: " + resp.getMessage());
             }
             
             log.info("Milvus插入成功, content={}", content);
@@ -126,7 +127,7 @@ public class MilvusUtil {
             
         } catch (Exception e) {
             log.error("Milvus插入异常, content={}", content, e);
-            throw new RuntimeException("Milvus插入异常: " + e.getMessage(), e);
+            throw new BusinessException(503, "Milvus插入异常: " + e.getMessage());
         }
     }
 
@@ -156,7 +157,7 @@ public class MilvusUtil {
             
             if (resp.getStatus() != R.Status.Success.getCode()) {
                 log.error("Milvus批量插入失败: {}", resp.getMessage());
-                throw new RuntimeException("Milvus批量插入失败: " + resp.getMessage());
+                throw new BusinessException(503, "Milvus批量插入失败: " + resp.getMessage());
             }
             
             List<String> ids = new ArrayList<>();
@@ -169,7 +170,7 @@ public class MilvusUtil {
             
         } catch (Exception e) {
             log.error("Milvus批量插入异常", e);
-            throw new RuntimeException("Milvus批量插入异常: " + e.getMessage(), e);
+            throw new BusinessException(503, "Milvus批量插入异常: " + e.getMessage());
         }
     }
 
@@ -267,7 +268,7 @@ public class MilvusUtil {
             // 检查响应状态
             if (resp.getStatus() != R.Status.Success.getCode()) {
                 log.error("Milvus搜索失败: {}", resp.getMessage());
-                throw new RuntimeException("Milvus搜索失败: " + resp.getMessage());
+                throw new BusinessException(503, "Milvus搜索失败: " + resp.getMessage());
             }
             
             SearchResults results = resp.getData();
@@ -297,7 +298,7 @@ public class MilvusUtil {
             
         } catch (Exception e) {
             log.error("Milvus搜索异常", e);
-            throw new RuntimeException("Milvus搜索异常: " + e.getMessage(), e);
+            throw new BusinessException(503, "Milvus搜索异常: " + e.getMessage());
         }
     }
     
@@ -394,7 +395,7 @@ public class MilvusUtil {
                 .withFields(fields)
                 .build());
         if (resp.getStatus() != R.Status.Success.getCode()) {
-            throw new IllegalStateException("租户向量写入失败: " + resp.getMessage());
+            throw new BusinessException(503, "租户向量写入失败: " + resp.getMessage());
         }
     }
 
@@ -440,7 +441,7 @@ public class MilvusUtil {
                 .build();
         R<SearchResults> resp = getClient().search(searchParam);
         if (resp.getStatus() != R.Status.Success.getCode()) {
-            throw new IllegalStateException("租户向量检索失败: " + resp.getMessage());
+            throw new BusinessException(503, "租户向量检索失败: " + resp.getMessage());
         }
         List<MilvusHit> hits = new ArrayList<>();
         if (resp.getData() == null || resp.getData().getResults() == null) {
@@ -468,7 +469,7 @@ public class MilvusUtil {
      */
     private synchronized void ensureTenantCollection(int dimHint) {
         if (!isReady()) {
-            throw new IllegalStateException("Milvus 未连接");
+            throw new BusinessException(503, "Milvus 未连接");
         }
         // 已初始化过则直接返回，避免重复Load
         if (tenantReady.get()) {
@@ -481,7 +482,7 @@ public class MilvusUtil {
             MilvusServiceClient milvus = (MilvusServiceClient) getClient();
             R<Boolean> has = milvus.hasCollection(HasCollectionParam.newBuilder().withCollectionName(name).build());
             if (has.getStatus() != R.Status.Success.getCode()) {
-                throw new IllegalStateException("检查租户集合失败: " + has.getMessage());
+                throw new BusinessException(503, "检查租户集合失败: " + has.getMessage());
             }
             if (Boolean.FALSE.equals(has.getData())) {
                 createTenantCollection(name, dim);
@@ -489,7 +490,7 @@ public class MilvusUtil {
             // Milvus集合必须Load后才能检索
             R<RpcStatus> load = milvus.loadCollection(LoadCollectionParam.newBuilder().withCollectionName(name).build());
             if (load.getStatus() != R.Status.Success.getCode()) {
-                throw new IllegalStateException("Load 租户集合失败: " + load.getMessage());
+                throw new BusinessException(503, "Load 租户集合失败: " + load.getMessage());
             }
             tenantReady.set(true);
             tenantLastError = "";
@@ -497,7 +498,7 @@ public class MilvusUtil {
             // 记录失败原因供健康检查展示，并原样抛出
             tenantReady.set(false);
             tenantLastError = e.getMessage();
-            throw e instanceof RuntimeException re ? re : new IllegalStateException(e);
+            throw e instanceof RuntimeException re ? re : new BusinessException(503, e.getMessage());
         }
     }
 
@@ -538,7 +539,7 @@ public class MilvusUtil {
                 .addFieldType(content)
                 .build());
         if (created.getStatus() != R.Status.Success.getCode()) {
-            throw new IllegalStateException("创建租户集合失败: " + created.getMessage());
+            throw new BusinessException(503, "创建租户集合失败: " + created.getMessage());
         }
         R<RpcStatus> index = milvus.createIndex(CreateIndexParam.newBuilder()
                 .withCollectionName(name)
@@ -549,7 +550,7 @@ public class MilvusUtil {
                 .withSyncMode(Boolean.TRUE)
                 .build());
         if (index.getStatus() != R.Status.Success.getCode()) {
-            throw new IllegalStateException("创建租户索引失败: " + index.getMessage());
+            throw new BusinessException(503, "创建租户索引失败: " + index.getMessage());
         }
         log.info("已创建租户 Milvus 集合 {} dim={}", name, dim);
     }

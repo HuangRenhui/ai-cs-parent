@@ -1,5 +1,6 @@
 package com.ai.cs.workorder.service;
 
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.workorder.entity.WorkOrder;
 import com.ai.cs.workorder.mapper.WorkOrderMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +57,7 @@ public class WorkOrderFlowService {
     public Map<String, Object> startProcess(Long workOrderId) {
         WorkOrder order = workOrderMapper.selectById(workOrderId);
         if (order == null) {
-            throw new RuntimeException("工单不存在");
+            throw new BusinessException(404, "工单不存在");
         }
 
         // 设置流程变量：供 BPMN 中的网关条件与任务分配表达式使用
@@ -143,7 +144,7 @@ public class WorkOrderFlowService {
     public void completeTask(String taskId, Map<String, Object> variables) {
         Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {
-            throw new RuntimeException("任务不存在或已完成");
+            throw new BusinessException(404, "任务不存在或已完成");
         }
 
         if (variables == null) {

@@ -268,14 +268,14 @@ knowledge-graph:
   enabled: false  # 是否启用知识图谱（需要Neo4j等图数据库）
   database-type: neo4j  # 图数据库类型: neo4j/nebula
   neo4j:
-    uri: bolt://localhost:7687
-    username: neo4j
-    password: password
+    uri: ${NEO4J_URI:bolt://localhost:7687}
+    username: ${NEO4J_USERNAME:neo4j}
+    password: ${NEO4J_PASSWORD:}
     database: neo4j
   nebula:
-    address: localhost:9669
-    username: root
-    password: nebula
+    address: ${NEBULA_ADDRESS:localhost:9669}
+    username: ${NEBULA_USERNAME:root}
+    password: ${NEBULA_PASSWORD:}
     space: knowledge_graph
   build:
     auto-build: false  # 是否自动从文档构建图谱

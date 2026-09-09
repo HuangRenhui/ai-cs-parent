@@ -1,5 +1,6 @@
 package com.ai.cs.knowledge.service;
 
+import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.knowledge.config.AudioProperties;
 import com.ai.cs.knowledge.entity.AudioMetadata;
 import lombok.extern.slf4j.Slf4j;
@@ -52,7 +53,7 @@ public class AudioProcessService {
             log.info("音频存储目录初始化完成: {}", audioProperties.getStoragePath());
         } catch (IOException e) {
             log.error("初始化存储目录失败", e);
-            throw new RuntimeException("初始化存储目录失败", e);
+            throw new BusinessException(500, "初始化存储目录失败: " + e.getMessage());
         }
     }
 
@@ -199,7 +200,7 @@ public class AudioProcessService {
                     
         } catch (Exception e) {
             log.error("提取音频元数据失败: {}", audioFile.getName(), e);
-            throw new RuntimeException("提取音频元数据失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "提取音频元数据失败: " + e.getMessage());
         }
         
         return metadata;
@@ -254,7 +255,7 @@ public class AudioProcessService {
             if (targetFile.exists()) {
                 targetFile.delete();
             }
-            throw new RuntimeException("音频压缩失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "音频压缩失败: " + e.getMessage());
         }
     }
 
@@ -288,7 +289,7 @@ public class AudioProcessService {
             
         } catch (Exception e) {
             log.error("音频格式转换失败", e);
-            throw new RuntimeException("音频格式转换失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "音频格式转换失败: " + e.getMessage());
         }
     }
 
@@ -320,7 +321,7 @@ public class AudioProcessService {
             
         } catch (Exception e) {
             log.error("音频比特率调整失败", e);
-            throw new RuntimeException("音频比特率调整失败: " + e.getMessage(), e);
+            throw new BusinessException(500, "音频比特率调整失败: " + e.getMessage());
         }
     }
 
@@ -426,4 +427,3 @@ public class AudioProcessService {
         }
     }
 }
-
