@@ -6,6 +6,7 @@ import com.ai.cs.common.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
@@ -29,4 +30,8 @@ public interface KnowledgeFeign {
     /** 按 ID 查询 FAQ 详情 */
     @GetMapping("/knowledge/faq/{id}")
     Result<Object> getFaqById(@PathVariable("id") Long id);
+
+    /** 按 ID 补录向量（对账用） */
+    @PostMapping("/knowledge/vectorize/{id}")
+    Result<String> vectorizeById(@PathVariable("id") Long id);
 }

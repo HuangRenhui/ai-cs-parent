@@ -32,6 +32,14 @@ public class KnowledgeFaq extends BaseEntity {
     private Integer status;
     /** Milvus中的向量ID */
     private String milvusId;
+    /** 审核状态：0-草稿，1-待审核，2-已发布，3-已下线 */
+    private Integer auditStatus;
+    /** 点赞数 */
+    private Integer likeCount;
+    /** 点踩数 */
+    private Integer dislikeCount;
+    /** 浏览数 */
+    private Integer viewCount;
     /** 逻辑删除标记：0-正常，1-已删除 */
     @TableLogic
     private Integer delFlag;

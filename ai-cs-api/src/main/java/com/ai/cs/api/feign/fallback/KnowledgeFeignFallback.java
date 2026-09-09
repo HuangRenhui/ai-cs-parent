@@ -33,4 +33,11 @@ public class KnowledgeFeignFallback implements KnowledgeFeign {
         log.error("知识库FAQ查询失败，触发熔断降级");
         return Result.fail(503, "知识库服务暂时不可用，请稍后重试");
     }
+
+    /** 降级：向量补录失败返回 503 */
+    @Override
+    public Result<String> vectorizeById(Long id) {
+        log.error("知识库向量补录失败 id={}，触发熔断降级", id);
+        return Result.fail(503, "知识库服务暂时不可用，请稍后重试");
+    }
 }

@@ -48,6 +48,15 @@ public class KnowledgeMissService extends ServiceImpl<KnowledgeMissMapper, Knowl
      * @return 分页结果
      */
     public PageResult<KnowledgeMiss> pageList(String tenantCode, long page, long size) {
+        return pageList(tenantCode, null, page, size);
+    }
+
+    /**
+     * 分页查询未命中记录（可按处理状态过滤）
+     * @param tenantCode 租户编码（可选）
+     * @param status 处理状态（可选，0-待处理，1-已转问）
+     */
+    public PageResult<KnowledgeMiss> pageList(String tenantCode, Integer status, long page, long size) {
         // 分页参数防御性校正
         long p = Math.max(1, page);
         long s = Math.min(100, Math.max(1, size));
@@ -55,8 +64,29 @@ public class KnowledgeMissService extends ServiceImpl<KnowledgeMissMapper, Knowl
         if (StringUtils.hasText(tenantCode)) {
             wrapper.eq(KnowledgeMiss::getTenantCode, KnowledgeFaqService.normalizeTenant(tenantCode));
         }
+        if (status != null) {
+            wrapper.eq(KnowledgeMiss::getStatus, status);
+        }
         wrapper.orderByDesc(KnowledgeMiss::getCreateTime);
         Page<KnowledgeMiss> mp = this.page(new Page<>(p, s), wrapper);
         return PageResult.of(mp.getRecords(), mp.getTotal(), p, s);
+    }
+
+    /**
+     * 标记未命中记录已转问
+     *
+     * @param missId 未命中记录ID
+     * @param faqId 生成的FAQ ID
+     * @return 是否成功
+     */
+    public boolean markConverted(Long missId, Long faqId) {
+        KnowledgeMiss miss = this.getById(missId);
+        if (miss == null) {
+            return false;
+        }
+        miss.setStatus(1);
+        miss.setFaqId(faqId);
+        miss.setHandleTime(LocalDateTime.now());
+        return this.updateById(miss);
     }
 }

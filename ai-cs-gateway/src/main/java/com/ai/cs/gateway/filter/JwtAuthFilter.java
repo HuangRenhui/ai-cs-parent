@@ -31,6 +31,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/open/widget/init",
             "/ops/health/self",
             "/knowledge/health",
+            "/help-center/",
             "/files/avatars/",
             "/actuator/health"
     );

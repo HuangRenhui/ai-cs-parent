@@ -34,7 +34,7 @@ spring:
         - id: knowledge-route
           uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:
-            - Path=/knowledge/**
+            - Path=/knowledge/**,/help-center/**
         - id: knowledge-api-route
           uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:

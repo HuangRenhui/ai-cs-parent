@@ -25,6 +25,12 @@ public class KnowledgeMiss {
     private String sessionId;
     /** 本次检索的最高相似度分数（低于阈值才记录） */
     private Float topScore;
+    /** 处理状态：0-待处理，1-已转问 */
+    private Integer status;
+    /** 转问生成的FAQ ID */
+    private Long faqId;
+    /** 处理时间 */
+    private LocalDateTime handleTime;
     /** 记录创建时间 */
     private LocalDateTime createTime;
 }

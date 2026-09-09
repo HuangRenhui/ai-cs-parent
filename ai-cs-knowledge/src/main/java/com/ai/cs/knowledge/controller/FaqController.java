@@ -342,4 +342,53 @@ public class FaqController {
             return Result.fail("系统异常: " + e.getMessage());
         }
     }
+
+    /**
+     * FAQ 点赞/点踩反馈
+     */
+    @PostMapping("/feedback/{id}")
+    @Operation(summary = "FAQ 点赞/点踩")
+    public Result<String> feedback(@PathVariable Long id, @RequestParam String type) {
+        return faqService.feedback(id, type) ? Result.success("反馈成功") : Result.fail("反馈失败，FAQ不存在或类型非法");
+    }
+
+    /**
+     * 未命中转问学习：把未命中记录转成正式 FAQ 并向量化
+     */
+    @PostMapping("/miss/{id}/convert")
+    @Operation(summary = "未命中转问学习", description = "将未命中记录转为正式FAQ并向量化入库")
+    public Result<String> convertMiss(@PathVariable Long id,
+                                      @RequestParam String answer,
+                                      @RequestParam(required = false) String category) {
+        KnowledgeMiss miss = missService.getById(id);
+        if (miss == null) {
+            return Result.fail("未命中记录不存在");
+        }
+        if (miss.getStatus() != null && miss.getStatus() == 1) {
+            return Result.fail("该未命中记录已处理");
+        }
+        if (!StringUtils.hasText(answer)) {
+            return Result.fail("答案不能为空");
+        }
+        // 创建 FAQ（直接发布）
+        KnowledgeFaq faq = new KnowledgeFaq();
+        faq.setTenantCode(miss.getTenantCode());
+        faq.setQuestion(miss.getQuestion());
+        faq.setAnswer(answer);
+        faq.setCategory(category);
+        faq.setStatus(1);
+        faq.setAuditStatus(2);
+        faq.setSortNum(0);
+        faqService.save(faq);
+        // 向量化（失败不影响转问结果，可后续手动补录）
+        try {
+            String milvusId = ragSearchService.vectorizeAndInsert(faq);
+            faq.setMilvusId(milvusId);
+            faqService.updateById(faq);
+        } catch (Exception ignored) {
+            // 向量化失败，保持 milvusId 为空，可后续补录
+        }
+        missService.markConverted(id, faq.getId());
+        return Result.success("已转问为FAQ，ID: " + faq.getId());
+    }
 }

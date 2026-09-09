@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * FAQ知识库服务
@@ -47,8 +48,9 @@ public class KnowledgeFaqService extends ServiceImpl<KnowledgeFaqMapper, Knowled
         if (StringUtils.hasText(tenantCode)) {
             wrapper.eq(KnowledgeFaq::getTenantCode, normalizeTenant(tenantCode));
         }
-        // status=1 表示启用
+        // status=1 表示启用，auditStatus=2 表示已发布（仅已发布且启用的 FAQ 参与检索）
         wrapper.eq(KnowledgeFaq::getStatus, 1);
+        wrapper.eq(KnowledgeFaq::getAuditStatus, 2);
         wrapper.orderByAsc(KnowledgeFaq::getSortNum).orderByDesc(KnowledgeFaq::getUpdateTime);
         return this.list(wrapper);
     }
@@ -82,5 +84,77 @@ public class KnowledgeFaqService extends ServiceImpl<KnowledgeFaqMapper, Knowled
         wrapper.orderByAsc(KnowledgeFaq::getSortNum).orderByDesc(KnowledgeFaq::getUpdateTime);
         Page<KnowledgeFaq> mp = this.page(new Page<>(p, s), wrapper);
         return PageResult.of(mp.getRecords(), mp.getTotal(), p, s);
+    }
+
+    /**
+     * 点赞/点踩反馈：累加计数
+     *
+     * @param id FAQ ID
+     * @param type like / dislike
+     * @return 是否成功
+     */
+    public boolean feedback(Long id, String type) {
+        KnowledgeFaq faq = this.getById(id);
+        if (faq == null) {
+            return false;
+        }
+        if ("like".equalsIgnoreCase(type)) {
+            faq.setLikeCount((faq.getLikeCount() == null ? 0 : faq.getLikeCount()) + 1);
+        } else if ("dislike".equalsIgnoreCase(type)) {
+            faq.setDislikeCount((faq.getDislikeCount() == null ? 0 : faq.getDislikeCount()) + 1);
+        } else {
+            return false;
+        }
+        return this.updateById(faq);
+    }
+
+    /**
+     * 浏览量 +1
+     *
+     * @param id FAQ ID
+     * @return 是否成功
+     */
+    public boolean view(Long id) {
+        KnowledgeFaq faq = this.getById(id);
+        if (faq == null) {
+            return false;
+        }
+        faq.setViewCount((faq.getViewCount() == null ? 0 : faq.getViewCount()) + 1);
+        return this.updateById(faq);
+    }
+
+    /**
+     * 分页查询已发布 FAQ（供对外帮助中心使用，仅返回已发布且启用的，按热度排序）
+     */
+    public PageResult<KnowledgeFaq> pagePublished(String tenantCode, String category, String keyword, long page, long size) {
+        long p = Math.max(1, page);
+        long s = Math.min(50, Math.max(1, size));
+        LambdaQueryWrapper<KnowledgeFaq> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(tenantCode)) {
+            wrapper.eq(KnowledgeFaq::getTenantCode, normalizeTenant(tenantCode));
+        }
+        wrapper.eq(KnowledgeFaq::getStatus, 1);
+        wrapper.eq(KnowledgeFaq::getAuditStatus, 2);
+        if (StringUtils.hasText(category)) {
+            wrapper.eq(KnowledgeFaq::getCategory, category);
+        }
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w.like(KnowledgeFaq::getQuestion, keyword).or().like(KnowledgeFaq::getAnswer, keyword));
+        }
+        wrapper.orderByDesc(KnowledgeFaq::getLikeCount).orderByDesc(KnowledgeFaq::getViewCount).orderByAsc(KnowledgeFaq::getSortNum);
+        Page<KnowledgeFaq> mp = this.page(new Page<>(p, s), wrapper);
+        return PageResult.of(mp.getRecords(), mp.getTotal(), p, s);
+    }
+
+    /**
+     * 查询已发布 FAQ 的分类列表（去重）
+     */
+    public List<String> listCategories(String tenantCode) {
+        List<KnowledgeFaq> faqs = getEnableFaqList(tenantCode);
+        return faqs.stream()
+                .map(KnowledgeFaq::getCategory)
+                .filter(c -> c != null && !c.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
     }
 }
