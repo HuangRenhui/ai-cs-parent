@@ -43,6 +43,9 @@ DROP TABLE IF EXISTS `cs_statistics`;
 DROP TABLE IF EXISTS `cs_ai_model`;
 DROP TABLE IF EXISTS `cs_model_usage`;
 DROP TABLE IF EXISTS `cs_sys_config`;
+DROP TABLE IF EXISTS `cs_intent_config`;
+DROP TABLE IF EXISTS `cs_slot_filling`;
+DROP TABLE IF EXISTS `cs_data_retention`;
 
 CREATE TABLE `cs_customer` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '客户ID',
@@ -114,6 +117,10 @@ CREATE TABLE `cs_knowledge_faq` (
     `sort_num` INT DEFAULT 0 COMMENT '排序号',
     `status` TINYINT DEFAULT 1 COMMENT '状态: 0-禁用, 1-启用',
     `milvus_id` VARCHAR(100) DEFAULT NULL COMMENT 'Milvus向量数据库中的记录ID',
+    `audit_status` TINYINT DEFAULT 2 COMMENT '审核状态: 0-草稿, 1-待审核, 2-已发布, 3-已下线',
+    `like_count` INT DEFAULT 0 COMMENT '点赞数',
+    `dislike_count` INT DEFAULT 0 COMMENT '点踩数',
+    `view_count` INT DEFAULT 0 COMMENT '浏览数',
     `del_flag` TINYINT DEFAULT 0 COMMENT '删除标记: 0-未删除, 1-已删除',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -131,6 +138,9 @@ CREATE TABLE `cs_knowledge_miss` (
     `question` VARCHAR(500) NOT NULL COMMENT '用户问题',
     `session_id` VARCHAR(64) DEFAULT NULL COMMENT '会话ID',
     `top_score` DECIMAL(8,4) DEFAULT NULL COMMENT '最高相似度（未过阈值）',
+    `status` TINYINT DEFAULT 0 COMMENT '处理状态: 0-待处理, 1-已转问',
+    `faq_id` BIGINT DEFAULT NULL COMMENT '转问生成的FAQ ID',
+    `handle_time` DATETIME DEFAULT NULL COMMENT '处理时间',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     KEY `idx_miss_tenant_time` (`tenant_code`, `create_time`)
@@ -476,6 +486,68 @@ CREATE TABLE `cs_sys_config` (
     UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置表';
 
+CREATE TABLE `cs_intent_config` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `intent_code` VARCHAR(64) NOT NULL COMMENT '意图编码',
+    `intent_name` VARCHAR(100) NOT NULL COMMENT '意图名称',
+    `intent_type` VARCHAR(32) DEFAULT 'business' COMMENT '意图类型: business/system/transfer',
+    `description` TEXT DEFAULT NULL COMMENT '意图描述',
+    `keywords` TEXT DEFAULT NULL COMMENT '关键词JSON数组',
+    `examples` TEXT DEFAULT NULL COMMENT '示例话术JSON数组',
+    `tool_bind` VARCHAR(64) DEFAULT NULL COMMENT '绑定的工具名称',
+    `response_template` TEXT DEFAULT NULL COMMENT '回复模板',
+    `priority` INT DEFAULT 0 COMMENT '优先级',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `del_flag` TINYINT DEFAULT 0 COMMENT '删除标记: 0-未删除, 1-已删除',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_intent` (`tenant_code`, `intent_code`),
+    KEY `idx_tenant_code` (`tenant_code`),
+    KEY `idx_enabled` (`enabled`),
+    KEY `idx_del_flag` (`del_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可配置意图表';
+
+CREATE TABLE `cs_slot_filling` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `intent_code` VARCHAR(64) NOT NULL COMMENT '关联意图编码',
+    `slot_name` VARCHAR(64) NOT NULL COMMENT '槽位名称',
+    `slot_type` VARCHAR(32) NOT NULL COMMENT '槽位类型: string/number/date/phone/order_id',
+    `required` TINYINT DEFAULT 1 COMMENT '是否必填: 0-否, 1-是',
+    `prompt_template` TEXT DEFAULT NULL COMMENT '追问话术模板',
+    `validation_regex` VARCHAR(500) DEFAULT NULL COMMENT '验证正则表达式',
+    `extract_prompt` TEXT DEFAULT NULL COMMENT '提取提示词',
+    `priority` INT DEFAULT 0 COMMENT '优先级',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `del_flag` TINYINT DEFAULT 0 COMMENT '删除标记: 0-未删除, 1-已删除',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_tenant_intent` (`tenant_code`, `intent_code`),
+    KEY `idx_slot_name` (`slot_name`),
+    KEY `idx_enabled` (`enabled`),
+    KEY `idx_del_flag` (`del_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='多轮填槽配置表';
+
+CREATE TABLE `cs_data_retention` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `data_type` VARCHAR(32) NOT NULL COMMENT '数据类型: session/message/knowledge/tool_invoke',
+    `retention_days` INT NOT NULL DEFAULT 90 COMMENT '保留天数',
+    `allow_external_domain` TINYINT DEFAULT 0 COMMENT '是否允许出域: 0-否, 1-是',
+    `allow_user_delete` TINYINT DEFAULT 1 COMMENT '是否允许用户删除: 0-否, 1-是',
+    `anonymize_after_days` INT DEFAULT NULL COMMENT '匿名化天数',
+    `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `status` TINYINT DEFAULT 1 COMMENT '状态: 0-禁用, 1-启用',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_type` (`tenant_code`, `data_type`),
+    KEY `idx_tenant_code` (`tenant_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据保留策略表';
+
 CREATE TABLE `cs_ai_model` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     `model_name` VARCHAR(100) NOT NULL COMMENT '显示名称',
@@ -591,6 +663,9 @@ INSERT INTO `cs_menu` (`parent_id`, `menu_name`, `menu_type`, `path`, `component
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '菜单管理', 2, '/system/menu', 'system/MenuPage', 'system:menu:list', 'Menu', 3),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '操作日志', 2, '/system/log', 'system/LogPage', 'system:log:list', 'Notebook', 4),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '系统配置', 2, '/system/config', 'system/ConfigPage', 'system:config:list', 'Tools', 5),
+((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '意图管理', 2, '/system/intent', 'system/IntentPage', 'system:intent:list', 'Target', 6),
+((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '填槽配置', 2, '/system/slot', 'system/SlotPage', 'system:slot:list', 'Grid', 7),
+((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='系统管理') t), '数据保留', 2, '/system/data-retention', 'system/DataRetentionPage', 'system:data-retention:list', 'Shield', 8),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='客户服务') t), 'AI聊天', 2, '/chat', 'ChatPage', 'chat:view', 'ChatDotRound', 1),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='客户服务') t), '客户管理', 2, '/customer', 'CustomerPage', 'customer:list', 'User', 2),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='客户服务') t), '会话管理', 2, '/service/session', 'service/SessionPage', 'service:session:list', 'ChatLineSquare', 3),
@@ -603,6 +678,26 @@ INSERT INTO `cs_menu` (`parent_id`, `menu_name`, `menu_type`, `path`, `component
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='统计分析') t), '数据概览', 2, '/statistics/overview', 'statistics/OverviewPage', 'statistics:overview', 'TrendCharts', 1),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='统计分析') t), '对话分析', 2, '/statistics/chat', 'statistics/ChatStatsPage', 'statistics:chat', 'ChatDotSquare', 2),
 ((SELECT id FROM (SELECT id FROM cs_menu WHERE menu_name='统计分析') t), '工单分析', 2, '/statistics/workorder', 'statistics/WorkOrderStatsPage', 'statistics:workorder', 'DataBoard', 3);
+
+-- 插入默认意图配置（兼容硬编码意图）
+INSERT INTO `cs_intent_config` (`tenant_code`, `intent_code`, `intent_name`, `intent_type`, `description`, `keywords`, `examples`, `tool_bind`, `response_template`, `priority`, `enabled`, `del_flag`) VALUES
+('default', 'CONSULT', '咨询', 'business', '政策、账户、使用方法等一般问题', '["咨询","问题","帮助","怎么","如何"]', '["如何重置密码","怎么联系客服","账户管理"]', NULL, NULL, 1, 1, 0),
+('default', 'QUERY_LOGISTICS', '查物流', 'business', '询问进度、发货、物流（演示包；entity 填对方系统单号）', '["物流","快递","发货","进度","配送"]', '["查一下物流","快递到哪了","什么时候发货"]', 'query_logistics', NULL, 2, 1, 0),
+('default', 'REFUND', '退款', 'business', '要求退款/退货（演示包；entity 填对方系统单号）', '["退款","退货","退钱","申请退款"]', '["我要退款","申请退货","怎么退款"]', 'apply_refund', NULL, 3, 1, 0),
+('default', 'COMPLAINT', '投诉', 'business', '表达不满、催促处理，需要升级', '["投诉","不满","差评","催促"]', '["我要投诉","服务太差了","快点处理"]', NULL, NULL, 4, 1, 0),
+('default', 'TO_AGENT', '转人工', 'transfer', '明确要求人工客服', '["转人工","人工客服","转接","客服"]', '["转人工客服","我要人工服务"]', NULL, NULL, 5, 1, 0);
+
+-- 插入默认填槽配置（演示：查物流需要订单号）
+INSERT INTO `cs_slot_filling` (`tenant_code`, `intent_code`, `slot_name`, `slot_type`, `required`, `prompt_template`, `validation_regex`, `extract_prompt`, `priority`, `enabled`, `del_flag`) VALUES
+('default', 'QUERY_LOGISTICS', 'order_id', 'order_id', 1, '请提供您的订单号', '[A-Za-z0-9]{6,}', '从用户消息中提取订单号', 1, 1, 0),
+('default', 'REFUND', 'order_id', 'order_id', 1, '请告诉我需要退款的订单编号', '[A-Za-z0-9]{6,}', '从用户消息中提取订单号', 1, 1, 0);
+
+-- 插入默认数据保留策略
+INSERT INTO `cs_data_retention` (`tenant_code`, `data_type`, `retention_days`, `allow_external_domain`, `allow_user_delete`, `anonymize_after_days`, `description`, `status`) VALUES
+('default', 'session', 90, 0, 1, 180, '会话数据保留策略', 1),
+('default', 'message', 90, 0, 1, 180, '消息数据保留策略', 1),
+('default', 'knowledge', 365, 0, 0, NULL, '知识库数据保留策略', 1),
+('default', 'tool_invoke', 180, 0, 0, 365, '工具调用审计保留策略', 1);
 
 INSERT INTO `cs_user` (`username`, `password`, `real_name`, `email`, `status`) VALUES
 ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '超级管理员', 'admin@example.com', 1);
