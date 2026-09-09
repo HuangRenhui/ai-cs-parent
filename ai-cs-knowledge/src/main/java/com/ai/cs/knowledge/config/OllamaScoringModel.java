@@ -1,5 +1,8 @@
 package com.ai.cs.knowledge.config;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.scoring.ScoringModel;
@@ -121,19 +124,16 @@ public class OllamaScoringModel implements ScoringModel {
                 return fallbackScores;
             }
 
-            // 解析响应（简化实现，实际需要根据Ollama API返回格式调整）
             String responseBody = httpResponse.body().string();
             log.debug("Ollama Rerank响应: {}", responseBody);
             
-            // TODO: 根据实际的Ollama Rerank API响应格式解析分数
-            // 这里提供一个简化的实现，假设返回JSON数组格式的分数
             List<Double> scores = parseScoresFromResponse(responseBody, documents.size());
             return scores;
         }
     }
 
     /**
-     * 从响应中解析分数
+     * 从响应中解析分数（FastJSON实现）
      * 支持Ollama Rerank API标准返回格式：
      * {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
      * 以及简化格式：[0.95, 0.87, 0.72, ...]
@@ -142,47 +142,32 @@ public class OllamaScoringModel implements ScoringModel {
         List<Double> scores = new ArrayList<>();
 
         try {
-            // 尝试解析标准Ollama Rerank API返回格式
-            // 格式: {"results": [{"index": 0, "relevance_score": 0.95}, ...]}
-            if (responseBody.contains("\"relevance_score\"")) {
-                String[] parts = responseBody.split("\"relevance_score\":");
-                for (int i = 1; i < parts.length && scores.size() < expectedSize; i++) {
-                    String afterScore = parts[i].trim();
-                    // 提取逗号或}之前的数值
-                    int endIdx = 0;
-                    while (endIdx < afterScore.length() && 
-                           (Character.isDigit(afterScore.charAt(endIdx)) || afterScore.charAt(endIdx) == '.' || afterScore.charAt(endIdx) == '-')) {
-                        endIdx++;
-                    }
-                    if (endIdx > 0) {
-                        double score = Double.parseDouble(afterScore.substring(0, endIdx));
-                        scores.add(clampScore(score));
-                    }
-                }
-            } 
-            // 尝试解析简化数组格式: [0.95, 0.87, ...]
-            else if (responseBody.trim().startsWith("[")) {
-                String numbers = responseBody.replaceAll("[\\[\\]\\s]", "");
-                String[] numParts = numbers.split(",");
-                for (String num : numParts) {
-                    if (!num.isEmpty() && scores.size() < expectedSize) {
-                        double score = Double.parseDouble(num.trim());
-                        scores.add(clampScore(score));
+            String trimmed = responseBody.trim();
+            if (trimmed.startsWith("{")) {
+                JSONObject json = JSON.parseObject(responseBody);
+                JSONArray results = json.getJSONArray("results");
+                if (results != null) {
+                    for (int i = 0; i < results.size() && scores.size() < expectedSize; i++) {
+                        JSONObject item = results.getJSONObject(i);
+                        Double relevanceScore = item.getDouble("relevance_score");
+                        if (relevanceScore == null) {
+                            relevanceScore = item.getDouble("score");
+                        }
+                        if (relevanceScore != null) {
+                            scores.add(clampScore(relevanceScore));
+                        }
                     }
                 }
-            }
-            // 尝试解析单行分数格式（逗号分隔）
-            else {
-                String[] numParts = responseBody.trim().split(",");
-                for (String num : numParts) {
-                    if (!num.isEmpty() && scores.size() < expectedSize) {
-                        double score = Double.parseDouble(num.trim());
-                        scores.add(clampScore(score));
+            } else if (trimmed.startsWith("[")) {
+                JSONArray arr = JSON.parseArray(responseBody);
+                for (int i = 0; i < arr.size() && scores.size() < expectedSize; i++) {
+                    Double val = arr.getDouble(i);
+                    if (val != null) {
+                        scores.add(clampScore(val));
                     }
                 }
             }
 
-            // 如果解析出的分数不足，用默认值补齐
             while (scores.size() < expectedSize) {
                 scores.add(0.5);
                 log.warn("Rerank分数不足，用默认值0.5补齐，已解析: {}，期望: {}", scores.size() - 1, expectedSize);

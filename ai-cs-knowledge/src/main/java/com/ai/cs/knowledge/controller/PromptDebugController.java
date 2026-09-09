@@ -1,5 +1,6 @@
 package com.ai.cs.knowledge.controller;
 
+import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.config.PromptProperties;
 import com.ai.cs.knowledge.service.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +33,7 @@ public class PromptDebugController {
      * 获取当前 Prompt 配置
      */
     @GetMapping("/config")
-    public Map<String, Object> getConfig() {
+    public Result<Map<String, Object>> getConfig() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("enabled", promptProperties.getEnabled());
         result.put("debugLog", promptProperties.getDebugLog());
@@ -75,30 +76,29 @@ public class PromptDebugController {
         context.put("contextPrefix", promptProperties.getContextPrefix());
         result.put("contextConfig", context);
 
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 获取所有可用预设模板列表
      */
     @GetMapping("/presets")
-    public Map<String, Object> listPresets() {
+    public Result<Map<String, Object>> listPresets() {
         List<String> names = promptTemplateService.getAvailablePresets();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("availablePresets", names);
         result.put("currentPreset", promptProperties.getPreset());
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 获取指定预设模板详情
      */
     @GetMapping("/presets/{name}")
-    public Map<String, Object> getPresetDetail(@PathVariable String name) {
+    public Result<Map<String, Object>> getPresetDetail(@PathVariable String name) {
         PromptProperties preset = promptTemplateService.getPreset(name);
         if (preset == null) {
-            return Map.of("error", "预设模板不存在: " + name,
-                    "availablePresets", promptTemplateService.getAvailablePresets());
+            return Result.fail(404, "预设模板不存在: " + name);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -117,26 +117,26 @@ public class PromptDebugController {
         result.put("noDataReply", preset.getNoDataReply());
         result.put("noFabrication", preset.getNoFabrication());
         result.put("contextOnlyReply", preset.getContextOnlyReply());
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 预览生成的 System Prompt
      */
     @GetMapping("/preview/system")
-    public Map<String, Object> previewSystemPrompt() {
+    public Result<Map<String, Object>> previewSystemPrompt() {
         String systemPrompt = promptTemplateService.buildSystemPrompt();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("systemPrompt", systemPrompt);
         result.put("length", systemPrompt.length());
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 预览生成的完整 Prompt
      */
     @PostMapping("/preview/full")
-    public Map<String, Object> previewFullPrompt(@RequestBody Map<String, Object> request) {
+    public Result<Map<String, Object>> previewFullPrompt(@RequestBody Map<String, Object> request) {
         String question = (String) request.getOrDefault("question", "测试问题");
         @SuppressWarnings("unchecked")
         List<String> contextDocs = (List<String>) request.getOrDefault("contextDocs",
@@ -152,14 +152,14 @@ public class PromptDebugController {
         result.put("fullPrompt", systemPrompt + "\n\n---\n\n" + userPrompt);
         result.put("totalLength", systemPrompt.length() + userPrompt.length());
         result.put("contextDocCount", contextDocs.size());
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 预览 messages 格式（OpenAI兼容）
      */
     @PostMapping("/preview/messages")
-    public Map<String, Object> previewMessages(@RequestBody Map<String, Object> request) {
+    public Result<Map<String, Object>> previewMessages(@RequestBody Map<String, Object> request) {
         String question = (String) request.getOrDefault("question", "测试问题");
         @SuppressWarnings("unchecked")
         List<String> contextDocs = (List<String>) request.getOrDefault("contextDocs",
@@ -174,14 +174,14 @@ public class PromptDebugController {
                 .mapToInt(m -> ((String) m.get("content")).length())
                 .sum();
         result.put("totalLength", totalLength);
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 动态更新 Prompt 配置（运行时生效，不持久化）
      */
     @PostMapping("/config")
-    public Map<String, Object> updateConfig(@RequestBody Map<String, Object> config) {
+    public Result<Map<String, Object>> updateConfig(@RequestBody Map<String, Object> config) {
         Map<String, Object> result = new LinkedHashMap<>();
 
         if (config.containsKey("enabled")) {
@@ -261,15 +261,15 @@ public class PromptDebugController {
 
         result.put("status", "success");
         result.put("message", "配置已动态更新（重启后恢复为 application.yml 中的值）");
-        return result;
+        return Result.success(result);
     }
 
     /**
      * 重置 Prompt 配置（取消预设，恢复为 application.yml 默认值）
      */
     @PostMapping("/reset")
-    public Map<String, Object> resetConfig() {
+    public Result<Map<String, Object>> resetConfig() {
         promptProperties.setPreset("");
-        return Map.of("status", "success", "message", "已取消预设模板，恢复为默认配置");
+        return Result.success(Map.of("status", "success", "message", "已取消预设模板，恢复为默认配置"));
     }
 }
