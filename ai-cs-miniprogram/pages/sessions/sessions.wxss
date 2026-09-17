@@ -1,0 +1,15 @@
+.session {
+  padding: 28rpx 24rpx;
+}
+
+.s-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1c2b4a;
+}
+
+.s-sub {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  color: #8a94a6;
+}

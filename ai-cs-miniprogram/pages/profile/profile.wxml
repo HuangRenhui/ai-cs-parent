@@ -1,0 +1,39 @@
+<view class="container">
+  <view class="user-card">
+    <view class="avatar">{{(userInfo.realName || userInfo.username || '客')[0]}}</view>
+    <view class="user-copy">
+      <view class="user-name">{{userInfo.realName || userInfo.username || '微信用户'}}</view>
+      <view class="user-sub">{{userInfo.username || '已登录'}}</view>
+    </view>
+  </view>
+
+  <view class="card menu">
+    <view class="menu-item" bindtap="goChat">
+      <text class="menu-icon">💬</text>
+      <text class="menu-text">智能咨询</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goSessions">
+      <text class="menu-icon">🗂️</text>
+      <text class="menu-text">我的会话</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goWorkOrder">
+      <text class="menu-icon">📋</text>
+      <text class="menu-text">我的工单</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="goHelp">
+      <text class="menu-icon">📖</text>
+      <text class="menu-text">帮助中心</text>
+      <text class="menu-arrow">></text>
+    </view>
+    <view class="menu-item" bindtap="about">
+      <text class="menu-icon">ℹ️</text>
+      <text class="menu-text">关于</text>
+      <text class="menu-arrow">></text>
+    </view>
+  </view>
+
+  <button class="btn-plain logout" bindtap="logout">退出登录</button>
+</view>

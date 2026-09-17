@@ -1,0 +1,56 @@
+<view class="container">
+  <!-- 搜索 -->
+  <view class="search">
+    <input
+      class="search-input"
+      value="{{keyword}}"
+      placeholder="搜一搜你的问题…"
+      bindinput="onKeyword"
+      confirm-type="search"
+      bindconfirm="onSearch"
+    />
+    <button class="search-btn" loading="{{searching}}" bindtap="onSearch">搜索</button>
+  </view>
+
+  <!-- 智能答复 -->
+  <view wx:if="{{reply}}" class="card reply-card">
+    <view class="reply-title">智能答复</view>
+    <view class="reply-text">{{reply}}</view>
+    <view wx:if="{{citations.length}}" class="citations">
+      <text class="muted">参考：</text>
+      <text wx:for="{{citations}}" wx:key="faqId" class="cite">{{item.question}}</text>
+    </view>
+  </view>
+
+  <!-- 分类 -->
+  <scroll-view class="cats" scroll-x enable-flex>
+    <view class="cat {{activeCategory === '' ? 'active' : ''}}" data-cat="" bindtap="switchCategory">全部</view>
+    <view
+      wx:for="{{categories}}"
+      wx:key="*this"
+      class="cat {{activeCategory === item ? 'active' : ''}}"
+      data-cat="{{item}}"
+      bindtap="switchCategory"
+    >{{item}}</view>
+  </scroll-view>
+
+  <!-- FAQ -->
+  <view class="card">
+    <view class="title">常见问题</view>
+    <view wx:if="{{faqs.length === 0}}" class="empty">暂无常见问题</view>
+    <view wx:for="{{faqs}}" wx:key="id" class="faq">
+      <view class="faq-q" data-id="{{item.id}}" bindtap="toggle">
+        <text class="faq-q-text">{{item.question}}</text>
+        <text class="faq-arrow">{{expandedId === item.id ? '−' : '+'}}</text>
+      </view>
+      <view wx:if="{{expandedId === item.id}}" class="faq-a">
+        <view class="faq-a-text">{{item.answer}}</view>
+        <view class="faq-actions">
+          <text class="muted">有帮助吗？</text>
+          <text class="act" data-id="{{item.id}}" catchtap="like">👍 {{item.likeCount || 0}}</text>
+          <text class="act" data-id="{{item.id}}" catchtap="dislike">👎 没帮助</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

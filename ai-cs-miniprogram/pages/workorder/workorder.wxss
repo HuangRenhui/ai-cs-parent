@@ -1,0 +1,47 @@
+.tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 999rpx;
+  padding: 8rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(16, 24, 40, 0.05);
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  color: #475569;
+}
+
+.tab.active {
+  background: #2f6bff;
+  color: #fff;
+}
+
+.wo {
+  padding: 26rpx 24rpx;
+}
+
+.wo-no {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1c2b4a;
+}
+
+.wo-content {
+  margin-top: 14rpx;
+  font-size: 27rpx;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.wo-meta {
+  margin-top: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #8a94a6;
+}

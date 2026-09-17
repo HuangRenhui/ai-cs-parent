@@ -1,0 +1,33 @@
+<view class="container">
+  <view class="tabs">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="label"
+      class="tab {{status === item.value ? 'active' : ''}}"
+      data-value="{{item.value}}"
+      bindtap="switchTab"
+    >{{item.label}}</view>
+  </view>
+
+  <view wx:if="{{list.length === 0 && !loading}}" class="empty">暂无工单</view>
+
+  <view
+    wx:for="{{list}}"
+    wx:key="id"
+    class="card wo"
+    data-index="{{index}}"
+    bindtap="detail"
+  >
+    <view class="between">
+      <view class="wo-no">{{item.orderNo}}</view>
+      <view class="tag {{item.orderStatus === 3 ? 'tag-success' : (item.orderStatus === 1 ? 'tag-warn' : 'tag-info')}}">
+        {{item.statusText}}
+      </view>
+    </view>
+    <view class="wo-content">{{item.orderContent}}</view>
+    <view class="wo-meta">
+      <text>{{item.orderType}}</text>
+      <text>{{item.createTime}}</text>
+    </view>
+  </view>
+</view>

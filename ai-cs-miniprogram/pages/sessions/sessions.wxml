@@ -1,0 +1,20 @@
+<view class="container">
+  <view wx:if="{{list.length === 0 && !loading}}" class="empty">暂无会话记录</view>
+
+  <view
+    wx:for="{{list}}"
+    wx:key="sessionId"
+    class="card session"
+    data-sid="{{item.sessionId}}"
+    bindtap="open"
+  >
+    <view class="between">
+      <view class="s-title">{{item.sessionId}}</view>
+      <view class="tag {{item.sessionStatus === 1 ? 'tag-success' : 'tag-info'}}">
+        {{item.sessionStatus === 1 ? '进行中' : '已结束'}}
+      </view>
+    </view>
+    <view class="s-sub">开始时间：{{item.startTime}}</view>
+    <view wx:if="{{item.endTime}}" class="s-sub">结束时间：{{item.endTime}}</view>
+  </view>
+</view>
