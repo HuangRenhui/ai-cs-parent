@@ -1,0 +1,55 @@
+server:
+  port: 8081
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 20
+    accept-count: 200
+    max-connections: 10000
+spring:
+  application:
+    name: ai-cs-websocket
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+    openfeign:
+      circuitbreaker:
+        enabled: true
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 15000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+ai:
+  jwt:
+    secret: ${JWT_SECRET:}
+feign:
+  agent:
+    url: ${FEIGN_AGENT_URL:http://localhost:8082}
+  base-service:
+    url: ${FEIGN_BASE_URL:http://localhost:8084}
+
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 40s

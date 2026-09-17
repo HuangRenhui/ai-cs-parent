@@ -1,0 +1,84 @@
+server:
+  port: 8084
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 20
+    accept-count: 200
+    max-connections: 10000
+spring:
+  application:
+    name: ai-cs-base-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 3000
+  # Redis（模型注册表跨服务广播）
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3000ms
+
+# 服务间 Feign
+feign:
+  open:
+    url: ${FEIGN_OPEN_URL:http://localhost:8086}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+ai:
+  jwt:
+    secret: ${JWT_SECRET:}
+  # 模型密钥(apiKey/apiSecret)落库加密密钥；未配置时使用内置默认(仅演示/本机)，生产务必用环境变量 AI_MODEL_SECRET 注入
+  model:
+    secret: ${AI_MODEL_SECRET:}
+app:
+  upload-dir: uploads/avatars
+
+# Knife4j API文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: 基础服务接口文档
+    description: 客户管理、坐席管理、会话管理、RBAC权限、数据统计
+    version: 1.0.0
+    group:
+      default:
+        group-name: 基础服务
+        api-rule: package
+        api-rule-resources:
+          - com.ai.cs.base.controller
+
+# Actuator 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    export:
+      prometheus:
+        enabled: true

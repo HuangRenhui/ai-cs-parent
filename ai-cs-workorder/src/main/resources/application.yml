@@ -1,0 +1,49 @@
+server:
+  port: 8085
+spring:
+  application:
+    name: ai-cs-workorder
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        fail-fast: false
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 3000
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# Flowable 工作流引擎配置
+flowable:
+  enabled: false  # 默认关闭，需要时改为true并配置数据库
+  database-schema-update: true
+  async-executor-activate: false
+  # 流程定义文件位置
+  process-definition-location-prefix: classpath:/processes/
+
+# Knife4j API文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: 工单服务接口文档
+    description: 工单CRUD、智能分类、Flowable流程引擎
+    version: 1.0.0
+    group:
+      default:
+        group-name: 工单服务
+        api-rule: package
+        api-rule-resources:
+          - com.ai.cs.workorder.controller
