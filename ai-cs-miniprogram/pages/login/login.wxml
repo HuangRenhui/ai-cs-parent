@@ -1,0 +1,18 @@
+<view class="login">
+  <view class="login-card">
+    <view class="brand">
+      <view class="logo">客</view>
+      <view class="brand-title">智能客服</view>
+      <view class="brand-sub">随时随地，为你解答</view>
+    </view>
+
+    <input class="input" placeholder="账号" value="{{username}}" bindinput="onUsername" confirm-type="next" />
+    <input class="input" placeholder="密码" password value="{{password}}" bindinput="onPassword" confirm-type="done" bindconfirm="submit" />
+
+    <button class="btn-primary submit" loading="{{loading}}" bindtap="submit">登录</button>
+    <button class="btn-wechat submit" bindtap="wxLogin">微信一键登录</button>
+    <button class="btn-plain submit" bindtap="guest">一键体验</button>
+
+    <view class="tip">演示环境可使用任意账号，或点「一键体验」直接进入</view>
+  </view>
+</view>

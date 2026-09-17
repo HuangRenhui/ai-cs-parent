@@ -1,0 +1,25 @@
+<view class="chat">
+  <scroll-view class="msgs" scroll-y scroll-into-view="{{scrollIntoView}}" scroll-with-animation>
+    <view wx:if="{{messages.length === 0}}" class="empty">
+      开始和智能小客聊天吧～
+      <view class="empty-link" bindtap="goHelp">或先看看帮助中心</view>
+    </view>
+    <view wx:for="{{messages}}" wx:key="id" class="msg {{item.mine ? 'mine' : ''}}">
+      <view class="bubble">{{item.msgContent}}</view>
+      <view class="time">{{item.createTime}}</view>
+    </view>
+    <view id="msg-bottom" class="msg-bottom"></view>
+  </scroll-view>
+
+  <view class="input-bar">
+    <input
+      class="input"
+      value="{{input}}"
+      placeholder="输入你的问题…"
+      bindinput="onInput"
+      confirm-type="send"
+      bindconfirm="send"
+    />
+    <button class="send-btn" loading="{{sending}}" bindtap="send">发送</button>
+  </view>
+</view>

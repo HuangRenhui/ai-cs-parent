@@ -1,0 +1,56 @@
+<view class="container">
+  <!-- 问候卡 -->
+  <view class="hero">
+    <view class="hero-mascot">客</view>
+    <view class="hero-copy">
+      <view class="hero-title">{{greeting}}，{{userInfo.realName || userInfo.username || '欢迎回来'}}</view>
+      <view class="hero-sub">我是智能小客，有问题随时问我～</view>
+    </view>
+  </view>
+
+  <!-- 快捷入口 -->
+  <view class="grid">
+    <view class="grid-item" bindtap="goChat">
+      <view class="grid-icon i-chat">💬</view>
+      <view class="grid-text">智能咨询</view>
+    </view>
+    <view class="grid-item" bindtap="goHelp">
+      <view class="grid-icon i-help">📖</view>
+      <view class="grid-text">帮助中心</view>
+    </view>
+    <view class="grid-item" bindtap="goSessions">
+      <view class="grid-icon i-session">🗂️</view>
+      <view class="grid-text">我的会话</view>
+    </view>
+    <view class="grid-item" bindtap="goWorkOrder">
+      <view class="grid-icon i-order">📋</view>
+      <view class="grid-text">我的工单</view>
+    </view>
+  </view>
+
+  <!-- 最近会话 -->
+  <view class="card">
+    <view class="between section-head">
+      <text class="title">最近会话</text>
+      <text class="muted" bindtap="goSessions">全部 ></text>
+    </view>
+    <view wx:if="{{recent.length === 0}}" class="empty">暂无会话记录</view>
+    <view
+      wx:for="{{recent}}"
+      wx:key="sessionId"
+      class="list-row"
+      data-sid="{{item.sessionId}}"
+      bindtap="openSession"
+    >
+      <view class="row-left">
+        <view class="row-title">{{item.sessionId}}</view>
+        <view class="muted">{{item.startTime}}</view>
+      </view>
+      <view class="tag {{item.sessionStatus === 1 ? 'tag-success' : 'tag-info'}}">
+        {{item.sessionStatus === 1 ? '进行中' : '已结束'}}
+      </view>
+    </view>
+  </view>
+
+  <view class="foot-tip">渠道支持：网页 / 微信小程序 · 同一套会话与知识</view>
+</view>
