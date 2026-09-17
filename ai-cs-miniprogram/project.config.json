@@ -1,0 +1,22 @@
+{
+  "description": "智能客服微信小程序（C 端客服界面）",
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "bigPackageSizeSupport": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.0.0",
+  "appid": "touristappid",
+  "projectname": "ai-cs-miniprogram",
+  "miniprogramRoot": "./",
+  "condition": {}
+}

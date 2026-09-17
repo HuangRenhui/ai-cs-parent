@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/chat/chat",
+    "pages/help/help",
+    "pages/profile/profile",
+    "pages/login/login",
+    "pages/sessions/sessions",
+    "pages/workorder/workorder"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#2f6bff",
+    "navigationBarTitleText": "智能客服",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#eef2f7"
+  },
+  "tabBar": {
+    "color": "#8a94a6",
+    "selectedColor": "#2f6bff",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
+      { "pagePath": "pages/chat/chat", "text": "咨询" },
+      { "pagePath": "pages/help/help", "text": "帮助" },
+      { "pagePath": "pages/profile/profile", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

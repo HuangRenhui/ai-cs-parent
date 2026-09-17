@@ -1,0 +1,214 @@
+/* 全局样式：与 Web 端视觉保持一致 */
+page {
+  background: #eef2f7;
+  color: #1c2b4a;
+  font-size: 28rpx;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC", sans-serif;
+}
+
+.container {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(16, 24, 40, 0.05);
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1c2b4a;
+}
+
+.subtitle {
+  font-size: 26rpx;
+  color: #6b7280;
+  margin-top: 6rpx;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.muted {
+  color: #8a94a6;
+  font-size: 24rpx;
+}
+
+.btn-primary {
+  background: #2f6bff;
+  color: #fff;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}
+
+.btn-plain {
+  background: #fff;
+  color: #2f6bff;
+  border: 2rpx solid #2f6bff;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2rpx 14rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  background: #eef4ff;
+  color: #2f6bff;
+}
+
+.tag-success {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.tag-warn {
+  background: #fff8eb;
+  color: #b54708;
+}
+
+.tag-info {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.empty {
+  text-align: center;
+  color: #8a94a6;
+  font-size: 26rpx;
+  padding: 80rpx 0;
+}
+
+.divider {
+  height: 1rpx;
+  background: #eef2f7;
+  margin: 20rpx 0;
+}
+
+/* ===== 通用表单弹层（半屏）===== */
+.mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(16, 24, 40, 0.45);
+  z-index: 100;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 82vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  z-index: 101;
+}
+
+.sheet-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1c2b4a;
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.form-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.form-label {
+  width: 180rpx;
+  flex-shrink: 0;
+  font-size: 28rpx;
+  color: #6b7280;
+}
+
+.form-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1c2b4a;
+}
+
+.form-switch {
+  margin-left: auto;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 32rpx;
+}
+
+.sheet-actions button {
+  flex: 1;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}
+
+.row-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.row-actions button {
+  flex: 1;
+  height: 68rpx;
+  line-height: 68rpx;
+  font-size: 26rpx;
+  margin: 0;
+}
+
+.btn-danger {
+  background: #fff;
+  color: #b42318;
+  border: 2rpx solid #fecdca;
+  border-radius: 999rpx;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+/* 工具栏右侧按钮组：多个按钮并排时用 */
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.add-btn {
+  width: 190rpx;
+  height: 68rpx;
+  line-height: 68rpx;
+  font-size: 26rpx;
+  margin: 0;
+}
