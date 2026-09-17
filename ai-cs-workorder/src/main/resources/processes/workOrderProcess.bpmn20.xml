@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/bpmn">
+
+    <!-- 工单处理主流程 -->
+    <process id="workOrderProcess" name="工单处理流程" isExecutable="true">
+
+        <startEvent id="start" name="工单创建" />
+
+        <!-- 自动分类节点：根据工单内容自动分类 -->
+        <serviceTask id="autoClassify" name="智能分类"
+            flowable:expression="${workOrderProcessService.autoClassify(workOrderId)}" />
+
+        <!-- 分类条件分支 -->
+        <exclusiveGateway id="classifyGateway" name="分类判断" />
+        <sequenceFlow sourceRef="autoClassify" targetRef="classifyGateway" />
+
+        <!-- 咨询类工单：自动回复处理 -->
+        <sequenceFlow sourceRef="classifyGateway" targetRef="autoReplyTask" name="咨询">
+            <conditionExpression>${orderType == '咨询'}</conditionExpression>
+        </sequenceFlow>
+        <serviceTask id="autoReplyTask" name="AI自动回复"
+            flowable:expression="${workOrderProcessService.autoReply(workOrderId)}" />
+
+        <!-- 投诉类工单：优先分配 -->
+        <sequenceFlow sourceRef="classifyGateway" targetRef="assignHighPriority" name="投诉">
+            <conditionExpression>${orderType == '投诉'}</conditionExpression>
+        </sequenceFlow>
+        <userTask id="assignHighPriority" name="高级坐席处理" flowable:assignee="${assignee}" />
+
+        <!-- 退款类工单：财务处理 -->
+        <sequenceFlow sourceRef="classifyGateway" targetRef="refundReviewTask" name="退款">
+            <conditionExpression>${orderType == '退款'}</conditionExpression>
+        </sequenceFlow>
+        <userTask id="refundReviewTask" name="退款审核" flowable:assignee="${assignee}" />
+
+        <!-- 默认路由：人工处理 -->
+        <sequenceFlow sourceRef="classifyGateway" targetRef="manualProcessTask" name="默认">
+            <conditionExpression>${orderType == '其他' || orderType == '物流' || orderType == '建议'}</conditionExpression>
+        </sequenceFlow>
+        <userTask id="manualProcessTask" name="人工处理" flowable:assignee="${assignee}" />
+
+        <!-- 处理完成审核 -->
+        <sequenceFlow sourceRef="autoReplyTask" targetRef="qualityCheck" />
+        <sequenceFlow sourceRef="assignHighPriority" targetRef="qualityCheck" />
+        <sequenceFlow sourceRef="refundReviewTask" targetRef="qualityCheck" />
+        <sequenceFlow sourceRef="manualProcessTask" targetRef="qualityCheck" />
+        <userTask id="qualityCheck" name="质检审核" flowable:assignee="${reviewer}" />
+
+        <!-- 质检判断 -->
+        <exclusiveGateway id="qualityGateway" name="质检结果" />
+        <sequenceFlow sourceRef="qualityCheck" targetRef="qualityGateway" />
+
+        <!-- 通过 -->
+        <sequenceFlow sourceRef="qualityGateway" targetRef="completeTask" name="通过">
+            <conditionExpression>${qualityPassed == true}</conditionExpression>
+        </sequenceFlow>
+        <serviceTask id="completeTask" name="工单完成"
+            flowable:expression="${workOrderProcessService.completeWorkOrder(workOrderId)}" />
+
+        <!-- 不通过：退回处理 -->
+        <sequenceFlow sourceRef="qualityGateway" targetRef="manualProcessTask" name="退回">
+            <conditionExpression>${qualityPassed == false}</conditionExpression>
+        </sequenceFlow>
+
+        <endEvent id="end" name="工单结束" />
+        <sequenceFlow sourceRef="completeTask" targetRef="end" />
+
+    </process>
+
+</definitions>
