@@ -1,12 +1,15 @@
 package com.ai.cs.aiagent.controller;
 
+import cn.hutool.core.lang.UUID;
 import com.ai.cs.aiagent.service.*;
+import com.ai.cs.common.dto.AttachmentDTO;
 import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.llm.TenantQuotaService;
 import com.ai.cs.common.result.Result;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -129,14 +132,27 @@ public class AiChatController {
         return Result.success(agentAssistService.suggestNextSentence(history, userMsg));
     }
 
-    /** 流式对话（SSE） */
+    /** 流式对话（SSE），支持文本与附件一同发送 */
     @PostMapping("/chat/stream")
     public SseEmitter streamChat(@RequestBody ChatDTO dto) {
+        // 会话 ID 兜底：缺失时生成，避免 emitters 以 null 为键互相覆盖
+        if (!StringUtils.hasText(dto.getSessionId())) {
+            dto.setSessionId("sess_" + UUID.randomUUID().toString(true));
+        }
         SseEmitter emitter = new SseEmitter(120_000L);
         emitters.put(dto.getSessionId(), emitter);
         emitter.onCompletion(() -> emitters.remove(dto.getSessionId()));
         emitter.onTimeout(() -> emitters.remove(dto.getSessionId()));
-        List<Map<String, String>> messages = List.of(Map.of("role", "user", "content", dto.getMsg()));
+        // 纯附件消息时内容为空，用占位文案表达「用户发来了附件」，避免空 content 让模型无从回应
+        String content = dto.getMsg();
+        List<AttachmentDTO> attachments = dto.getAttachments();
+        if (!StringUtils.hasText(content) && attachments != null && !attachments.isEmpty()) {
+            content = "（用户上传了 " + attachments.size() + " 个附件）";
+        }
+        if (!StringUtils.hasText(content)) {
+            content = "";
+        }
+        List<Map<String, String>> messages = List.of(Map.of("role", "user", "content", content));
         streamingChatService.streamChat(dto.getSessionId(), messages, emitter);
         return emitter;
     }

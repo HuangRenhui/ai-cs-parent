@@ -7,6 +7,7 @@ import com.ai.cs.base.mapper.ChatMsgMapper;
 import com.ai.cs.base.mapper.ChatSessionMapper;
 import com.ai.cs.base.support.OpenWebhookClient;
 import com.ai.cs.common.constant.RedisKeyConst;
+import com.ai.cs.common.dto.AttachmentDTO;
 import com.ai.cs.common.dto.SessionDTO;
 import com.ai.cs.common.dto.SessionSnapshotDTO;
 import com.ai.cs.common.dto.TransferResultDTO;
@@ -29,7 +30,9 @@ import org.springframework.util.StringUtils;
 import jakarta.annotation.Resource;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -123,17 +126,48 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
      * 保存一条聊天消息（消息落库前先确保会话存在）
      */
     public void saveMessage(SessionDTO dto) {
-        if (dto == null || !StringUtils.hasText(dto.getSessionId()) || !StringUtils.hasText(dto.getMsgContent())) {
-            throw new BusinessException("会话ID和消息内容不能为空");
+        if (dto == null || !StringUtils.hasText(dto.getSessionId())) {
+            throw new BusinessException("会话ID不能为空");
+        }
+        // 允许「纯附件消息」：文本与附件至少有一项即可
+        boolean hasAttachment = dto.getAttachments() != null && !dto.getAttachments().isEmpty();
+        if (!StringUtils.hasText(dto.getMsgContent()) && !hasAttachment) {
+            throw new BusinessException("消息内容不能为空");
         }
         // 消息依附于会话，先兜底建会话
         ensureSession(dto);
         ChatMsg msg = new ChatMsg();
         msg.setSessionId(dto.getSessionId());
-        msg.setMsgContent(dto.getMsgContent());
+        msg.setMsgContent(StringUtils.hasText(dto.getMsgContent()) ? dto.getMsgContent() : "");
         // 未指明发送方时按用户消息处理
         msg.setMsgType(dto.getSenderType() == null ? MsgTypeEnum.USER.getCode() : dto.getSenderType());
+        msg.setAttachments(toAttachmentMaps(dto.getAttachments()));
         chatMsgMapper.insert(msg);
+    }
+
+    /**
+     * 把附件 DTO 转为存库用的 Map 列表。
+     * <p>只保留前端渲染与后续解析所需的字段，避免把冗余信息写进 JSON 列。</p>
+     */
+    private List<Map<String, Object>> toAttachmentMaps(List<AttachmentDTO> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
+        List<Map<String, Object>> list = new ArrayList<>(attachments.size());
+        for (AttachmentDTO att : attachments) {
+            if (att == null) {
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("fileId", att.getFileId());
+            row.put("url", att.getUrl());
+            row.put("fileName", att.getFileName());
+            row.put("category", att.getCategory());
+            row.put("contentType", att.getContentType());
+            row.put("fileSize", att.getFileSize());
+            list.add(row);
+        }
+        return list.isEmpty() ? null : list;
     }
 
     /**

@@ -7,10 +7,12 @@ import com.ai.cs.api.feign.OpenToolFeign;
 import com.ai.cs.api.feign.SessionFeign;
 import com.ai.cs.api.feign.WorkOrderFeign;
 import com.ai.cs.common.constant.PromptConst;
+import com.ai.cs.common.dto.AttachmentDTO;
 import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.dto.IntentDTO;
 import com.ai.cs.common.dto.RagSearchResultDTO;
+import com.ai.cs.common.dto.SessionDTO;
 import com.ai.cs.common.dto.SlotFillResultDTO;
 import com.ai.cs.common.dto.ToolInvokeDTO;
 import com.ai.cs.common.dto.ToolInvokeResultDTO;
@@ -29,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -112,9 +115,31 @@ public class AiAgentService {
         if (dto == null) {
             throw new BusinessException("消息内容不能为空");
         }
-        // 消息长度限制 1~2000，防止超长输入打爆模型上下文
-        ValidateUtil.requireLength(dto.getMsg(), "消息内容", 1, 2000);
+
+        // 附件与文本至少有一项：支持「文字 + 图片/附件」以及「只发附件不说话」两种发法
+        List<AttachmentDTO> attachments = dto.getAttachments() == null
+                ? new ArrayList<>()
+                : dto.getAttachments();
+        boolean hasAttachment = !attachments.isEmpty();
+        boolean hasText = StringUtils.hasText(dto.getMsg());
+        if (!hasText && !hasAttachment) {
+            throw new BusinessException("消息内容不能为空");
+        }
+
+        if (hasText) {
+            // 消息长度限制 1~2000，防止超长输入打爆模型上下文
+            ValidateUtil.requireLength(dto.getMsg(), "消息内容", 1, 2000);
+        } else {
+            // 纯附件消息：msg 置空串而非 null，避免下游拼接上下文时出现 "null"
+            dto.setMsg("");
+        }
         dto.setMsg(ValidateUtil.trimToNull(dto.getMsg()));
+        if (dto.getMsg() == null) {
+            dto.setMsg("");
+        }
+        dto.setAttachments(attachments);
+        log.info("[对话] 收到消息 sessionId={} 文本长度={} 附件数={}",
+                dto.getSessionId(), dto.getMsg().length(), attachments.size());
 
         // 租户日配额：超限直接返回繁忙话术，避免把账单打爆
         String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
@@ -205,7 +230,38 @@ public class AiAgentService {
         if (tenantQuotaService != null) {
             tenantQuotaService.recordUsage(dto.getTenantCode(), 1);
         }
+
+        // 第五步：消息落库（含附件），保证刷新页面后附件仍可回显
+        persistMessages(dto, reply);
         return result;
+    }
+
+    /**
+     * 持久化本轮对话的用户消息与 AI 回复。
+     *
+     * <p>附件随用户消息一起落库，前端拉取历史消息时按 {@code attachments} 字段渲染。
+     * 落库失败不影响本次回复返回，仅记录告警。</p>
+     */
+    private void persistMessages(ChatDTO dto, String reply) {
+        if (sessionFeign == null || !StringUtils.hasText(dto.getSessionId())) {
+            return;
+        }
+        try {
+            SessionDTO userMsg = new SessionDTO();
+            userMsg.setSessionId(dto.getSessionId());
+            userMsg.setMsgContent(dto.getMsg());
+            userMsg.setSenderType(1);
+            userMsg.setAttachments(dto.getAttachments());
+            sessionFeign.saveMessage(userMsg);
+
+            SessionDTO aiMsg = new SessionDTO();
+            aiMsg.setSessionId(dto.getSessionId());
+            aiMsg.setMsgContent(reply);
+            aiMsg.setSenderType(2);
+            sessionFeign.saveMessage(aiMsg);
+        } catch (Exception e) {
+            log.warn("对话消息落库失败 sessionId={}", dto.getSessionId(), e);
+        }
     }
 
     /**
