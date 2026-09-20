@@ -1,6 +1,8 @@
 package com.ai.cs.base.controller;
 
 import com.ai.cs.base.service.AvatarStorageService;
+import com.ai.cs.base.service.ChatAttachmentStorageService;
+import com.ai.cs.common.dto.AttachmentDTO;
 import com.ai.cs.common.result.Result;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +28,9 @@ public class FileController {
     @Resource
     private AvatarStorageService avatarStorageService;
 
+    @Resource
+    private ChatAttachmentStorageService chatAttachmentStorageService;
+
     /**
      * 上传头像，返回可访问的 URL 路径
      */
@@ -42,5 +47,22 @@ public class FileController {
             return Result.fail(400, "不支持的文件类型，仅允许: " + ALLOWED_AVATAR_EXTENSIONS);
         }
         return Result.success("上传成功", avatarStorageService.save(file));
+    }
+
+    /**
+     * 上传对话附件（C 端对话输入框的「+」、粘贴图片、选择文件均走此接口）。
+     *
+     * <p>允许全部文件类型，仅限制单文件 20MB。返回附件元信息，前端拿到后
+     * 随消息一起调用 {@code /ai/chat/send} 的 attachments 字段提交。</p>
+     *
+     * @param file 上传的附件
+     * @return 附件元信息（url / fileName / category / fileSize 等）
+     */
+    @PostMapping("/chat-attachment")
+    public Result<AttachmentDTO> uploadChatAttachment(@RequestParam("file") MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return Result.fail(400, "请选择要上传的文件");
+        }
+        return Result.success("上传成功", chatAttachmentStorageService.save(file));
     }
 }

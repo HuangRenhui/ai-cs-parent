@@ -52,7 +52,10 @@ ai:
   model:
     secret: ${AI_MODEL_SECRET:}
 app:
+  # 头像上传目录（映射为 /files/avatars/**）
   upload-dir: uploads/avatars
+  # 对话附件上传目录（映射为 /files/chat/**），允许全部类型，单文件上限 20MB
+  chat-upload-dir: uploads/chat
 
 # Knife4j API文档配置
 knife4j:
