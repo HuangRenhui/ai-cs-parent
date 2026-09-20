@@ -71,6 +71,14 @@ spring:
             - Path=/api/file/avatar
           filters:
             - RewritePath=/api/file/avatar,/file/avatar
+        # 对话附件上传同属 base-service（/file/chat-attachment），同样需先于 knowledge /api/file/** 拆分，
+        # 否则 C 端粘贴/上传的图片会被知识库的文件路由接走。
+        - id: chat-attachment-upload-route
+          uri: ${GATEWAY_BASE_URI:http://localhost:8084}
+          predicates:
+            - Path=/api/file/chat-attachment
+          filters:
+            - RewritePath=/api/file/chat-attachment,/file/chat-attachment
         - id: knowledge-api-route
           uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:

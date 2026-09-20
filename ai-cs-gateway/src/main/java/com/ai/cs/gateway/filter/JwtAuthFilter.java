@@ -35,14 +35,18 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/knowledge/health",
             "/help-center/",
             "/files/avatars/",
+            // 对话附件静态资源（上传后的图片/文件需可被直接访问展示）
+            "/files/chat/",
             "/actuator/health"
     );
 
-    /** 访客令牌允许访问的路径（前缀匹配）：只开放聊天与会话相关接口 */
+    /** 访客令牌允许访问的路径（前缀匹配）：只开放聊天、会话与对话附件上传 */
     private static final List<String> VISITOR_ALLOWED = List.of(
             "/ai/chat",
             "/session/ensure",
-            "/session/message"
+            "/session/message",
+            // 对话附件上传（图片/文档等），C 端未登录用户也需可传
+            "/file/chat-attachment"
     );
 
     private static final String INTERNAL_HEADER = "X-Internal-Token";
