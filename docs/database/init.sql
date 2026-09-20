@@ -110,8 +110,9 @@ CREATE TABLE `cs_chat_session` (
 CREATE TABLE `cs_chat_msg` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息ID',
     `session_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
-    `msg_content` TEXT NOT NULL COMMENT '消息内容',
+    `msg_content` TEXT NOT NULL COMMENT '消息内容（纯附件消息可为空串）',
     `msg_type` TINYINT DEFAULT 1 COMMENT '发送方: 1-用户, 2-AI, 3-坐席（非图片/文件类型）',
+    `attachments` JSON DEFAULT NULL COMMENT '消息附件列表（图片/文档等，JSON数组；空表示纯文本消息）',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
