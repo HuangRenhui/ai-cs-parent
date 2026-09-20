@@ -5,21 +5,74 @@
       <view class="empty-link" bindtap="goHelp">或先看看帮助中心</view>
     </view>
     <view wx:for="{{messages}}" wx:key="id" class="msg {{item.mine ? 'mine' : ''}}">
-      <view class="bubble">{{item.msgContent}}</view>
+      <!-- 附件区：图片可点击预览，其他类型显示文件卡片 -->
+      <view wx:if="{{item.attachments && item.attachments.length}}" class="att-list">
+        <block wx:for="{{item.attachments}}" wx:for-item="att" wx:key="fileId">
+          <image
+            wx:if="{{att.category === 'image'}}"
+            class="att-img"
+            src="{{att.fullUrl || att.url}}"
+            mode="aspectFill"
+            data-url="{{att.url}}"
+            bindtap="previewImage"
+          />
+          <view
+            wx:else
+            class="att-file"
+            data-url="{{att.url}}"
+            data-name="{{att.fileName}}"
+            bindtap="openAttachment"
+          >
+            <text class="att-file-icon">{{att.icon || '📄'}}</text>
+            <text class="att-file-name">{{att.fileName}}</text>
+            <text class="att-file-size">{{att.sizeText}}</text>
+          </view>
+        </block>
+      </view>
+      <view wx:if="{{item.msgContent}}" class="bubble">{{item.msgContent}}</view>
       <view class="time">{{item.createTime}}</view>
     </view>
     <view id="msg-bottom" class="msg-bottom"></view>
   </scroll-view>
 
+  <!-- 待发送附件预览 -->
+  <view wx:if="{{pending.length}}" class="pending-bar">
+    <view wx:for="{{pending}}" wx:key="fileId" class="pending-item">
+      <image
+        wx:if="{{item.category === 'image'}}"
+        class="pending-thumb"
+        src="{{item.fullUrl || item.url}}"
+        mode="aspectFill"
+      />
+      <view wx:else class="pending-file">{{item.icon || '📄'}}</view>
+      <view class="pending-remove" data-index="{{index}}" catchtap="removePending">×</view>
+    </view>
+    <view wx:if="{{uploading}}" class="pending-uploading">上传中…</view>
+  </view>
+
   <view class="input-bar">
-    <input
+    <!-- 附件入口：图片 / 文件 -->
+    <view class="attach-btn" bindtap="showAttachMenu">＋</view>
+    <textarea
       class="input"
       value="{{input}}"
-      placeholder="输入你的问题…"
-      bindinput="onInput"
+      placeholder="输入你的问题…（可粘贴文本）"
+      auto-height
+      maxlength="2000"
       confirm-type="send"
+      bindinput="onInput"
       bindconfirm="send"
     />
     <button class="send-btn" loading="{{sending}}" bindtap="send">发送</button>
+  </view>
+
+  <!-- 附件来源选择面板 -->
+  <view wx:if="{{showAttachPanel}}" class="attach-mask" bindtap="hideAttachMenu">
+    <view class="attach-panel" catchtap="noop">
+      <view class="attach-opt" data-type="image" bindtap="chooseAttachment">选择图片</view>
+      <view class="attach-opt" data-type="camera" bindtap="chooseAttachment">拍照</view>
+      <view class="attach-opt" data-type="file" bindtap="chooseAttachment">选择文件</view>
+      <view class="attach-cancel" bindtap="hideAttachMenu">取消</view>
+    </view>
   </view>
 </view>

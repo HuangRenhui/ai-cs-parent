@@ -11,6 +11,16 @@ export const uploadAvatar = (file) => {
   return request.post('/file/avatar', data)
 }
 
+/**
+ * 上传对话附件（图片/文档/音频等，允许全部类型，单文件上限 20MB）。
+ * 返回附件元信息，随消息的 attachments 字段一起提交给 /ai/chat/send。
+ */
+export const uploadChatAttachment = (file) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post('/file/chat-attachment', data)
+}
+
 export const listCustomers = (keyword) => request.get('/customer/list', { params: { keyword } })
 export const pageCustomers = (params) => request.get('/customer/page', { params })
 export const saveCustomer = (data) => request.post('/customer/save', data)

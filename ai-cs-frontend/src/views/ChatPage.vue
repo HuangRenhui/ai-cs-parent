@@ -62,7 +62,32 @@
             <el-icon v-else><User /></el-icon>
           </div>
           <div class="message-content">
-            <div class="content">{{ msg.content }}</div>
+            <!-- 附件区：图片直接展示，其他类型显示文件卡片 -->
+            <div v-if="msg.attachments && msg.attachments.length" class="msg-attachments">
+              <template v-for="(att, ai) in msg.attachments" :key="att.fileId || ai">
+                <el-image
+                  v-if="att.category === 'image'"
+                  class="att-image"
+                  :src="att.url"
+                  :preview-src-list="imagePreviewList(msg.attachments)"
+                  :initial-index="imageIndex(msg.attachments, att)"
+                  fit="cover"
+                  preview-teleported
+                />
+                <a
+                  v-else
+                  class="att-file"
+                  :href="att.url"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <el-icon class="att-file-icon"><Document /></el-icon>
+                  <span class="att-file-name">{{ att.fileName }}</span>
+                  <span class="att-file-size">{{ formatSize(att.fileSize) }}</span>
+                </a>
+              </template>
+            </div>
+            <div v-if="msg.content" class="content">{{ msg.content }}</div>
             <div v-if="msg.citations && msg.citations.length" class="citations">
               引用：
               <span v-for="c in msg.citations" :key="c.faqId">#{{ c.faqId }} {{ c.question }}</span>
@@ -76,13 +101,53 @@
         <span>正在思考...</span>
       </div>
     </div>
-    <div class="chat-input">
+    <!-- 待发送附件预览条 -->
+    <div v-if="pendingAttachments.length" class="pending-bar">
+      <div v-for="(att, i) in pendingAttachments" :key="att.fileId || i" class="pending-item">
+        <img v-if="att.category === 'image'" class="pending-thumb" :src="att.url" :alt="att.fileName" />
+        <div v-else class="pending-file">
+          <el-icon><Document /></el-icon>
+          <span class="pending-name">{{ att.fileName }}</span>
+        </div>
+        <button class="pending-remove" title="移除" @click="removePending(i)">×</button>
+      </div>
+      <div v-if="uploading" class="pending-uploading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>上传中...</span>
+      </div>
+    </div>
+
+    <div
+      class="chat-input"
+      @paste="onPaste"
+      @dragover.prevent="onDragOver"
+      @dragleave.prevent="dragging = false"
+      @drop.prevent="onDrop"
+      :class="{ dragging }"
+    >
+      <!-- 隐藏的文件选择器：支持多选与全类型 -->
+      <input
+        ref="fileInputRef"
+        class="file-input-hidden"
+        type="file"
+        multiple
+        @change="onFilePicked"
+      />
+      <el-tooltip content="上传附件（支持图片、文档等，也可直接粘贴或拖入）" placement="top">
+        <el-button class="attach-btn" :disabled="uploading" @click="pickFile">
+          <el-icon><Paperclip /></el-icon>
+        </el-button>
+      </el-tooltip>
       <el-input
         v-model="inputMessage"
-        placeholder="请输入消息..."
-        @keyup.enter="sendMessage"
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 4 }"
+        resize="none"
+        placeholder="请输入消息...（可粘贴图片或文本，也可拖拽文件到此处）"
+        @keydown.enter.exact.prevent="sendMessage"
       />
-      <el-button type="primary" @click="sendMessage">发送</el-button>
+      <el-button type="primary" :disabled="uploading" @click="sendMessage">发送</el-button>
+      <div v-if="dragging" class="drop-mask">松开即可上传附件</div>
     </div>
 
     <WorkOrderDialog
@@ -99,7 +164,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { ChatDotRound, Headset, Reading, User, Loading } from '@element-plus/icons-vue'
+import { ChatDotRound, Headset, Reading, User, Loading, Document, Paperclip } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 import { createWorkOrder, ensureSession, interruptChat, listCustomers, listOpenPacks, listAgents, transferSession } from '../api'
@@ -193,6 +258,120 @@ const orderForm = ref({
   sessionId: '',
   priority: '普通'
 })
+
+/* ===== 对话附件：上传 / 粘贴 / 拖拽 ===== */
+/** 上传接口路径（网关会 RewritePath 到 base-service 的 /file/chat-attachment） */
+const ATTACHMENT_UPLOAD_URL = '/file/chat-attachment'
+/** 待发送的附件列表（发送后清空） */
+const pendingAttachments = ref([])
+/** 附件上传中标记，上传期间禁止发送 */
+const uploading = ref(false)
+/** 拖拽悬停标记，用于展示落区遮罩 */
+const dragging = ref(false)
+const fileInputRef = ref(null)
+
+/** 触发隐藏的文件选择器 */
+const pickFile = () => {
+  if (fileInputRef.value) fileInputRef.value.click()
+}
+
+/** 读取文件选择器的选择结果 */
+const onFilePicked = (e) => {
+  const files = Array.from(e.target?.files || [])
+  if (files.length) uploadFiles(files)
+  // 重置，保证同一文件可重复选择
+  if (e.target) e.target.value = ''
+}
+
+/**
+ * 上传一批文件到对话附件接口。
+ * <p>并行上传，逐个追加到待发送列表；失败时提示但不阻断其余文件。</p>
+ */
+const uploadFiles = async (files) => {
+  if (!files.length) return
+  uploading.value = true
+  try {
+    const results = await Promise.all(
+      files.map((file) => {
+        const form = new FormData()
+        form.append('file', file)
+        return request.post(ATTACHMENT_UPLOAD_URL, form).then((res) => res.data)
+      })
+    )
+    pendingAttachments.value = pendingAttachments.value.concat(results.filter(Boolean))
+  } catch (e) {
+    ElMessage.error('附件上传失败，请重试')
+  } finally {
+    uploading.value = false
+  }
+}
+
+/** 移除一个待发送附件 */
+const removePending = (index) => {
+  pendingAttachments.value.splice(index, 1)
+}
+
+/**
+ * 粘贴处理：从剪贴板取图片，同时保留文本粘贴。
+ * <p>ClipboardEvent 的 files 属性在部分浏览器不可用，故回退到 items 遍历。</p>
+ */
+const onPaste = (e) => {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const images = []
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) images.push(file)
+    }
+  }
+  if (images.length) {
+    // 仅在有图片时阻止默认，纯文本粘贴保持原生行为
+    e.preventDefault()
+    uploadFiles(images)
+  }
+}
+
+const onDragOver = () => {
+  dragging.value = true
+}
+
+/** 拖拽放入：取文件列表上传 */
+const onDrop = (e) => {
+  dragging.value = false
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (files.length) uploadFiles(files)
+}
+
+/** 组装图片附件的预览列表，供 el-image 放大浏览 */
+const imagePreviewList = (attachments) =>
+  (attachments || []).filter((a) => a.category === 'image').map((a) => a.url)
+
+/** 计算某张图片在预览列表中的下标 */
+const imageIndex = (attachments, target) => {
+  const list = (attachments || []).filter((a) => a.category === 'image')
+  return Math.max(0, list.findIndex((a) => a.fileId === target.fileId))
+}
+
+/** 字节数转可读大小 */
+const formatSize = (bytes) => {
+  const n = Number(bytes)
+  if (!n || n < 0) return ''
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+  return (n / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+/** 附件随消息一起发出的精简结构（去掉本地预览用的冗余字段） */
+const payloadAttachments = (list) =>
+  (list || []).map((a) => ({
+    fileId: a.fileId,
+    url: a.url,
+    fileName: a.fileName,
+    category: a.category,
+    contentType: a.contentType,
+    fileSize: a.fileSize
+  }))
 
 /** 取姓名最后一个字做头像底字，贴近真实客服头像占位 */
 const agentInitial = (name) => (name && String(name).trim().slice(-1)) || '席'
@@ -401,21 +580,28 @@ onUnmounted(() => {
 })
 
 const sendMessage = async () => {
-  if (!inputMessage.value.trim() || isLoading.value) return
+  // 允许「纯附件、无文本」发送；但上传中或正在回复时不允许发送
+  const hasText = !!inputMessage.value.trim()
+  const hasAttachment = pendingAttachments.value.length > 0
+  if ((!hasText && !hasAttachment) || isLoading.value || uploading.value) return
+
+  const lastUser = inputMessage.value
+  const lastAttachments = payloadAttachments(pendingAttachments.value)
 
   appendMessage({
-    content: inputMessage.value,
+    content: lastUser,
     isAI: false,
+    attachments: pendingAttachments.value.slice(),
     time: new Date().toLocaleTimeString()
   })
-  const lastUser = inputMessage.value
   inputMessage.value = ''
+  pendingAttachments.value = []
   scrollToBottom()
   isLoading.value = true
 
   // 流式走 HTTP SSE，避免与 WebSocket 两路同时推同一条回复
   if (useStream.value) {
-    await sendStream(lastUser)
+    await sendStream(lastUser, lastAttachments)
     return
   }
 
@@ -424,7 +610,8 @@ const sendMessage = async () => {
     socket.send(JSON.stringify({
       msg: lastUser,
       sessionId: sessionId.value,
-      packCode: packCode.value || undefined
+      packCode: packCode.value || undefined,
+      attachments: lastAttachments
     }))
     return
   }
@@ -433,7 +620,8 @@ const sendMessage = async () => {
     const response = await request.post('/ai/chat/send', {
       sessionId: sessionId.value,
       msg: lastUser,
-      packCode: packCode.value || undefined
+      packCode: packCode.value || undefined,
+      attachments: lastAttachments
     })
     const payload = response.data
     const text = typeof payload === 'string' ? payload : (payload?.reply || '')
@@ -462,7 +650,7 @@ const sendMessage = async () => {
 }
 
 /** POST SSE：Spring 事件名为 token / done / interrupted / error */
-const sendStream = async (msg) => {
+const sendStream = async (msg, attachments) => {
   const aiMsg = { content: '', isAI: true, time: new Date().toLocaleTimeString(), citations: [] }
   appendMessage(aiMsg)
   streamAbort = new AbortController()
@@ -476,7 +664,8 @@ const sendStream = async (msg) => {
       body: JSON.stringify({
         sessionId: sessionId.value,
         msg,
-        packCode: packCode.value || undefined
+        packCode: packCode.value || undefined,
+        attachments: attachments || []
       }),
       signal: streamAbort.signal
     })
@@ -817,26 +1006,170 @@ const createOrder = async () => {
   color: #667085;
 }
 .chat-input {
+  position: relative;
   padding: 12px 16px 14px;
   background: #fff;
   border-top: 1px solid #e7edf5;
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-end;
 }
-.chat-input :deep(.el-input) {
+.chat-input.dragging {
+  background: #f4f8ff;
+  outline: 2px dashed #2f6bff;
+  outline-offset: -6px;
+}
+.chat-input :deep(.el-textarea) {
   flex: 1;
 }
-.chat-input :deep(.el-input__wrapper) {
-  min-height: 42px;
-  padding: 4px 14px;
+.chat-input :deep(.el-textarea__inner) {
+  min-height: 42px !important;
+  padding: 10px 14px;
   border-radius: 12px !important;
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
+  font-size: 14px;
+  line-height: 1.5;
 }
 .chat-input .el-button {
   height: 42px;
   padding: 0 22px;
   border-radius: 12px;
   font-size: 15px;
+}
+/* 附件按钮保持方形，与发送按钮区分 */
+.chat-input .attach-btn {
+  padding: 0;
+  width: 42px;
+  flex: none;
+  font-size: 18px;
+}
+.file-input-hidden {
+  display: none;
+}
+/* 拖拽悬停遮罩 */
+.drop-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(47, 107, 255, 0.06);
+  color: #2f6bff;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+/* 待发送附件预览条 */
+.pending-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px 0;
+  background: #fff;
+  align-items: center;
+}
+.pending-item {
+  position: relative;
+  border: 1px solid #e7edf5;
+  border-radius: 10px;
+  overflow: visible;
+  background: #fbfcfe;
+}
+.pending-thumb {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 9px;
+}
+.pending-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  height: 56px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  color: #374151;
+}
+.pending-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pending-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 18px;
+  height: 18px;
+  line-height: 15px;
+  border: none;
+  border-radius: 50%;
+  background: #f04438;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.pending-uploading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+/* 消息内附件 */
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.att-image {
+  width: 160px;
+  max-width: 100%;
+  height: 160px;
+  border-radius: 10px;
+  cursor: zoom-in;
+  background: #f4f6fb;
+}
+.message.user-message .att-image {
+  margin-left: auto;
+}
+.att-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 10px 14px;
+  border: 1px solid #e7edf5;
+  border-radius: 10px;
+  background: #fbfcfe;
+  color: #374151;
+  text-decoration: none;
+  font-size: 13px;
+}
+.att-file:hover {
+  border-color: #2f6bff;
+  color: #2f6bff;
+}
+.att-file-icon {
+  flex: none;
+  font-size: 16px;
+}
+.att-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.att-file-size {
+  flex: none;
+  color: #98a2b3;
+  font-size: 12px;
 }
 .chat-container > .agent-banner {
   margin: 10px 16px 0;

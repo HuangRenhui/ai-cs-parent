@@ -79,7 +79,22 @@ function handle(method, url, data) {
         return
       }
       if (path === '/ai/chat/send' || path === '/ai/chat') {
-        resolve(ok({ reply: replyOf(body.question || body.content), sessionId: body.sessionId || 'sess_demo_1001' }))
+        resolve(ok({ reply: replyOf(body.msg || body.question || body.content), sessionId: body.sessionId || 'sess_demo_1001' }))
+        return
+      }
+      // 对话附件上传（演示）：返回附件元信息，供前端预览与随消息发送
+      if (path === '/file/chat-attachment') {
+        const fileName = (body.file && body.file.name) || 'demo-attachment.png'
+        const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(fileName)
+        resolve(ok({
+          fileId: 'att_' + Date.now(),
+          url: '/files/chat/demo-' + Date.now() + (isImage ? '.png' : '.dat'),
+          fileName,
+          category: isImage ? 'image' : 'document',
+          contentType: isImage ? 'image/png' : 'application/octet-stream',
+          fileSize: 204800,
+          parseStatus: 0
+        }))
         return
       }
       if (path === '/help-center/search') {

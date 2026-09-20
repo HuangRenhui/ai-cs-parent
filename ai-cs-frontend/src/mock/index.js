@@ -1309,11 +1309,19 @@ const handle = (method, path, config) => {
 
   if (path === '/ai/chat/send') {
     const msg = body.msg || ''
+    const atts = body.attachments || []
+    const imageCount = atts.filter((a) => a.category === 'image').length
+    const fileCount = atts.length - imageCount
+    // 附件描述片段：让演示回复能体现「收到了哪些附件」
+    const attDesc = atts.length === 0 ? ''
+      : '（含附件：' + [imageCount ? imageCount + ' 张图片' : '', fileCount ? fileCount + ' 个文件' : '']
+        .filter(Boolean).join('、') + '）'
+    const ask = msg || '您发送的附件'
     const wantHuman = msg.includes('转人工')
     const agent = db.agents.find((a) => a.agentStatus === 1 && a.id !== 1) || db.agents[1]
     const reply = wantHuman
       ? `已为您接入人工客服。工号 ${agent.agentNo} ${agent.agentName} 正在为您服务，请简要说明问题。`
-      : `【演示回复】已收到「${msg}」。开启电商包时可演示查物流/退款话术。`
+      : `【演示回复】已收到「${ask}」${attDesc}。开启电商包时可演示查物流/退款话术。`
     return ok({
       reply,
       citations: wantHuman ? [] : [{ faqId: 2, question: '物流多久送达？' }],
@@ -1321,6 +1329,21 @@ const handle = (method, path, config) => {
       agentNo: wantHuman ? agent.agentNo : undefined,
       agentName: wantHuman ? agent.agentName : undefined,
       agentId: wantHuman ? agent.id : undefined
+    })
+  }
+  // 对话附件上传（演示）：返回附件元信息，供前端预览与随消息发送
+  if (path === '/file/chat-attachment') {
+    const file = (body && body.file) || {}
+    const fileName = typeof file === 'object' ? (file.name || 'demo-attachment.png') : 'demo-attachment.png'
+    const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(fileName)
+    return ok({
+      fileId: 'att_' + Date.now(),
+      url: '/files/chat/demo-' + Date.now() + (isImage ? '.png' : '.dat'),
+      fileName,
+      category: isImage ? 'image' : 'document',
+      contentType: isImage ? 'image/png' : 'application/octet-stream',
+      fileSize: 204800,
+      parseStatus: 0
     })
   }
   if (path === '/ai/chat/interrupt') return ok('已打断')
