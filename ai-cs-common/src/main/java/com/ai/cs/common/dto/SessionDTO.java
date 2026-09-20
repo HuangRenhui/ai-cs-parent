@@ -2,6 +2,8 @@ package com.ai.cs.common.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 会话/消息 DTO：会话管理与消息收发共用
  *
@@ -21,6 +23,8 @@ public class SessionDTO {
     private Integer sessionType;
     /** 发送方类型（对应 MsgTypeEnum：1-用户 2-AI 3-人工） */
     private Integer senderType;
-    /** 消息内容 */
+    /** 消息内容（纯附件消息可为空串） */
     private String msgContent;
+    /** 消息附件列表（图片/文档等），随消息一起落库以便回显 */
+    private List<AttachmentDTO> attachments;
 }
