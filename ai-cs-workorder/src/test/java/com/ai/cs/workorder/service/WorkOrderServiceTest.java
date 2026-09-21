@@ -18,7 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * WorkOrderService 单元测试（CRUD 为真实现，智能处理为占位）
+ * WorkOrderService 单元测试（CRUD 已实现，智能处理为占位）
  *
  * @author huangrenhui
  * @date 2026/7/20

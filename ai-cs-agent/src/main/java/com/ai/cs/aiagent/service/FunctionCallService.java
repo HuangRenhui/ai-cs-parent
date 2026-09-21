@@ -55,7 +55,7 @@ public class FunctionCallService {
     /**
      * 构建工具的 Function 定义（供 OpenAI 兼容协议的 tools 参数使用）
      *
-     * <p>纯结构映射，不依赖模型与外部服务，保留为真实现。</p>
+     * <p>纯结构映射，不依赖模型与外部服务，保留已实现。</p>
      */
     public List<Map<String, Object>> buildToolDefinitions(List<Map<String, Object>> registeredTools) {
         List<Map<String, Object>> definitions = new ArrayList<>();

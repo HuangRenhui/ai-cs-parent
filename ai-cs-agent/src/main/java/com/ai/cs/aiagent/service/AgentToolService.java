@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Redis 不可用时降级为进程内缓存（超过 200 条整体清空）。</p>
  *
  * <p>当前 {@link #executeToolChain} 返回空串、{@link #executeTool} 恒返回 null：
- * 不调用任何模型或外部服务，也不写缓存。{@link #getAvailableTools} 与 {@link #clearCache} 为真实现。</p>
+ * 不调用任何模型或外部服务，也不写缓存。{@link #getAvailableTools} 与 {@link #clearCache} 已实现。</p>
  *
  * @author huangrenhui
  * @date 2026/7/20

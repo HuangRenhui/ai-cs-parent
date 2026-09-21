@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * {@code cs_multimodal_knowledge}），但向量化未实现，故 {@code status=0} 标记「未索引」、不参与检索；
  * 四个问答入口返回未实现文案；{@link #analyzeVideo} 返回空 Map。</p>
  *
- * <p>真实现部分（单表 CRUD 与简单统计）：按模态/标签检索、按资源或知识ID查询、列表、
+ * <p>已实现部分（单表 CRUD 与简单统计）：按模态/标签检索、按资源或知识ID查询、列表、
  * {@link #getStatistics}、{@link #deleteKnowledge}、{@link #updateKnowledge}，
  * 以及父类 {@code ServiceImpl} 的 `getById` / `save`。</p>
  *
@@ -143,7 +143,7 @@ public class MultimodalKnowledgeService extends ServiceImpl<MultimodalKnowledgeM
         return knowledge;
     }
 
-    // ========== 知识检索（单表 CRUD，真实现） ==========
+    // ========== 知识检索（单表 CRUD，已实现） ==========
 
     /**
      * 按模态检索知识
@@ -272,7 +272,7 @@ public class MultimodalKnowledgeService extends ServiceImpl<MultimodalKnowledgeM
         return Map.of();
     }
 
-    // ========== 统计功能（单表聚合，真实现） ==========
+    // ========== 统计功能（单表聚合，已实现） ==========
 
     /**
      * 获取多模态知识库统计

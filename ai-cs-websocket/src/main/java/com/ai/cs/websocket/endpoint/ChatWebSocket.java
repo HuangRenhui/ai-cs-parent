@@ -42,7 +42,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * WebSocket 聊天端点（消息处理为占位）。
  *
- * <p>握手必须带 token（查询参数），禁止只靠猜 sessionId；连接建立后的鉴权与归属校验为真实现。</p>
+ * <p>握手必须带 token（查询参数），禁止只靠猜 sessionId；连接建立后的鉴权与归属校验已实现。</p>
  *
  * <p>TODO 后续实现消息处理链路：取 Redis 历史上下文 → 用户消息落库 → 调 ai-agent 生成回复
  * → 追加并续期上下文 → AI 回复落库 → 推送回复（携带意图、是否转人工、引用来源、接入坐席）。</p>
