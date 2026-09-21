@@ -1,13 +1,10 @@
 # AI 模型统一注册与管理
 
-> ⛔ **未实现**：本文为**技术设计**；凡涉及**实际代码实现**之处
-> （§2 架构中的失败计数/故障转移/健康探测、§4 后端改动、§6 故障转移与熔断、§8 各阶段「已完成」清单与 REST/用量/配额）
-> 均为**占位实现**——`ModelRouter`（chat/embed 一律抛 `ModelCallException`、注册表不读 Redis、`pool` 恒空、
-> `testConnect` 恒 false）、`ModelCircuitBreaker`（不熔断）、`ModelUsageRecorder`（不记用量/不计费）、
-> `DashscopeModelClient` 与 `OpenAiCompatClient`（不发起调用）、`AiModelConfigService.testConnect` /
-> `publishRegistry`（不探测、不广播，因此「设为生效」不会传播到消费服务）。
-> **保留可用**的是模型配置 CRUD（含同能力唯一 active 的让渡规则）、字段校验与密钥加解密/脱敏。
-> 逐条见 [后端未完成清单 §2.1.1](后端未完成清单.md#211-占位方法清单按模块)。
+> ✅ **已实现**：§2/§6/§8 描述的 LLM 底座——`ModelRouter`（注册表链路 + 故障转移）、`ModelCircuitBreaker`（熔断/冷却/半开探测）、
+> `ModelUsageRecorder`（Redis 流用量 + 当日计数 + 80% 配额预警）、`DashscopeModelClient`（yml 兜底链路）、
+> `OpenAiCompatClient`（OpenAI 兼容协议）与 `AiModelConfigService.testConnect` / `publishRegistry`（真实探测 + Redis 广播）均已实现。
+> 仍为占位的是：`ai-cs-job` 的 `ModelUsageConsumeTask`（用量流消费落库）与 agent/knowledge 侧的上层消费方（意图/填槽/工具链/RAG 等），
+> 见 [后端未完成清单 §2.1.1](后端未完成清单.md#211-占位方法清单按模块)。
 
 > 目标：支持本地(Ollama)与在线(DashScope/OpenAI兼容/DeepSeek)模型自由切换、管理页注册/启停/设为生效、对话选用模型、以及模型故障时的自动切换（故障转移）。
 
@@ -205,3 +202,55 @@
 - 更新 `docs/功能清单.md` / `docs/模块能力.md`（标注"模型统一管理"为新增能力）
 - 更新 `docs/database/init.sql`（合并 cs_ai_model）
 - 更新 `docs/配置说明.md`（模型相关 yml 与 Redis 广播说明）
+
+## 10. 运行时链路（已实现）
+
+### 10.1 一次对话的完整方法链（注册表链路 + 兜底链路）
+
+```
+业务代码（agent: LlmUtil / StreamingChatService…；knowledge: LlmClient…）
+  │
+  ▼
+ModelRouter.chat(messages, sessionId)
+  └─ chatForType("LLM", messages, sessionId)
+       ├─ refreshIfStale()              ← 5 秒防抖 + 版本号比对，读 Redis 注册表
+       ├─ pool("LLM")                    ← active 优先 + priority 升序
+       │   对每个候选 route（先跳过熔断中 / 当日配额用尽的）：
+       │   └─ OpenAiCompatClient.chatWithUsage(baseUrl, apiKey, remoteModel, temperature, messages, timeoutMs)
+       │        ├─ POST {baseUrl}/chat/completions           ← 全项目唯一的网络出口
+       │        ├─ 成功 → ModelCircuitBreaker.onSuccess + ModelUsageRecorder.success → Redis Stream
+       │        │         └─ 返回文本 ✓
+       │        └─ 失败 → ModelCircuitBreaker.onFailure（连续失败→熔断 60s）+ ModelUsageRecorder.failure
+       │                  └─ 同模型重试 maxRetries 次 → 换下一候选
+       └─ 候选为空或全不可用：
+            └─ DashscopeModelClient.chatMessages()           ← yml 兜底链路（读 ai.llm.*）
+                 └─ 内部仍走 OpenAiCompatClient（原生 DashScope 地址自动映射 compatible-mode）
+```
+
+`embed` 同构：type=`EMBEDDING`、路径 `/embeddings`、结果经 `parseEmbedding` 转 `List<Float>`。
+
+### 10.2 注册表「生产 → 消费」
+
+```
+【生产】base-service 管理页（/system/ai-model 增删改 / 设为生效 / 启停）
+        └─ AiModelConfigService.testConnect(id) → ModelRouter.testConnect(route) → 发 ping → health=HEALTHY/DOWN → 写库
+        └─ AiModelConfigService.publishRegistry() → ModelRouter.registerLocal(全部启用模型)
+             ├─ 写 Redis Hash  ai:model:registry   （field=类型 → 该类型启用模型 JSON 数组）
+             ├─ 写 Redis Hash  ai:model:active     （field=类型 → 生效模型 JSON）
+             └─ 写 Redis String ai:model:version   （版本号，消费服务据此判断是否刷新）
+
+【消费】agent / knowledge 等服务的 ModelRouter
+        └─ refreshIfStale()（5 秒防抖 + 版本号没变就跳过）
+             └─ 读 ai:model:registry → 重建本地候选池 → 后续调用走 10.1
+```
+
+### 10.3 相关 Redis Key
+
+| Key | 类型 | 用途 |
+|---|---|---|
+| `ai:model:registry` | Hash | field=modelType → 该能力启用模型 JSON 数组 |
+| `ai:model:active` | Hash | field=modelType → 生效模型 JSON |
+| `ai:model:version` | String | 版本号（时间戳），消费服务判断是否刷新 |
+| `ai:model:usage:stream` | Stream | 用量事件（字段 event=JSON、ts），由 ai-cs-job 消费落库（**待实现**） |
+| `ai:model:usage:daily:{id}:{yyyyMMdd}` | Hash | 当日 tokens/calls/costMicro 计数 |
+| `ai:model:usage:warn:{id}:{yyyyMMdd}` | String | 80% 配额预警当日去重 |
