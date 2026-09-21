@@ -202,20 +202,21 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
     }
 
     /**
-     * 测试连接（占位：不发起真实探测）
-     *
-     * <p>TODO 后续实现：取模型配置转成路由对象，经 {@code ModelRouter.testConnect} 做真实探测，
-     * 按结果把 {@code health} 写为 HEALTHY/DOWN，再触发 {@link #publishRegistry} 广播，
-     * 返回「连接成功，模型可用」或「连接失败，请检查地址与密钥」。</p>
-     *
-     * <p>当前不探测、不更新 health，直接返回未实现提示（**不谎报连接成功**）。</p>
+     * 测试连接：取模型配置转成路由对象，经 {@link ModelRouter#testConnect} 做真实探测，
+     * 按结果把 {@code health} 写为 HEALTHY/DOWN，再触发 {@link #publishRegistry} 广播
      *
      * @param id 模型 ID
-     * @return 未实现提示
+     * @return 「连接成功，模型可用」或「连接失败，请检查地址与密钥」
      */
     public String testConnect(Long id) {
-        log.info("[占位] 模型连通性测试未实现 id={}", id);
-        return "模型连通性测试为占位实现，后端未接入真实探测";
+        AiModelConfig target = requireModel(id);
+        AiModelRoute route = toRoute(target);
+        boolean ok = modelRouter.testConnect(route);
+        this.update(new LambdaUpdateWrapper<AiModelConfig>()
+                .eq(AiModelConfig::getId, id)
+                .set(AiModelConfig::getHealth, route.getHealth()));
+        publishRegistry();
+        return ok ? "连接成功，模型可用" : "连接失败，请检查地址与密钥";
     }
 
     // ==================== 内部 ====================
@@ -226,16 +227,19 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
     }
 
     /**
-     * 把启用模型写入 Redis 注册表 + 版本号，并刷新本地路由池（占位：不写 Redis、不注册）
+     * 把启用模型写入 Redis 注册表 + 版本号，并刷新本地路由池
      *
-     * <p>TODO 后续实现：查全部启用模型，按能力聚成 Hash（field=modelType，value=该能力启用模型 JSON 数组）
-     * 写入 {@code RedisKeyConst.AI_MODEL_REGISTRY}，active 模型写入 {@code AI_MODEL_ACTIVE}，
-     * 时间戳写入 {@code AI_MODEL_VERSION}（失败只记日志）；最后与 Redis 解耦地刷新本地路由池。</p>
-     *
-     * <p>当前不写 Redis、不注册本地池：模型「设为生效/启停」不会传播到 agent/knowledge 等消费服务。</p>
+     * <p>委托 {@link ModelRouter#registerLocal(java.util.List)}：按能力聚成 Hash
+     * （field = modelType，value = 该能力启用模型 JSON 数组）写入 {@code RedisKeyConst.AI_MODEL_REGISTRY}，
+     * active 模型写入 {@code AI_MODEL_ACTIVE}，时间戳写入 {@code AI_MODEL_VERSION}，
+     * 同时刷新本地候选池；Redis 不可用时只影响广播，不影响本地路由。</p>
      */
     public void publishRegistry() {
-        log.info("[占位] 模型注册表发布未实现（不写 Redis、不刷新本地路由池）");
+        try {
+            modelRouter.registerLocal(allEnabledForRoute());
+        } catch (Exception e) {
+            log.warn("模型注册表发布失败: {}", e.getMessage());
+        }
     }
 
     /** 查询全部启用模型并转为路由对象列表 */
