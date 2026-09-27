@@ -32,6 +32,9 @@ public class DataRetentionController {
     @GetMapping("/list")
     public Result<List<DataRetention>> list(@RequestParam(required = false) String tenantCode) {
         try {
+            // TODO(租户令牌优先) 保留策略属租户级配置，同样不能由请求参数决定读谁的数据。
+            //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode);（import com.ai.cs.common.security.JwtContext）
+            //  然后把 listByTenant(tenantCode) 换成 listByTenant(tenant)。
             List<DataRetention> list = dataRetentionService.listByTenant(tenantCode);
             return Result.success(list);
         } catch (Exception e) {
@@ -51,6 +54,8 @@ public class DataRetentionController {
     public Result<DataRetention> get(@RequestParam(required = false) String tenantCode,
                                      @RequestParam String dataType) {
         try {
+            // TODO(租户令牌优先) 同 list：String tenant = JwtContext.resolveTenantCode(tenantCode);
+            //  再 getDataRetention(tenant, dataType)；否则可跨租户读到别人的保留/匿名化策略。
             DataRetention retention = dataRetentionService.getDataRetention(tenantCode, dataType);
             return Result.success(retention);
         } catch (Exception e) {

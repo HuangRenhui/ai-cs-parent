@@ -76,6 +76,10 @@ public class ModelUsageRecorder {
             log.debug("未配置 Redis，跳过用量记录 modelId={} success={}", event.getModelId(), event.getSuccess());
             return;
         }
+        // 两段写入各自 try/catch，职责分离、互不阻塞：
+        //   ① Stream（全量明细，由 job 落库做报表/对账）；
+        //   ② 当日计数（供路由层配额判断）。
+        // 二者失败都只记日志：用量统计属旁路，绝不能因为统计失败把主链路调用带崩。
         try {
             Map<String, String> body = new LinkedHashMap<>(2);
             body.put("event", JSON.toJSONString(event));
@@ -172,20 +176,25 @@ public class ModelUsageRecorder {
     private void accumulateDaily(StringRedisTemplate redis, ModelUsageEvent event, AiModelRoute route) {
         Long modelId = event.getModelId();
         if (modelId == null) {
+            // 取不到模型 ID 的事件归入 -1 桶：既不会丢计数，也避免 Redis key 里出现 "null"
             modelId = -1L;
         }
         String key = dailyKey(modelId);
+        // 全部用 HINCRBY 原子累加：多实例并发写同一模型时不会丢计数（读改写会）
         long tokens = event.getTotalTokens() == null ? 0L : event.getTotalTokens();
         if (tokens > 0) {
             redis.opsForHash().increment(key, "tokens", tokens);
         }
+        // calls 每次必加（含失败调用），便于用 calls 与失败数直接算失败率
         redis.opsForHash().increment(key, "calls", 1L);
         if (event.getCost() != null) {
+            // 成本按「元 ×10^6」存整数，避免浮点累加误差；读取侧（ModelRouter.overQuota）再除回去
             long costMicro = event.getCost().multiply(COST_SCALE).setScale(0, RoundingMode.HALF_UP).longValue();
             if (costMicro > 0) {
                 redis.opsForHash().increment(key, "costMicro", costMicro);
             }
         }
+        // 保留 3 天而非 1 天：跨日排查"昨天配额为什么超了"时还能看到原始计数
         redis.expire(key, Duration.ofDays(3));
         if (route != null) {
             warnIfQuotaNearlyExhausted(redis, route, key);
@@ -215,6 +224,8 @@ public class ModelUsageRecorder {
         if (!tokenWarn && !costWarn) {
             return;
         }
+        // 用 Redis 的 setIfAbsent 做「当日只预警一次」：内存标记在多实例下会各预警一遍（刷屏），
+        // 而这里只需要一个跨实例的开关，代价是一次 Redis 写（预警是低频路径，可接受）
         Boolean firstWarn = redis.opsForValue().setIfAbsent(warnKey(modelId), "1", Duration.ofDays(1));
         if (Boolean.TRUE.equals(firstWarn)) {
             log.warn("模型当日配额预警（已达 {}%）modelId={} tokens={}/{} cost={}/{}",

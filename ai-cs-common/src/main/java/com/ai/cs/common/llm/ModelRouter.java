@@ -114,21 +114,37 @@ public class ModelRouter {
     /**
      * 指定能力类型的对话（带会话ID）
      *
+     * <p><b>两级重试结构</b>：外层遍历候选池做<b>故障转移</b>，内层按该模型的 {@code maxRetries}
+     * 做<b>同模型重试</b>；某个候选重试耗尽后自动换下一个候选，全部候选都失败才收尾。</p>
+     *
+     * <p><b>收尾口径（关键，别改错）</b>：{@code tried} 记录「是否有候选被真正调用过」——</p>
+     * <ul>
+     *   <li>{@code tried == false}：没有候选可用（未登记 / 全被熔断 / 全部超出当日配额）→
+     *       回退 yml 兜底链路，保证「注册表为空也能跑」；</li>
+     *   <li>{@code tried == true}：调用过但都失败 → <b>抛异常，不降级到兜底模型</b>。
+     *       这是有意为之：候选全挂说明上游故障，此时静默换兜底模型会把「故障」伪装成「成功」，
+     *       调用方与监控都会失去感知（宁可失败得响亮）。</li>
+     * </ul>
+     *
      * @param modelType 能力类型，缺省按 LLM
      * @param messages  消息列表
-     * @param sessionId 会话ID（可空）
+     * @param sessionId 会话ID（可空，仅用于用量归集）
      * @return 模型输出文本
+     * @throws ModelCallException 所有候选均调用失败（异常为最后一次失败原因）
      */
     public String chatForType(String modelType, List<Map<String, String>> messages, String sessionId) {
         String type = normalizeType(modelType);
         refreshIfStale();
         List<AiModelRoute> pool = pool(type);
         ModelCallException lastError = null;
+        // 区分「没候选可用」与「候选都调用失败」两种收尾方式，语义见方法注释
         boolean tried = false;
         for (AiModelRoute route : pool) {
             if (!available(route)) {
+                // 熔断中或配额用尽：跳过该候选，继续看下一个（不计入 tried，因为它根本没被调用）
                 continue;
             }
+            // 内层重试次数 = 1 次 + 该模型配置的 maxRetries（瞬时抖动优先靠重试解决，不急着换模型）
             int attempts = 1 + Math.max(0, nvl(route.getMaxRetries()));
             for (int i = 0; i < attempts; i++) {
                 tried = true;
@@ -139,6 +155,7 @@ public class ModelRouter {
                     onCallSuccess(route, sessionId, result);
                     return result.getText();
                 } catch (Exception e) {
+                    // 失败统一收口：累计熔断 + 记失败用量，并保留最后一次异常用于最终抛出
                     lastError = onCallFailure(route, sessionId, "对话", System.currentTimeMillis() - start, e, i + 1);
                 }
             }
@@ -147,6 +164,7 @@ public class ModelRouter {
             // 该能力未登记模型，或候选全部被熔断/超配额 → 回退 yml 兜底链路
             return legacyChat(type, messages);
         }
+        // 试过但全失败：不降级到兜底模型，把最后一次失败原样抛出
         throw lastError != null ? lastError : new ModelCallException("模型调用失败，无可用候选: " + type);
     }
 
@@ -162,6 +180,8 @@ public class ModelRouter {
     /**
      * 向量化（带会话ID）
      *
+     * <p>重试/收尾口径与 {@link #chatForType} 完全一致（候选内重试 → 换候选 → tried 决定是否走兜底）。</p>
+     *
      * @return 向量；全部候选失败且兜底不可用时抛 {@link ModelCallException}
      */
     public List<Float> embed(String text, String sessionId) {
@@ -169,6 +189,7 @@ public class ModelRouter {
         refreshIfStale();
         List<AiModelRoute> pool = pool(type);
         ModelCallException lastError = null;
+        // 同 chat：false 表示"没候选可用"（走兜底），true 表示"试过且全失败"（抛异常）
         boolean tried = false;
         for (AiModelRoute route : pool) {
             if (!available(route)) {
@@ -313,6 +334,9 @@ public class ModelRouter {
             return;
         }
         try {
+            // 版本号未变且本地已有候选 → 直接跳过重建（这是"大多数请求都不打 Redis"的关键优化）。
+            // 额外加 !isEmpty() 是为了兜住"版本号没变但本地候选为空"的边界：比如启动早期
+            // 注册表还没写入、或被别处 clear 过，此时必须重建，否则会一直走兜底链路。
             String version = redis.opsForValue().get(RedisKeyConst.AI_MODEL_VERSION);
             if (version != null && version.equals(lastRegistryVersion) && !isEmpty()) {
                 return;
@@ -352,16 +376,25 @@ public class ModelRouter {
                 }
             });
             if (!registry.isEmpty()) {
+                // 注册表（全量候选，JSON 数组）与生效表（每能力首位）分开存：
+                // 其它服务读注册表重建候选池，管理页/诊断读生效表拿"当前用的是哪个模型"
                 redis.opsForHash().putAll(RedisKeyConst.AI_MODEL_REGISTRY, registry);
                 redis.opsForHash().putAll(RedisKeyConst.AI_MODEL_ACTIVE, activeMap);
             }
+            // 版本号用毫秒时间戳即可：消费方只判断"是否变化"，不解析具体值；
+            // 它是各服务跳过重建的依据（见 doRefresh 的版本判断）
             redis.opsForValue().set(RedisKeyConst.AI_MODEL_VERSION, String.valueOf(System.currentTimeMillis()));
         } catch (Exception e) {
             log.warn("写入模型注册表失败: {}", e.getMessage());
         }
     }
 
-    /** 候选是否可用：未被熔断且当日配额未用尽 */
+    /**
+     * 候选是否可用：未被熔断且当日配额未用尽。
+     *
+     * <p>顺序有意为之——先判断熔断（内存判断，最廉价且是"已知故障"），再查配额（要读 Redis）。
+     * 「不可用」不等于「调用失败」：它不写入失败用量、也不计入 {@code tried}。</p>
+     */
     private boolean available(AiModelRoute route) {
         if (circuitBreaker.isOpen(route)) {
             log.warn("模型熔断中，跳过 modelId={} name={}", route.getId(), route.getModelName());
@@ -389,6 +422,10 @@ public class ModelRouter {
         }
         try {
             String key = ModelUsageRecorder.dailyKey(route.getId());
+            // 当日计数由 ModelUsageRecorder 用 HINCRBY 原子累加：
+            //  - tokens：当日累计 token 数；
+            //  - costMicro：当日累计成本，单位为「元 ×10^6」的整数（整数存储避免浮点误差），
+            //    所以这里要除回 10^6 再与配置的元价比较。
             Object tokensValue = redis.opsForHash().get(key, "tokens");
             Object costValue = redis.opsForHash().get(key, "costMicro");
             if (hasTokenLimit && tokensValue != null && Long.parseLong(tokensValue.toString()) >= limitTokens) {
@@ -400,6 +437,7 @@ public class ModelRouter {
             }
             return false;
         } catch (Exception e) {
+            // 读不到就按「未超限」放行（fail-open）：配额是成本保护，不该因为 Redis 抖动阻断业务
             log.debug("读取模型当日配额失败（按未超限处理）: {}", e.getMessage());
             return false;
         }
@@ -449,7 +487,20 @@ public class ModelRouter {
         }
     }
 
-    /** 排序：active(1) 优先，其次 priority 升序（空值排最后），最后按 id 升序 */
+    /**
+     * 候选排序：<b>生效模型（active=1）优先 → priority 升序（空值排最后）→ id 升序</b>。
+     *
+     * <p>三级排序各有用意：</p>
+     * <ul>
+     *   <li>第一级用 {@code 1 - nvl(isActive)} 把「降序」折叠成升序比较：active=1 → 0 排最前，
+     *       active=0/null → 1 排后；</li>
+     *   <li>第二级 priority：同是 active（或同为备用）时按配置的优先级；</li>
+     *   <li>第三级 id：兜底保证顺序<b>稳定可复现</b>，否则同优先级候选在不同实例上顺序可能不同，
+     *       故障转移结果就不可预期。</li>
+     * </ul>
+     *
+     * <p>返回 {@code List.copyOf}：候选池会被多线程读取，返回不可变视图可防止调用方误改顺序。</p>
+     */
     private static List<AiModelRoute> sort(List<AiModelRoute> routes) {
         List<AiModelRoute> sorted = new ArrayList<>(routes);
         sorted.sort(Comparator

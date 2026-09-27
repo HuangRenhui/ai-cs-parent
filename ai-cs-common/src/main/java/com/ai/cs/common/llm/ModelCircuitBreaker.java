@@ -15,6 +15,18 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>熔断触发时把运行时健康标记为 DOWN 由 {@link ModelRouter} 负责（本类不依赖路由对象之外的状态）。</p>
  *
+ * <p><b>两个必须知道的设计取舍：</b></p>
+ * <ul>
+ *   <li><b>状态是每实例内存级</b>（{@link ConcurrentHashMap} + 每模型一把锁，重启即清零）：多实例部署时
+ *       各实例各自熔断，不做分布式共享。这是有意为之——熔断判断在每次调用的热路径上，
+ *       若每实例都要写 Redis 会引入额外延迟与单点依赖；代价是"某实例已熔断、另一实例还会再试几次"，
+ *       最终由失败重试兜住，可接受。</li>
+ *   <li><b>半开是隐式实现的</b>：冷却期结束后 {@link #isOpen} 自然返回 false，下一次调用即为"半开探测"；
+ *       因为 {@code fails} 未清零，探测若再次失败会立刻重新熔断（这正是期望的行为）。
+ *       因此路由层用的是 {@link #isOpen}，而 {@link #allow} 目前<b>没有调用方</b>（保留给需要显式
+ *       "冷却结束日志 + 状态转换"语义的场景，见其 javadoc）。</li>
+ * </ul>
+ *
  * @author ai-cs
  */
 @Slf4j
@@ -29,7 +41,14 @@ public class ModelCircuitBreaker {
     private final Map<Long, State> states = new ConcurrentHashMap<>();
 
     /**
-     * 是否允许调用该模型：熔断中返回 false；冷却结束自动转为半开（放行一次探测）
+     * 是否允许调用该模型：熔断中返回 false；冷却结束自动转为半开（放行一次探测）。
+     *
+     * <p>语义上与 {@link #isOpen} 互补：{@code isOpen} 是纯查询，本方法在"冷却刚结束"时会把
+     * {@code openUntil} 归零并打一条日志（便于排查"什么时候恢复的"）。</p>
+     *
+     * <p><b>注意</b>：当前路由层走的是 {@link #isOpen}（半开由冷却时间自然达成），
+     * 本方法暂无调用方；若要启用"显式半开日志/状态转换"，把 {@link ModelRouter#available} 的判断
+     * 从 {@code isOpen} 换成本方法即可，两者判定结果一致，只差一条恢复日志与状态归零。</p>
      */
     public boolean allow(AiModelRoute route) {
         Long modelId = idOf(route);
@@ -76,6 +95,9 @@ public class ModelCircuitBreaker {
 
     /**
      * 调用失败：累计连续失败，达到阈值则熔断
+     *
+     * <p>熔断后 {@code fails} <b>不清零</b>：冷却结束放行的那次"半开探测"若再失败，
+     * {@code fails} 已 ≥ 阈值，会立刻重新熔断，避免"冷却—失败—冷却"的慢速抖动。</p>
      *
      * @return true 表示本次触发了熔断（调用方据此把健康标记为 DOWN）
      */

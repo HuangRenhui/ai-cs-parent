@@ -3,7 +3,6 @@ package com.ai.cs.base.controller;
 import com.ai.cs.base.entity.IntentConfig;
 import com.ai.cs.base.service.IntentConfigService;
 import com.ai.cs.common.result.Result;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
@@ -12,10 +11,12 @@ import java.util.List;
 /**
  * 可配置意图控制器
  *
+ * <p>异常统一交给 {@code GlobalExceptionHandler}：这里不再 try/catch，避免把内部异常信息
+ * 拼进返回体、也避免绕过全局错误处理。</p>
+ *
  * @author huangrenhui
  * @date 2026-09-09
  */
-@Slf4j
 @RestController
 @RequestMapping("/system/intent")
 public class IntentConfigController {
@@ -31,13 +32,13 @@ public class IntentConfigController {
      */
     @GetMapping("/list")
     public Result<List<IntentConfig>> list(@RequestParam(required = false) String tenantCode) {
-        try {
-            List<IntentConfig> intents = intentConfigService.getEnabledIntents(tenantCode);
-            return Result.success(intents);
-        } catch (Exception e) {
-            log.error("查询意图列表失败", e);
-            return Result.error("查询意图列表失败: " + e.getMessage());
-        }
+        // TODO(租户令牌优先) 现在直接吃请求参数：绑定租户的坐席令牌改一下 URL 参数就能读别的租户意图（水平越权）。
+        //  实现三步：
+        //   1) import com.ai.cs.common.security.JwtContext;
+        //   2) String tenant = JwtContext.resolveTenantCode(tenantCode);
+        //      规则：令牌带租户 → 一律以令牌为准（忽略入参）；令牌未绑定租户（平台级账号）→ 用入参；都为空 → default
+        //   3) 把 tenant 传给 service（替换下面的 tenantCode）
+        return Result.success(intentConfigService.getEnabledIntents(tenantCode));
     }
 
     /**
@@ -48,13 +49,9 @@ public class IntentConfigController {
      */
     @GetMapping("/listAll")
     public Result<List<IntentConfig>> listAll(@RequestParam(required = false) String tenantCode) {
-        try {
-            List<IntentConfig> intents = intentConfigService.listByTenant(tenantCode);
-            return Result.success(intents);
-        } catch (Exception e) {
-            log.error("查询意图列表失败", e);
-            return Result.error("查询意图列表失败: " + e.getMessage());
-        }
+        // TODO(租户令牌优先) 同 list：管理页也要按令牌租户收敛，否则能翻到别的租户（含禁用）的意图配置。
+        //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode); 后把 tenant 传给 service。
+        return Result.success(intentConfigService.listByTenant(tenantCode));
     }
 
     /**
@@ -65,13 +62,7 @@ public class IntentConfigController {
      */
     @GetMapping("/{id}")
     public Result<IntentConfig> getById(@PathVariable Long id) {
-        try {
-            IntentConfig intent = intentConfigService.getById(id);
-            return Result.success(intent);
-        } catch (Exception e) {
-            log.error("查询意图失败", e);
-            return Result.error("查询意图失败: " + e.getMessage());
-        }
+        return Result.success(intentConfigService.getById(id));
     }
 
     /**
@@ -82,13 +73,7 @@ public class IntentConfigController {
      */
     @PostMapping("/save")
     public Result<Boolean> save(@RequestBody IntentConfig intentConfig) {
-        try {
-            boolean success = intentConfigService.saveOrUpdateIntent(intentConfig);
-            return Result.success(success);
-        } catch (Exception e) {
-            log.error("保存意图失败", e);
-            return Result.error("保存意图失败: " + e.getMessage());
-        }
+        return Result.success(intentConfigService.saveOrUpdateIntent(intentConfig));
     }
 
     /**
@@ -99,12 +84,6 @@ public class IntentConfigController {
      */
     @DeleteMapping("/delete/{id}")
     public Result<Boolean> delete(@PathVariable Long id) {
-        try {
-            boolean success = intentConfigService.deleteIntent(id);
-            return Result.success(success);
-        } catch (Exception e) {
-            log.error("删除意图失败", e);
-            return Result.error("删除意图失败: " + e.getMessage());
-        }
+        return Result.success(intentConfigService.deleteIntent(id));
     }
 }
