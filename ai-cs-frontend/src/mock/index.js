@@ -93,9 +93,9 @@ const db = {
     { id: 3, orderNo: 'WO_9003', orderType: '建议', orderContent: '希望增加夜间客服', orderStatus: 3, agentId: 2, sessionId: '', customerId: 3, createTime: '2026-09-08 16:00:00', updateTime: '2026-09-08 18:00:00' }
   ],
   faqs: [
-    { id: 1, tenantCode: 'default', question: '如何退款？', answer: '提交售后申请后 1-3 个工作日原路退回。', category: '售后', status: 1, auditStatus: 2, likeCount: 12, dislikeCount: 1, viewCount: 88, milvusId: 'vec-1', createTime: '2026-08-20 10:00:00' },
-    { id: 2, tenantCode: 'default', question: '物流多久送达？', answer: '江浙沪 48 小时，其他地区 3-5 天。', category: '物流', status: 1, auditStatus: 2, likeCount: 9, dislikeCount: 0, viewCount: 64, milvusId: 'vec-2', createTime: '2026-08-21 10:00:00' },
-    { id: 3, tenantCode: 'default', question: '怎么修改收货地址？', answer: '发货前可在订单详情修改一次地址。', category: '订单', status: 1, auditStatus: 1, likeCount: 3, dislikeCount: 0, viewCount: 21, milvusId: '', createTime: '2026-09-01 10:00:00' }
+    { id: 1, tenantCode: 'default', question: '如何退款？', answer: '提交售后申请后 1-3 个工作日原路退回。', category: '售后', status: 1, auditStatus: 2, likeCount: 12, dislikeCount: 1, viewCount: 88, createTime: '2026-08-20 10:00:00' },
+    { id: 2, tenantCode: 'default', question: '物流多久送达？', answer: '江浙沪 48 小时，其他地区 3-5 天。', category: '物流', status: 1, auditStatus: 2, likeCount: 9, dislikeCount: 0, viewCount: 64, createTime: '2026-08-21 10:00:00' },
+    { id: 3, tenantCode: 'default', question: '怎么修改收货地址？', answer: '发货前可在订单详情修改一次地址。', category: '订单', status: 1, auditStatus: 1, likeCount: 3, dislikeCount: 0, viewCount: 21, createTime: '2026-09-01 10:00:00' }
   ],
   misses: [
     { id: 1, question: '会员积分能抵运费吗', topScore: 0.31, status: 0, createTime: '2026-09-10 12:00:00' },
@@ -267,7 +267,7 @@ const db = {
     db.faqs.push({
       id: n, tenantCode: 'default', question: `演示问答 ${n}：${names[i]} 常见问题`,
       answer: `这是第 ${n} 条演示答案，用于验证分页与滚动。`, category: ['售后', '物流', '订单'][i % 3],
-      status: 1, auditStatus: 2, likeCount: i, dislikeCount: 0, viewCount: 10 + i, milvusId: `vec-${n}`,
+      status: 1, auditStatus: 2, likeCount: i, dislikeCount: 0, viewCount: 10 + i,
       createTime: `2026-08-${String((i % 27) + 1).padStart(2, '0')} 10:00:00`
     })
     db.misses.push({
@@ -1048,6 +1048,15 @@ mmEvalRuns[0].createTime = '2026-09-12 17:00:00'
 mmEvalRuns[1].createTime = '2026-09-12 17:02:00'
 mmEvalRuns[2].createTime = '2026-09-08 10:15:00'
 
+/** 演示用：已向量化 FAQ 主键（初始按 id 奇数种子，点「向量化」后加入，便于演示状态翻转） */
+let mockVectorizedFaqIds = null
+const vectorizedFaqIds = () => {
+  if (!mockVectorizedFaqIds) {
+    mockVectorizedFaqIds = new Set(db.faqs.filter(f => Number(f.id) % 2 === 1).map(f => Number(f.id)))
+  }
+  return mockVectorizedFaqIds
+}
+
 const handle = (method, path, config) => {
   const p = paramsOf(config)
   const body = parseBody(config)
@@ -1195,7 +1204,18 @@ const handle = (method, path, config) => {
   }
   if (path === '/knowledge/save' || path === '/knowledge/update') { upsert(db.faqs, { ...body, status: body.status ?? 1, auditStatus: 1 }); return ok('保存成功') }
   if (path.startsWith('/knowledge/delete/')) { removeById(db.faqs, idFrom(path, /\/(\d+)$/)); return ok('删除成功') }
-  if (path.startsWith('/knowledge/vectorize/')) return ok('向量化完成（演示）')
+  // 注意：必须在下面的 /knowledge/vectorize/ 通配之前拦截，否则会被吞成「向量化完成（演示）」
+  if (path === '/knowledge/vectorize/status') {
+    const ids = Array.isArray(body) ? body.map(Number) : []
+    const known = vectorizedFaqIds()
+    return ok({ available: true, vectorizedIds: ids.filter(id => known.has(id)) })
+  }
+  if (path.startsWith('/knowledge/vectorize/')) {
+    const faqId = Number(idFrom(path, /\/(\d+)$/))
+    // 单条向量化后状态立即翻转为「已向量化」，避免演示时点了按钮状态不变
+    if (faqId) vectorizedFaqIds().add(faqId)
+    return ok('向量化完成（演示）')
+  }
   if (path === '/knowledge/rag/search' || path === '/knowledge/search') {
     return ok({ reply: `【演示答复】关于「${p.question}」：可在帮助中心查看退款与物流说明。`, citations: [{ faqId: 1, question: '如何退款？' }] })
   }

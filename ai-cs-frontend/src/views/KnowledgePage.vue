@@ -80,16 +80,25 @@
           <span class="stat-cell">{{ scope.row.likeCount || 0 }} / {{ scope.row.dislikeCount || 0 }} / {{ scope.row.viewCount || 0 }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="milvusId" label="向量" min-width="100" show-overflow-tooltip />
+      <el-table-column label="向量" min-width="92">
+        <template #default="{ row }">
+          <el-tag v-if="statusKnown && vectorizeStatus.has(row.id)"
+                  :type="vectorizeStatus.get(row.id) ? 'success' : 'info'" size="small">
+            {{ vectorizeStatus.get(row.id) ? '已向量化' : '未向量化' }}
+          </el-tag>
+          <!-- 向量库不可用时状态未知，显示「—」而不是谎报「未向量化」 -->
+          <span v-else class="stat-cell">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="createTime" label="创建时间" min-width="168" />
       <el-table-column label="操作" width="258">
         <template #default="scope">
           <div class="table-actions">
             <TblAct act="edit" @click="editFaq(scope.row)" />
-            <!-- 已有向量的显示「重新向量化」，比「向量化」长两字，固定槽宽免得后面的删除逐行错位 -->
+            <!-- 「重新向量化」比「向量化」长两字，固定槽宽免得后面的删除逐行错位 -->
             <TblAct
               class="act-slot is-long"
-              :act="scope.row.milvusId ? 'revector' : 'vector'"
+              :act="vectorizeStatus.get(scope.row.id) ? 'revector' : 'vector'"
               @click="handleVectorizeFaq(scope.row.id)"
             />
             <TblAct act="delete" @click="handleDeleteFaq(scope.row.id)" />
@@ -245,6 +254,7 @@ import {
   batchVectorize as batchVectorizeApi,
   convertMiss as convertMissApi,
   deleteFaq as deleteFaqApi,
+  faqVectorizeStatus,
   importFaqs,
   listFaqs,
   listKnowledgeMiss,
@@ -263,6 +273,9 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const faqList = ref([])
+/** id -> 是否已向量化；statusKnown=false 表示向量库不可用，状态未知 */
+const vectorizeStatus = ref(new Map())
+const statusKnown = ref(true)
 /** 问答列表 / 未命中回收横排切片 */
 const section = ref('faq')
 const sectionOptions = [
@@ -331,12 +344,36 @@ const loadFaqs = async () => {
     faqList.value = categoryFilter.value
       ? rows.filter(item => item.category === categoryFilter.value)
       : rows
+    loadVectorizeStatus(faqList.value)
     loadCategories()
     loadMiss()
   } catch {
     faqList.value = []
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 批量查当前页的向量化状态。
+ * 失败时整体降级为「未知」：列表照常可用，按钮仍可按幂等语义执行（upsert 可重复调用）
+ */
+const loadVectorizeStatus = async (rows) => {
+  const ids = (rows || []).map(r => r.id).filter(id => id != null)
+  if (!ids.length) {
+    vectorizeStatus.value = new Map()
+    statusKnown.value = true
+    return
+  }
+  try {
+    const res = await faqVectorizeStatus(ids, tenantCode.value || undefined)
+    const data = res?.data || {}
+    statusKnown.value = data.available !== false
+    const set = new Set(data.vectorizedIds || [])
+    vectorizeStatus.value = new Map(ids.map(id => [id, set.has(id)]))
+  } catch {
+    statusKnown.value = false
+    vectorizeStatus.value = new Map()
   }
 }
 

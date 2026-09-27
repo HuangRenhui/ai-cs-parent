@@ -114,6 +114,11 @@ request.interceptors.response.use(
     const body = error.response?.data
     if (status === 401) {
       redirectLogin()
+    } else if (status === 403) {
+      // 无权限（如岗位角色不匹配）单独提示，避免落到泛化的「请求失败」
+      if (!error.config?.silent) {
+        ElMessage.error(body && body.msg ? body.msg : '没有权限执行该操作')
+      }
     } else if (!error.config?.silent) {
       if (body && body.msg) {
         ElMessage.error(body.msg)
