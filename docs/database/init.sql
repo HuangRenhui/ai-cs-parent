@@ -128,7 +128,6 @@ CREATE TABLE `cs_knowledge_faq` (
     `category` VARCHAR(100) DEFAULT NULL COMMENT '分类',
     `sort_num` INT DEFAULT 0 COMMENT '排序号',
     `status` TINYINT DEFAULT 1 COMMENT '状态: 0-禁用, 1-启用',
-    `milvus_id` VARCHAR(100) DEFAULT NULL COMMENT 'Milvus向量数据库中的记录ID',
     `audit_status` TINYINT DEFAULT 2 COMMENT '审核状态: 0-草稿, 1-待审核, 2-已发布, 3-已下线',
     `like_count` INT DEFAULT 0 COMMENT '点赞数',
     `dislike_count` INT DEFAULT 0 COMMENT '点踩数',
@@ -140,7 +139,6 @@ CREATE TABLE `cs_knowledge_faq` (
     KEY `idx_tenant_code` (`tenant_code`),
     KEY `idx_category` (`category`),
     KEY `idx_status` (`status`),
-    KEY `idx_milvus_id` (`milvus_id`),
     KEY `idx_del_flag` (`del_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库FAQ表';
 
@@ -206,6 +204,25 @@ CREATE TABLE `cs_document_version` (
     KEY `idx_del_flag` (`del_flag`),
     KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档版本管理表';
+
+CREATE TABLE `cs_kb_chunk` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID（同时作为 Milvus 切片集合的 chunk_id）',
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `document_id` VARCHAR(64) NOT NULL COMMENT '来源文档ID',
+    `document_name` VARCHAR(256) DEFAULT NULL COMMENT '来源文档名称',
+    `chunk_index` INT NOT NULL DEFAULT 0 COMMENT '文档内切片序号（从0开始）',
+    `content` TEXT NOT NULL COMMENT '切片文本',
+    `vectorized` TINYINT DEFAULT 0 COMMENT '是否已写入向量库: 0-未向量化, 1-已向量化',
+    `del_flag` TINYINT DEFAULT 0 COMMENT '删除标记: 0-未删除, 1-已删除',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_document_chunk` (`tenant_code`, `document_id`, `chunk_index`),
+    KEY `idx_document_id` (`document_id`),
+    KEY `idx_tenant_code` (`tenant_code`),
+    KEY `idx_vectorized` (`vectorized`),
+    KEY `idx_del_flag` (`del_flag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库文档切片表';
 
 CREATE TABLE `cs_knowledge_graph_node` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',

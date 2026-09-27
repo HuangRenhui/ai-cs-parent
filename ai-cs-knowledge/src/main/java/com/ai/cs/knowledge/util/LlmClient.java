@@ -1,11 +1,14 @@
 package com.ai.cs.knowledge.util;
 
+import com.ai.cs.common.llm.ModelCallException;
 import com.ai.cs.common.llm.ModelRouter;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
-import jakarta.annotation.Resource;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -34,8 +37,14 @@ public class LlmClient {
      * @throws IOException 占位实现
      */
     public String call(String prompt) throws IOException {
-        log.warn("[占位] 知识库 LLM 单轮调用未实现");
-        throw new IOException("调用大模型异常: 知识库 LLM 调用为占位实现");
+        if (!StringUtils.hasText(prompt)) {
+            throw new IOException("调用大模型异常: 提示词为空");
+        }
+        try {
+            return modelRouter.chat(List.of(Map.of("role", "user", "content", prompt)));
+        } catch (ModelCallException e) {
+            throw new IOException("调用大模型异常: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -47,8 +56,19 @@ public class LlmClient {
      * @throws IOException 占位实现
      */
     public String callWithSystem(String systemPrompt, String userPrompt) throws IOException {
-        log.warn("[占位] 知识库 LLM 系统提示词调用未实现");
-        throw new IOException("调用大模型异常: 知识库 LLM 调用为占位实现");
+        if (!StringUtils.hasText(userPrompt)) {
+            throw new IOException("调用大模型异常: 提示词为空");
+        }
+        List<Map<String, String>> messages = new ArrayList<>();
+        if (StringUtils.hasText(systemPrompt)) {
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+        }
+        messages.add(Map.of("role", "user", "content", userPrompt));
+        try {
+            return modelRouter.chat(messages);
+        } catch (ModelCallException e) {
+            throw new IOException("调用大模型异常: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -59,7 +79,19 @@ public class LlmClient {
      * @throws IOException 占位实现
      */
     public String callWithMessages(List<Map<String, Object>> messages) throws IOException {
-        log.warn("[占位] 知识库 LLM 多消息调用未实现");
-        throw new IOException("调用大模型异常: 知识库 LLM 调用为占位实现");
+        if (messages == null || messages.isEmpty()) {
+            throw new IOException("调用大模型异常: 消息列表为空");
+        }
+        List<Map<String, String>> normalizedMessages = new ArrayList<>();
+        for (Map<String, Object> message : messages) {
+            String role = message.get("role") == null ? "user" : String.valueOf(message.get("role"));
+            String content = message.get("content") == null ? "" : String.valueOf(message.get("content"));
+            normalizedMessages.add(Map.of("role", role, "content", content));
+        }
+        try {
+            return modelRouter.chat(normalizedMessages);
+        } catch (ModelCallException e) {
+            throw new IOException("调用大模型异常: " + e.getMessage(), e);
+        }
     }
 }

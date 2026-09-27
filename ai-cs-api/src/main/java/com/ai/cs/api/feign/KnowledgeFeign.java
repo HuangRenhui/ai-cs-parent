@@ -15,16 +15,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 @FeignClient(value = "ai-cs-knowledge", url = "${feign.knowledge.url:http://localhost:8083}", fallback = KnowledgeFeignFallback.class)
 public interface KnowledgeFeign {
 
-    /** 知识库全文检索（兼容旧接口，返回纯文本答案） */
+    /** 知识库全文检索（兼容旧接口，返回纯文本答案）；tenantCode 必传，服务端不再隐式落到 default 租户 */
     @GetMapping("/knowledge/search")
     Result<String> search(@RequestParam("question") String question,
-                          @RequestParam(value = "tenantCode", required = false) String tenantCode,
+                          @RequestParam("tenantCode") String tenantCode,
                           @RequestParam(value = "sessionId", required = false) String sessionId);
 
-    /** RAG 检索：返回命中状态、生成回复与引用来源；industryPrompt 为人设/拒答叠加，可空 */
+    /** RAG 检索：返回命中状态、生成回复与引用来源；tenantCode 必传，industryPrompt 为人设/拒答叠加，可空 */
     @GetMapping("/knowledge/rag/search")
     Result<RagSearchResultDTO> ragSearch(@RequestParam("question") String question,
-                                         @RequestParam(value = "tenantCode", required = false) String tenantCode,
+                                         @RequestParam("tenantCode") String tenantCode,
                                          @RequestParam(value = "sessionId", required = false) String sessionId,
                                          @RequestParam(value = "industryPrompt", required = false) String industryPrompt);
 

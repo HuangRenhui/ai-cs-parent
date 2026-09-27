@@ -11,21 +11,27 @@ import com.ai.cs.knowledge.entity.KnowledgeMiss;
 import com.ai.cs.knowledge.service.KnowledgeFaqService;
 import com.ai.cs.knowledge.service.KnowledgeMissService;
 import com.ai.cs.knowledge.service.RagSearchService;
+import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.knowledge.util.MilvusUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * FAQ知识库控制器
  * 提供FAQ的增删改查和语义检索功能
  */
+@Slf4j
 @RestController
 @RequestMapping("/knowledge")
 @Tag(name = "FAQ知识库管理", description = "FAQ知识的增删改查和向量化检索")
@@ -48,11 +54,12 @@ public class FaqController {
      */
     @GetMapping("/health")
     @Operation(summary = "知识库健康检查")
-    public Result<KnowledgeHealthVO> health() {
+    public Result<KnowledgeHealthVO> health(@RequestParam(required = false) String tenantCode) {
         KnowledgeHealthVO vo = new KnowledgeHealthVO();
         vo.setReady(milvusUtil.isReady());
         vo.setMilvus(milvusUtil.statusMessage());
-        vo.setCollection(milvusUtil.tenantCollectionName());
+        // 探活接口：只回显集合名。令牌带租户时以令牌为准，否则按请求参数、最后兜底 default
+        vo.setCollection(milvusUtil.tenantCollectionName(JwtContext.resolveTenantCode(tenantCode)));
         vo.setEmbeddingModel(aiModelProperties.getEmbedding().getModel());
         return Result.success(vo);
     }
@@ -69,16 +76,18 @@ public class FaqController {
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long page,
             @RequestParam(required = false) Long size) {
+        // 租户以令牌为准（坐席/访客令牌绑定租户时忽略请求参数），平台级账号才看请求参数
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
         // 显式分页请求
         if (page != null) {
-            return Result.success(faqService.pageList(tenantCode, keyword, status, page, size == null ? 20 : size));
+            return Result.success(faqService.pageList(tenant, keyword, status, page, size == null ? 20 : size));
         }
         // 带筛选条件但不分页：用大页拉取记录列表
         if (StringUtils.hasText(keyword) || status != null) {
-            return Result.success(faqService.pageList(tenantCode, keyword, status, 1, 500).getRecords());
+            return Result.success(faqService.pageList(tenant, keyword, status, 1, 500).getRecords());
         }
         // 无参数：返回全部启用状态的FAQ
-        return Result.success(faqService.getEnableFaqList(tenantCode));
+        return Result.success(faqService.getEnableFaqList(tenant));
     }
 
     /**
@@ -91,7 +100,8 @@ public class FaqController {
             @RequestParam(required = false) String tenantCode,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long size) {
-        return Result.success(missService.pageList(tenantCode, page, size));
+        // 同上：未命中记录也按「令牌租户优先」过滤
+        return Result.success(missService.pageList(JwtContext.resolveTenantCode(tenantCode), page, size));
     }
 
     /**
@@ -101,99 +111,114 @@ public class FaqController {
     @PostMapping("/save")
     @Operation(summary = "新增FAQ", description = "创建新的FAQ并自动向量化存入Milvus")
     public Result<String> save(@RequestBody KnowledgeFaq faq) {
-        // 租户编码归一化，避免大小写/空格导致的数据隔离错乱
-        faq.setTenantCode(KnowledgeFaqService.normalizeTenant(faq.getTenantCode()));
+        // 租户「令牌优先」后再归一化：绑定租户的令牌会忽略请求体里的 tenantCode，防越权写入；
+        // 归一化避免大小写/空格导致的数据隔离错乱
+        faq.setTenantCode(KnowledgeFaqService.normalizeTenant(JwtContext.resolveTenantCode(faq.getTenantCode())));
         faqService.save(faq);
         
-        // 自动向量化并插入Milvus
+        // 自动向量化并插入Milvus（按 faqId upsert，无需回写向量ID）
         try {
-            String milvusId = ragSearchService.vectorizeAndInsert(faq);
-            // 更新FAQ的milvusId
-            faq.setMilvusId(milvusId);
-            faqService.updateById(faq);
+            ragSearchService.vectorizeAndInsert(faq);
             return Result.success("新增成功，已向量化插入Milvus");
         } catch (IOException e) {
+            // FAQ 已落库：向量化失败只提示，不当作整体失败（其余异常交给全局异常处理）
             return Result.fail("新增成功，但向量化失败: " + e.getMessage());
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
         }
     }
 
     /**
      * 更新FAQ
-     * 先带出旧的milvusId以便更新向量时定位旧记录，再落库并增量更新向量
+     * 先落库，再按 faqId 增量更新向量
      */
     @PutMapping("/update")
     @Operation(summary = "更新FAQ", description = "修改FAQ信息并增量更新Milvus向量")
     public Result<String> update(@RequestBody KnowledgeFaq faq) {
-        // 查询旧数据获取milvusId
         KnowledgeFaq oldFaq = faqService.getById(faq.getId());
         if (oldFaq == null) {
             return Result.fail("FAQ不存在，ID: " + faq.getId());
         }
-        
-        // 设置旧的milvusId
-        faq.setMilvusId(oldFaq.getMilvusId());
-        
+        // 防 IDOR：令牌绑定租户时只能改本租户的 FAQ（改 id 越权在业务层直接拦掉）
+        if (!tenantMatched(oldFaq.getTenantCode())) {
+            return Result.fail("无权修改其他租户的FAQ");
+        }
+        // 租户不允许通过请求体改动：沿用库里的原值，避免把记录「搬」到别的租户
+        faq.setTenantCode(oldFaq.getTenantCode());
+
         faqService.updateById(faq);
         
-        // 增量更新Milvus向量
+        // 增量更新Milvus向量（按 faqId upsert，无需回写向量ID）
         try {
-            String newMilvusId = ragSearchService.incrementUpdate(faq);
-            // 更新FAQ的milvusId
-            faq.setMilvusId(newMilvusId);
-            faqService.updateById(faq);
+            ragSearchService.incrementUpdate(faq);
             return Result.success("修改成功，已增量更新Milvus");
         } catch (IOException e) {
+            // FAQ 已落库：向量化失败只提示，不当作整体失败（其余异常交给全局异常处理）
             return Result.fail("修改成功，但向量化失败: " + e.getMessage());
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
         }
     }
 
     /**
      * 删除FAQ
      * 同步删除Milvus中对应的向量，避免残留脏数据
+     * 向量删除失败不阻断业务删除（fail-open），失败项登记待清理，由向量对账任务补偿
      */
     @DeleteMapping("/delete/{id}")
     @Operation(summary = "删除FAQ", description = "删除FAQ及其在Milvus中的向量数据")
     public Result<String> delete(@PathVariable Long id) {
-        // 查询FAQ获取milvusId
         KnowledgeFaq faq = faqService.getById(id);
-        if (faq != null && faq.getMilvusId() != null && !faq.getMilvusId().isEmpty()) {
-            // 删除Milvus中的向量
-            milvusUtil.deleteById(faq.getMilvusId());
+        if (faq != null) {
+            // 防 IDOR：绑定租户的令牌不能删其他租户的 FAQ（也不会去动它的向量）
+            if (!tenantMatched(faq.getTenantCode())) {
+                return Result.fail("无权删除其他租户的FAQ");
+            }
+            try {
+                milvusUtil.deleteByFaqId(faq.getId(), faq.getTenantCode());
+            } catch (Exception e) {
+                log.warn("删除FAQ向量失败，已登记待清理 faqId={} tenant={}: {}",
+                        faq.getId(), faq.getTenantCode(), e.getMessage());
+                milvusUtil.markPendingDelete(MilvusUtil.BIZ_TYPE_FAQ, faq.getTenantCode(), faq.getId());
+            }
         }
-        
+
         faqService.removeById(id);
         return Result.success("删除成功");
     }
 
     /**
+     * 校验记录的归属租户是否与当前令牌租户一致（防 IDOR：改 id 读写别人租户的数据）。
+     *
+     * <p>令牌未绑定租户时一律放行——平台级运营账号本来就要跨租户管理；
+     * 绑定租户的令牌（坐席、访客、C 端）只能操作自己租户的数据。</p>
+     *
+     * @param recordTenantCode 记录上的租户编码
+     * @return true=允许操作
+     */
+    private boolean tenantMatched(String recordTenantCode) {
+        String tokenTenant = JwtContext.getCurrentTenantCode();
+        if (!StringUtils.hasText(tokenTenant)) {
+            return true;
+        }
+        return tokenTenant.equals(KnowledgeFaqService.normalizeTenant(recordTenantCode));
+    }
+
+    /**
      * 语义检索问答（对接Milvus）
-     * 带租户/会话参数时走租户隔离检索，否则走全局语义问答
+     * 必须传租户：多租户下不再隐式落到 default 租户检索
      */
     @GetMapping("/search")
     @Operation(summary = "语义检索问答", description = "基于Milvus向量数据库的语义检索和RAG问答")
     public Result<String> search(@Parameter(description = "用户问题") @RequestParam String question,
                                  @RequestParam(required = false) String tenantCode,
                                  @RequestParam(required = false) String sessionId) {
-        try {
-            // 有租户或会话标识时按租户隔离检索，保证多租户数据安全
-            if (StringUtils.hasText(tenantCode) || StringUtils.hasText(sessionId)) {
-                RagSearchResultDTO data = ragSearchService.semanticSearch(question, tenantCode, sessionId);
-                if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
-                    return Result.fail(data.getError() == null ? "知识库检索不可用" : data.getError());
-                }
-                return Result.success(data.getReply());
-            }
-            String answer = ragSearchService.semanticChat(question);
-            return Result.success(answer);
-        } catch (IOException e) {
-            return Result.fail("知识库检索失败: " + e.getMessage());
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
+        // 令牌绑定租户时以令牌为准；平台级账号必须显式传租户，避免隐式落到 default 租户检索
+        String tenant = JwtContext.resolveTenantCodeOrNull(tenantCode);
+        if (!StringUtils.hasText(tenant)) {
+            return Result.fail("请指定租户编码 tenantCode");
         }
+        RagSearchResultDTO data = ragSearchService.semanticSearch(question, tenant, sessionId);
+        if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
+            return Result.fail(data.getError() == null ? "知识库检索不可用" : data.getError());
+        }
+        return Result.success(data.getReply());
     }
 
     /**
@@ -209,7 +234,12 @@ public class FaqController {
         if (!StringUtils.hasText(question)) {
             throw new BusinessException("检索问题不能为空");
         }
-        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenantCode, sessionId, industryPrompt);
+        // 同上：令牌租户优先；平台级账号必须显式传租户
+        String tenant = JwtContext.resolveTenantCodeOrNull(tenantCode);
+        if (!StringUtils.hasText(tenant)) {
+            throw new BusinessException("请指定租户编码 tenantCode");
+        }
+        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenant, sessionId, industryPrompt);
         if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
             return Result.fail(data.getError() == null ? "知识库检索不可用" : data.getError());
         }
@@ -248,7 +278,9 @@ public class FaqController {
         for (KnowledgeFaq faq : faqs) {
             // 强制清空ID确保是新增而非更新；租户归一化；状态默认启用
             faq.setId(null);
-            faq.setTenantCode(KnowledgeFaqService.normalizeTenant(faq.getTenantCode()));
+            // 租户「令牌优先」+ 归一化：批量导入的记录只能落到当前令牌租户，防越权写入
+            faq.setTenantCode(KnowledgeFaqService.normalizeTenant(
+                    JwtContext.resolveTenantCode(faq.getTenantCode())));
             if (faq.getStatus() == null) {
                 faq.setStatus(1);
             }
@@ -257,8 +289,9 @@ public class FaqController {
             try {
                 ragSearchService.vectorizeAndInsert(faq);
                 indexed++;
-            } catch (Exception ignored) {
-                // 已落库
+            } catch (Exception e) {
+                // 已落库：单条向量化失败不阻断整批导入，但必须留痕便于后续补录
+                log.warn("批量导入FAQ向量化失败 faqId={}: {}", faq.getId(), e.getMessage());
             }
         }
         return Result.success("导入 " + saved + " 条，已写入向量库 " + indexed + " 条");
@@ -279,14 +312,12 @@ public class FaqController {
                 return Result.fail("FAQ不存在，ID: " + id);
             }
             
-            // 调用服务层进行向量化插入
-            String milvusId = ragSearchService.vectorizeAndInsert(faq);
+            // 调用服务层进行向量化插入（按 faqId upsert）
+            ragSearchService.vectorizeAndInsert(faq);
             
-            return Result.success("向量化插入成功，Milvus ID: " + milvusId);
+            return Result.success("向量化插入成功，FAQ ID: " + faq.getId());
         } catch (IOException e) {
             return Result.fail("向量化失败: " + e.getMessage());
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
         }
     }
 
@@ -297,24 +328,22 @@ public class FaqController {
     @PostMapping("/vectorize/batch")
     @Operation(summary = "批量FAQ向量化", description = "将所有启用的FAQ批量向量化并存入Milvus")
     public Result<String> batchVectorizeAndInsert(@RequestParam(required = false) String tenantCode) {
-        try {
-            // 查询所有启用的FAQ
-            List<KnowledgeFaq> faqList = faqService.getEnableFaqList(tenantCode);
-            if (faqList == null || faqList.isEmpty()) {
-                return Result.fail("没有可向量化的FAQ数据");
-            }
-            
-            // 调用服务层进行批量向量化插入
-            int count = ragSearchService.batchVectorizeAndInsert(faqList);
-            
-            if (count == 0) {
-                return Result.fail("所有FAQ向量化均失败");
-            }
-            
-            return Result.success("批量向量化插入成功，共插入 " + count + " 条数据");
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
+        // 租户「令牌优先」：避免改参数就把别的租户的 FAQ 全量重建一遍向量
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        // 查询所有启用的FAQ
+        List<KnowledgeFaq> faqList = faqService.getEnableFaqList(tenant);
+        if (faqList == null || faqList.isEmpty()) {
+            return Result.fail("没有可向量化的FAQ数据");
         }
+
+        // 调用服务层进行批量向量化插入
+        int count = ragSearchService.batchVectorizeAndInsert(faqList);
+
+        if (count == 0) {
+            return Result.fail("所有FAQ向量化均失败");
+        }
+
+        return Result.success("批量向量化插入成功，共插入 " + count + " 条数据");
     }
 
     /**
@@ -324,24 +353,50 @@ public class FaqController {
     @PostMapping("/vectorize/increment")
     @Operation(summary = "批量增量更新向量", description = "增量更新所有FAQ的Milvus向量数据")
     public Result<String> batchIncrementUpdate() {
-        try {
-            // 查询所有启用的FAQ
-            List<KnowledgeFaq> faqList = faqService.getEnableFaqList();
-            if (faqList == null || faqList.isEmpty()) {
-                return Result.fail("没有可更新的FAQ数据");
-            }
-            
-            // 调用服务层进行批量增量更新
-            int count = ragSearchService.batchIncrementUpdate(faqList);
-            
-            if (count == 0) {
-                return Result.fail("所有FAQ向量化均失败");
-            }
-            
-            return Result.success("批量增量更新成功，共更新 " + count + " 条数据");
-        } catch (Exception e) {
-            return Result.fail("系统异常: " + e.getMessage());
+        // 查询所有启用的FAQ
+        List<KnowledgeFaq> faqList = faqService.getEnableFaqList();
+        if (faqList == null || faqList.isEmpty()) {
+            return Result.fail("没有可更新的FAQ数据");
         }
+
+        // 调用服务层进行批量增量更新
+        int count = ragSearchService.batchIncrementUpdate(faqList);
+
+        if (count == 0) {
+            return Result.fail("所有FAQ向量化均失败");
+        }
+
+        return Result.success("批量增量更新成功，共更新 " + count + " 条数据");
+    }
+
+    /**
+     * 批量查询 FAQ 向量化状态
+     *
+     * <p>向量库故障时返回 {@code available=false}（状态未知）而非「未向量化」，前端据此显示「—」；
+     * 返回值里的 vectorizedIds 为已在租户集合中的 FAQ 主键。</p>
+     */
+    @PostMapping("/vectorize/status")
+    @Operation(summary = "批量查询FAQ向量化状态", description = "返回已写入向量库的FAQ主键；向量库不可用时 available=false，状态视为未知")
+    public Result<Map<String, Object>> vectorizeStatus(@RequestParam(required = false) String tenantCode,
+                                                       @RequestBody List<Long> ids) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (ids == null || ids.isEmpty()) {
+            data.put("available", true);
+            data.put("vectorizedIds", List.of());
+            return Result.success(data);
+        }
+        // 租户「令牌优先」：状态查询只允许查当前租户的集合
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        try {
+            data.put("vectorizedIds", new ArrayList<>(milvusUtil.filterExistingFaqIds(tenant, ids)));
+            data.put("available", true);
+        } catch (Exception e) {
+            log.warn("查询FAQ向量化状态失败 tenant={} count={}: {}", tenant, ids.size(), e.getMessage());
+            data.put("vectorizedIds", List.of());
+            data.put("available", false);
+            data.put("message", "向量库暂不可用，状态未知");
+        }
+        return Result.success(data);
     }
 
     /**
@@ -368,12 +423,16 @@ public class FaqController {
         if (miss.getStatus() != null && miss.getStatus() == 1) {
             return Result.fail("该未命中记录已处理");
         }
+        // 防 IDOR：绑定租户的令牌只能处理本租户的未命中记录
+        if (!tenantMatched(miss.getTenantCode())) {
+            return Result.fail("无权处理其他租户的未命中记录");
+        }
         if (!StringUtils.hasText(answer)) {
             return Result.fail("答案不能为空");
         }
-        // 创建 FAQ（直接发布）
+        // 创建 FAQ（直接发布）：租户沿用未命中记录并归一化
         KnowledgeFaq faq = new KnowledgeFaq();
-        faq.setTenantCode(miss.getTenantCode());
+        faq.setTenantCode(KnowledgeFaqService.normalizeTenant(miss.getTenantCode()));
         faq.setQuestion(miss.getQuestion());
         faq.setAnswer(answer);
         faq.setCategory(category);
@@ -381,13 +440,12 @@ public class FaqController {
         faq.setAuditStatus(2);
         faq.setSortNum(0);
         faqService.save(faq);
-        // 向量化（失败不影响转问结果，可后续手动补录）
+        // 向量化（失败不影响转问结果，可后续批量补录）
         try {
-            String milvusId = ragSearchService.vectorizeAndInsert(faq);
-            faq.setMilvusId(milvusId);
-            faqService.updateById(faq);
-        } catch (Exception ignored) {
-            // 向量化失败，保持 milvusId 为空，可后续补录
+            ragSearchService.vectorizeAndInsert(faq);
+        } catch (Exception e) {
+            // 向量化失败可后续通过批量向量化补录，但必须留痕
+            log.warn("转问为FAQ后向量化失败 faqId={}: {}", faq.getId(), e.getMessage());
         }
         missService.markConverted(id, faq.getId());
         return Result.success("已转问为FAQ，ID: " + faq.getId());

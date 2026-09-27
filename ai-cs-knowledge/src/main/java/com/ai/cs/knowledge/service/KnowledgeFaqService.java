@@ -4,6 +4,7 @@ import com.ai.cs.common.result.PageResult;
 import com.ai.cs.knowledge.entity.KnowledgeFaq;
 import com.ai.cs.knowledge.mapper.KnowledgeFaqMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
@@ -94,18 +95,21 @@ public class KnowledgeFaqService extends ServiceImpl<KnowledgeFaqMapper, Knowled
      * @return 是否成功
      */
     public boolean feedback(Long id, String type) {
-        KnowledgeFaq faq = this.getById(id);
-        if (faq == null) {
+        if (id == null || !StringUtils.hasText(type)) {
             return false;
         }
+        String column;
         if ("like".equalsIgnoreCase(type)) {
-            faq.setLikeCount((faq.getLikeCount() == null ? 0 : faq.getLikeCount()) + 1);
+            column = "like_count";
         } else if ("dislike".equalsIgnoreCase(type)) {
-            faq.setDislikeCount((faq.getDislikeCount() == null ? 0 : faq.getDislikeCount()) + 1);
+            column = "dislike_count";
         } else {
             return false;
         }
-        return this.updateById(faq);
+        // 原子自增：帮助中心是匿名高频入口，原先「读后写」在并发下会丢计数
+        return this.update(new KnowledgeFaq(), new LambdaUpdateWrapper<KnowledgeFaq>()
+                .setSql(column + " = IFNULL(" + column + ", 0) + 1")
+                .eq(KnowledgeFaq::getId, id));
     }
 
     /**
@@ -115,12 +119,13 @@ public class KnowledgeFaqService extends ServiceImpl<KnowledgeFaqMapper, Knowled
      * @return 是否成功
      */
     public boolean view(Long id) {
-        KnowledgeFaq faq = this.getById(id);
-        if (faq == null) {
+        if (id == null) {
             return false;
         }
-        faq.setViewCount((faq.getViewCount() == null ? 0 : faq.getViewCount()) + 1);
-        return this.updateById(faq);
+        // 原子自增：浏览量是最高频的匿名写，避免读改写丢计数与热点行争用
+        return this.update(new KnowledgeFaq(), new LambdaUpdateWrapper<KnowledgeFaq>()
+                .setSql("view_count = IFNULL(view_count, 0) + 1")
+                .eq(KnowledgeFaq::getId, id));
     }
 
     /**

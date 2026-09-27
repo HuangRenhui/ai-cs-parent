@@ -1,10 +1,12 @@
 package com.ai.cs.knowledge.util;
 
+import com.ai.cs.common.llm.ModelCallException;
 import com.ai.cs.common.llm.ModelRouter;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
-import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.List;
 
@@ -31,7 +33,17 @@ public class EmbeddingClient {
      * @throws IOException 占位实现
      */
     public List<Float> getVector(String text) throws IOException {
-        log.warn("[占位] 知识库向量化未实现");
-        throw new IOException("获取向量异常: 知识库向量化为占位实现");
+        if (!StringUtils.hasText(text)) {
+            throw new IOException("获取向量异常: 待向量化文本为空");
+        }
+        try {
+            List<Float> vector = modelRouter.embed(text);
+            if (vector == null || vector.isEmpty()) {
+                throw new IOException("获取向量异常: 向量为空");
+            }
+            return vector;
+        } catch (ModelCallException e) {
+            throw new IOException("获取向量异常: " + e.getMessage(), e);
+        }
     }
 }

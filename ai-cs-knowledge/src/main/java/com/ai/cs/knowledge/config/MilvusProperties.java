@@ -16,8 +16,10 @@ public class MilvusProperties {
     private String host = "localhost";
     /** Milvus服务端口 */
     private Integer port = 19530;
-    /** 向量集合（Collection）名称 */
+    /** FAQ 向量集合（Collection）基础名称 */
     private String collectionName = "cs_kb_faq";
+    /** 文档切片向量集合（Collection）基础名称 */
+    private String chunkCollectionName = "cs_kb_chunk";
     /** IVF索引建库时的聚类簇数，影响索引精度与构建速度 */
     private int nlist = 128;
     /** 查询时探测的簇数，越大召回越准但越慢 */

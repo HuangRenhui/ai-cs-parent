@@ -30,8 +30,6 @@ public class KnowledgeFaq extends BaseEntity {
     private Integer sortNum;
     /** 状态：0-禁用，1-启用 */
     private Integer status;
-    /** Milvus中的向量ID */
-    private String milvusId;
     /** 审核状态：0-草稿，1-待审核，2-已发布，3-已下线 */
     private Integer auditStatus;
     /** 点赞数 */
