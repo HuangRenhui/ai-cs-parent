@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -52,6 +53,15 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     private static final String INTERNAL_HEADER = "X-Internal-Token";
     private static final String DEFAULT_INTERNAL = "AiCsInternalToken2026LocalOnly";
 
+    /**
+     * 身份类请求头：一律由网关按令牌重新写入，进入下游前先清空客户端自带的同名头。
+     *
+     * <p>不清空的后果：调用方只要自己带上 {@code X-User-Id: 1}，而下游在「内部令牌」分支信任这些头，
+     * 就能冒充任意用户（越权）。</p>
+     */
+    private static final List<String> IDENTITY_HEADERS = List.of(
+            "X-User-Id", "X-Username", "X-Token-Type", "X-Tenant-Id", "X-User-Roles", "X-User-Perms");
+
     @Value("${ai.internal.token:${INTERNAL_API_TOKEN:}}")
     private String internalToken;
 
@@ -74,10 +84,14 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // 白名单直接放行，但仍注入内部令牌，便于下游识别来自网关而不是直连伪造
+        // 白名单直接放行，但仍注入内部令牌，便于下游识别来自网关而不是直连伪造；
+        // 同时清掉客户端自带的身份头，避免白名单接口被伪造身份调用
         if (isWhiteListed(path)) {
             ServerHttpRequest marked = exchange.getRequest().mutate()
-                    .header(INTERNAL_HEADER, resolveInternalToken())
+                    .headers(headers -> {
+                        stripIdentityHeaders(headers);
+                        headers.set(INTERNAL_HEADER, resolveInternalToken());
+                    })
                     .build();
             return chain.filter(exchange.mutate().request(marked).build());
         }
@@ -97,15 +111,33 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
-        // 把令牌中的用户身份解析后注入请求头，并带上内部令牌供下游验真
+        // 把令牌中的身份与授权信息解析后注入请求头，并带上内部令牌供下游验真
         Long userId = JwtUtil.getUserId(token);
         String username = JwtUtil.getUsername(token);
         String typ = JwtUtil.getTokenType(token);
+        String tenant = JwtUtil.getTenantCode(token);
+        List<String> roles = JwtUtil.getRoles(token);
+        List<String> permissions = JwtUtil.getPermissions(token);
         ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
-                .header("X-User-Id", String.valueOf(userId))
-                .header("X-Username", username != null ? username : "")
-                .header("X-Token-Type", typ != null ? typ : JwtUtil.TYP_STAFF)
-                .header(INTERNAL_HEADER, resolveInternalToken())
+                .headers(headers -> {
+                    // 覆盖式写入：先清空客户端同名头，再写网关解析结果
+                    stripIdentityHeaders(headers);
+                    headers.set("X-User-Id", String.valueOf(userId));
+                    headers.set("X-Username", username != null ? username : "");
+                    headers.set("X-Token-Type", typ != null ? typ : JwtUtil.TYP_STAFF);
+                    // 租户：仅绑定租户的令牌才有值；下游用 JwtContext.resolveTenantCode 取用
+                    if (StringUtils.hasText(tenant)) {
+                        headers.set("X-Tenant-Id", tenant);
+                    }
+                    // 授权：逗号分隔；空列表不写头（下游视为无权限）
+                    if (!roles.isEmpty()) {
+                        headers.set("X-User-Roles", String.join(",", roles));
+                    }
+                    if (!permissions.isEmpty()) {
+                        headers.set("X-User-Perms", String.join(",", permissions));
+                    }
+                    headers.set(INTERNAL_HEADER, resolveInternalToken());
+                })
                 .build();
 
         return chain.filter(exchange.mutate().request(modifiedRequest).build());
@@ -117,6 +149,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return -100;
+    }
+
+    /** 清空客户端自带的身份类请求头（这些头只允许网关写入） */
+    private static void stripIdentityHeaders(HttpHeaders headers) {
+        IDENTITY_HEADERS.forEach(headers::remove);
     }
 
     /** 判断路径是否命中白名单（前缀匹配） */

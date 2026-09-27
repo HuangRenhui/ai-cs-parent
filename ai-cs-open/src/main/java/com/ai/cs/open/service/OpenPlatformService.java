@@ -365,9 +365,10 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         vo.setEntities(dto.getEntities() == null ? List.of() : dto.getEntities());
         vo.setCustomerId(existing.getCustomerId());
         vo.setPackCode(StringUtils.hasText(dto.getPackCode()) ? dto.getPackCode().trim() : null);
-        // 第三步：签发访客令牌；未识别客户用 0 占位，仅标识访客身份
+        // 第三步：签发访客令牌（绑定租户，下游据此隔离会话与知识检索范围）；
+        // 未识别客户用 0 占位，仅标识访客身份
         long visitorId = existing.getCustomerId() == null ? 0L : existing.getCustomerId();
-        vo.setAccessToken(JwtUtil.generateVisitorToken(visitorId, "visitor:" + visitorRef));
+        vo.setAccessToken(JwtUtil.generateVisitorToken(visitorId, "visitor:" + visitorRef, tenant));
         // 第四步：按场景下发开场白与快捷动作
         applySceneProfile(vo);
         return vo;

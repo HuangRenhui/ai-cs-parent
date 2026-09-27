@@ -113,14 +113,20 @@ public class AgentService extends ServiceImpl<AgentMapper, Agent> {
                 throw new BusinessException("平台账号或密码错误");
             }
         }
+        String tenant = dto.getTenantCode().trim();
+        // 坐席默认角色与权限点（后续可改为按坐席绑定的角色查库下发）
+        List<String> roles = List.of("AGENT");
+        List<String> permissions = List.of("chat:view", "session:view", "workorder:view");
         LoginDTO.Result result = new LoginDTO.Result();
-        result.setToken(JwtUtil.generateToken(agent.getId(), agent.getAgentAccount()));
+        // 坐席令牌**绑定租户**：下游用 JwtContext.resolveTenantCode 取值时以令牌为准，
+        // 这样即使有人改写请求参数里的 tenantCode 也读不到别的租户数据（防水平越权）
+        result.setToken(JwtUtil.generateToken(agent.getId(), agent.getAgentAccount(), tenant, roles, permissions));
         result.setUsername(agent.getAgentAccount());
         result.setRealName(agent.getAgentName());
-        result.setRoles(List.of("AGENT"));
-        result.setPermissions(List.of("chat:view", "session:view", "workorder:view"));
+        result.setRoles(roles);
+        result.setPermissions(permissions);
         result.setLoginType("platform");
-        result.setTenantCode(dto.getTenantCode().trim());
+        result.setTenantCode(tenant);
         return result;
     }
 

@@ -10,7 +10,10 @@ import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,6 +28,15 @@ public class JwtUtil {
     public static final String TYP_STAFF = "staff";
     /** 访客(C 端聊窗) token 类型 */
     public static final String TYP_VISITOR = "visitor";
+
+    /** 租户 claim：令牌绑定租户后，服务端一律以令牌租户为准，防止改请求参数跨租户读写 */
+    public static final String CLAIM_TENANT = "tenant";
+    /** 角色 claim：角色编码列表 */
+    public static final String CLAIM_ROLES = "roles";
+    /** 权限 claim：权限标识列表（取值口径与 cs_menu.perms 一致，如 system:user:list） */
+    public static final String CLAIM_PERMS = "perms";
+    /** 超管通配权限：持有它即视为具备任意权限（超管兜底，避免权限点未配置时把自己锁死） */
+    public static final String WILDCARD_PERMISSION = "*:*:*";
 
     /** 内置默认密钥：仅为本机/演示兜底，生产必须通过 JWT_SECRET / ai.jwt.secret 覆盖 */
     static final String DEFAULT_SECRET = "AiCsSystemJwtSecretKey2026ForTokenGenerationAndValidation";
@@ -108,6 +120,32 @@ public class JwtUtil {
     }
 
     /**
+     * 生成员工 token（带租户 + 授权信息）。
+     *
+     * <p>把租户、角色、权限一并写进令牌：下游服务无需回查数据库即可做租户隔离与接口级鉴权
+     * （{@code @RequirePermission} 依赖这些 claim）；代价是授权变更需重新登录或等令牌过期，
+     * 这是网关方案的常见取舍，换来的是「零额外查询 + 无法被请求参数篡改」。</p>
+     *
+     * @param tenantCode  绑定租户；平台级账号（可跨租户运营）传 null 或空串
+     * @param roles       角色编码列表，可空
+     * @param permissions 权限标识列表，可空
+     */
+    public static String generateToken(Long userId, String username, String tenantCode,
+                                       List<String> roles, List<String> permissions) {
+        Map<String, Object> claims = new LinkedHashMap<>();
+        claims.put(CLAIM_TENANT, tenantCode == null ? "" : tenantCode.trim());
+        claims.put(CLAIM_ROLES, roles == null ? List.of() : roles);
+        claims.put(CLAIM_PERMS, permissions == null ? List.of() : permissions);
+        return buildToken(userId, username, TYP_STAFF, staffExpireMs, claims);
+    }
+
+    /** 生成访客 token（绑定租户：下游据此隔离该访客的会话与知识检索范围） */
+    public static String generateVisitorToken(Long userId, String username, String tenantCode) {
+        return buildToken(userId, username, TYP_VISITOR, visitorExpireMs,
+                Map.of(CLAIM_TENANT, tenantCode == null ? "" : tenantCode.trim()));
+    }
+
+    /**
      * 组装 JWT：subject=userId，附带 username 与 typ(员工/访客) 两个标准 claim。
      * 额外 claim 不允许覆盖这三个保留键，防止调用方篡改身份字段。
      */
@@ -124,7 +162,8 @@ public class JwtUtil {
                 .expiration(expiration);
         if (extraClaims != null) {
             extraClaims.forEach((key, value) -> {
-                if (!"username".equals(key) && !CLAIM_TYP.equals(key) && !"sub".equals(key)) {
+                // 身份与授权类 claim 由本方法内部写入，extraClaims 一律不得覆盖，防止越权伪造
+                if (!"username".equals(key) && !"sub".equals(key) && !isReservedClaim(key)) {
                     builder.claim(key, value);
                 }
             });
@@ -185,6 +224,54 @@ public class JwtUtil {
         }
         String typ = claims.get(CLAIM_TYP, String.class);
         return StringUtils.hasText(typ) ? typ : TYP_STAFF;
+    }
+
+    /** 从 token 取绑定租户；平台级账号（未绑定租户）或旧令牌返回 null */
+    public static String getTenantCode(String token) {
+        Claims claims = parseToken(token);
+        if (claims == null) {
+            return null;
+        }
+        String tenant = claims.get(CLAIM_TENANT, String.class);
+        return StringUtils.hasText(tenant) ? tenant : null;
+    }
+
+    /** 从 token 取角色编码列表；无则返回空列表（不返回 null，避免调用方 NPE） */
+    public static List<String> getRoles(String token) {
+        return readStringList(token, CLAIM_ROLES);
+    }
+
+    /** 从 token 取权限标识列表；无则返回空列表 */
+    public static List<String> getPermissions(String token) {
+        return readStringList(token, CLAIM_PERMS);
+    }
+
+    /** 是否为内部保留 claim（身份/授权字段，不允许通过 extraClaims 注入） */
+    private static boolean isReservedClaim(String key) {
+        return CLAIM_TYP.equals(key) || CLAIM_TENANT.equals(key)
+                || CLAIM_ROLES.equals(key) || CLAIM_PERMS.equals(key);
+    }
+
+    /**
+     * 读取列表型 claim：jjwt 反序列化后是 {@code List<?>}，这里统一转成「去空 + 去空白」的字符串列表
+     */
+    private static List<String> readStringList(String token, String claimKey) {
+        Claims claims = parseToken(token);
+        if (claims == null) {
+            return List.of();
+        }
+        Object value = claims.get(claimKey);
+        if (!(value instanceof List<?> raw)) {
+            return List.of();
+        }
+        List<String> list = new ArrayList<>(raw.size());
+        for (Object item : raw) {
+            String text = item == null ? null : String.valueOf(item).trim();
+            if (StringUtils.hasText(text)) {
+                list.add(text);
+            }
+        }
+        return list;
     }
 
     /** 是否访客 token */

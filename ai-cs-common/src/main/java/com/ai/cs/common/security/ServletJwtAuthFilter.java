@@ -14,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -81,19 +82,46 @@ public class ServletJwtAuthFilter extends OncePerRequestFilter {
         }
     }
 
-    /** 从网关注入头还原当前用户，供审计与权限切面使用 */
+    /**
+     * 从网关注入头还原当前用户（身份 + 租户 + 角色 + 权限），供审计、租户隔离与权限切面使用。
+     *
+     * <p>为什么可以信任这些头：只有携带合法内部令牌的请求才会走到这里，而内部令牌仅网关与 Feign 持有；
+     * 直连下游的请求走的是 JWT 解析分支（见 {@link #doFilterInternal}），伪造请求头不会被采信。</p>
+     *
+     * <p>网关会把同名请求头先清空再写入，因此客户端自带的 {@code X-User-*} 不会残留。</p>
+     */
     private static void bindFromGatewayHeaders(HttpServletRequest request) {
         String userId = request.getHeader("X-User-Id");
         String username = request.getHeader("X-Username");
         if (StringUtils.hasText(userId) && !"null".equals(userId)) {
             try {
-                JwtContext.setCurrentUser(Long.parseLong(userId), username);
+                // 身份 + 租户：租户随网关透传，业务侧用 JwtContext.resolveTenantCode 取用
+                JwtContext.setCurrentUser(Long.parseLong(userId), username, request.getHeader("X-Tenant-Id"));
+                // 授权信息：网关从令牌 claim 解出后以逗号分隔透传，@RequirePermission 依赖它
+                JwtContext.setRoles(splitHeader(request.getHeader("X-User-Roles")));
+                JwtContext.setPermissions(splitHeader(request.getHeader("X-User-Perms")));
                 return;
             } catch (NumberFormatException ignored) {
                 // 非法 userId 时再尝试 JWT
             }
         }
         JwtContext.setFromRequest(request);
+    }
+
+    /**
+     * 逗号分隔的身份头 → 字符串列表。
+     *
+     * <p>统一返回空列表而不是 null：{@code JwtContext.hasPermission} 按集合判空，
+     * 返回 null 会退化成「无权限」，语义上一致，但空列表更不容易在别处触发 NPE。</p>
+     */
+    private static List<String> splitHeader(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .toList();
     }
 
     private static boolean isWhiteListed(String path) {
