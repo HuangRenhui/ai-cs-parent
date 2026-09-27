@@ -19,6 +19,13 @@ spring:
         enabled: false
         import-check:
           enabled: false
+    # 服务间 Feign 超时：未配置时走默认（近乎无限等待），会拖垮线程池
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 15000
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
@@ -57,9 +64,9 @@ app:
   # 对话附件上传目录（映射为 /files/chat/**），允许全部类型，单文件上限 20MB
   chat-upload-dir: uploads/chat
 
-# Knife4j API文档配置
+# Knife4j API文档配置（生产必须设 KNIFE4J_ENABLE=false，避免接口清单对外暴露）
 knife4j:
-  enable: true
+  enable: ${KNIFE4J_ENABLE:true}
   openapi:
     title: 基础服务接口文档
     description: 客户管理、坐席管理、会话管理、RBAC权限、数据统计

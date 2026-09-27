@@ -43,7 +43,10 @@ mybatis-plus:
 milvus:
   host: ${MILVUS_HOST:localhost}
   port: ${MILVUS_PORT:19530}
+  # FAQ 向量集合基础名（实际集合名 = 基础名_归一化租户_短哈希）
   collection-name: cs_kb_faq
+  # 文档切片向量集合基础名（文档 RAG 投喂用，与 FAQ 集合分离）
+  chunk-collection-name: cs_kb_chunk
   top-k: 5
   score-threshold: 0.40
   dimension: 1024
