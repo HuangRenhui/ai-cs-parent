@@ -7,17 +7,7 @@ import com.ai.cs.api.feign.OpenToolFeign;
 import com.ai.cs.api.feign.SessionFeign;
 import com.ai.cs.api.feign.WorkOrderFeign;
 import com.ai.cs.common.constant.PromptConst;
-import com.ai.cs.common.dto.AttachmentDTO;
-import com.ai.cs.common.dto.ChatDTO;
-import com.ai.cs.common.dto.ChatReplyDTO;
-import com.ai.cs.common.dto.IntentDTO;
-import com.ai.cs.common.dto.RagSearchResultDTO;
-import com.ai.cs.common.dto.SessionDTO;
-import com.ai.cs.common.dto.SlotFillResultDTO;
-import com.ai.cs.common.dto.ToolInvokeDTO;
-import com.ai.cs.common.dto.ToolInvokeResultDTO;
-import com.ai.cs.common.dto.TransferResultDTO;
-import com.ai.cs.common.dto.WorkOrderDTO;
+import com.ai.cs.common.dto.*;
 import com.ai.cs.common.enums.IntentEnum;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.llm.TenantQuotaService;
@@ -92,7 +82,7 @@ public class AiAgentService {
      * 敏感操作列表，用于检测绕过尝试
      */
     private static final List<String> SENSITIVE_ACTIONS = Arrays.asList(
-        "退款", "冻卡", "销户", "删除", "修改", "转账", "支付"
+            "退款", "冻卡", "销户", "删除", "修改", "转账", "支付"
     );
 
     /**
@@ -155,7 +145,7 @@ public class AiAgentService {
 
         // 安全检查：提示词注入防护
         PromptInjectionProtection.SecurityCheckResult securityCheck =
-            PromptInjectionProtection.performSecurityCheck(dto.getMsg(), 2000, SENSITIVE_ACTIONS);
+                PromptInjectionProtection.performSecurityCheck(dto.getMsg(), 2000, SENSITIVE_ACTIONS);
         if (!securityCheck.isSafe()) {
             ChatReplyDTO result = new ChatReplyDTO();
             result.setSessionId(dto.getSessionId());
@@ -265,10 +255,27 @@ public class AiAgentService {
     }
 
     /**
-     * 意图识别（优先使用可配置意图服务，失败时回退到硬编码意图）
+     * 意图识别（双路径，可配置优先）。
+     *
+     * <p><b>为什么是两层而不是一层</b>：{@code ConfigurableIntentService} 支持租户自定义
+     * 意图，但引入了 Feign 依赖（拉意图配置），比 {@code LlmUtil} 多一个可能失败的环节。
+     * 这里再加一层兜底，确保「配置服务抖动」不会导致整个对话不可用。</p>
+     *
+     * <p><b>注意两层的语义差别</b>：</p>
+     * <ul>
+     *   <li>本方法 catch 的是<b>意外异常</b>（如 Feign 熔断、NPE），此时降级到只能识别
+     *       硬编码五类的 {@code LlmUtil}，是「能力降级但仍有结果」</li>
+     *   <li>而 {@code ConfigurableIntentService} 内部对<b>模型调用失败</b>已自行处理为
+     *       {@code llmDegraded=true}，正常返回（不抛异常），因此不会走到这里</li>
+     * </ul>
+     * <p>换言之：<b>能拿到 DTO 就说明意图判断过程没崩</b>，是否可靠由 {@code llmDegraded} 字段表达。</p>
+     *
+     * @param dto 对话入参
+     * @return 意图识别结果；最差情况为「咨询」+ llmDegraded=true
      */
     private IntentDTO recognizeIntent(ChatDTO dto) {
         try {
+            // tenantCode 兜底为 default：单租户部署时前端可能不传该字段
             String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
             return configurableIntentService.getIntent(dto.getMsg(), tenantCode);
         } catch (Exception e) {
@@ -290,25 +297,168 @@ public class AiAgentService {
     }
 
     /**
-     * 按意图路由（占位：统一返回繁忙文案，不做任何分支）
+     * 按意图路由到对应业务分支。
      *
-     * <p>TODO 后续实现四个分支：转人工、查物流/退款（开放工具）、投诉（建工单）、其余（知识库 RAG）。</p>
+     * <p><b>为什么再次调用 {@code IntentEnum.fromName}</b>：{@code intentName} 来自识别层，
+     * 可能是租户自定义的名称（如「查发票」），枚举里并不存在。这里重新归一化一次，
+     * 让未知意图自然落到 default 分支，避免下游用字符串比较时漏判。</p>
+     *
+     * <p><b>四个分支的当前状态</b>：</p>
+     * <ul>
+     *   <li>{@link #routeToKnowledge} —— <b>已实现</b>，依赖知识库 RAG（已打通）</li>
+     *   <li>{@link #routeToAgent} —— 占位，待 P0-序4「坐席分配」</li>
+     *   <li>{@link #routeToTool} —— 占位，待 P0-序5/6「开放工具与幂等」</li>
+     *   <li>{@link #routeToWorkOrder} —— 占位，待建单能力接入</li>
+     * </ul>
+     *
+     * <p><b>兜底策略</b>：{@code CONSULT} 与 {@code default} 合并，都走 RAG。
+     * 这是有意设计——模型分类偶发不准时（返回了未知意图），RAG 是最安全且有价值的
+     * 落点：答不上来会明确说「暂无资料」，而不会像其他分支那样返回「功能暂不可用」。</p>
+     *
+     * <p><b>外层 try-catch</b>：单个分支抛异常不影响整体，统一转繁忙文案，
+     * 避免把内部异常堆栈暴露给用户。</p>
+     *
+     * @param intentName 意图名（可能为租户自定义，未必能匹配枚举）
+     * @param entity     从用户消息中抽取的实体（单号/手机号等，可为空串）
      */
     private String routeByIntent(String intentName, String entity, ChatDTO dto, ChatReplyDTO result) {
-        log.warn("[占位] 意图路由未实现 intent={}，返回繁忙文案", intentName);
-        return PromptConst.LLM_BUSY_REPLY;
+        IntentEnum intent = IntentEnum.fromName(intentName);
+        try {
+            switch (intent) {
+                case TO_AGENT:
+                    return routeToAgent(dto, result);
+                case QUERY_LOGISTICS:
+                case REFUND:
+                    // 查物流与退款共用工具分支：都需走开放工具调用 + 幂等控制
+                    return routeToTool(intent, entity, dto, result);
+                case COMPLAINT:
+                    return routeToWorkOrder(entity, dto, result);
+                case CONSULT:
+                default:
+                    // 兜底也走 RAG，而不是繁忙文案：模型分类偶发不准时，
+                    // 知识库问答是最安全且最有价值的兜底
+                    return routeToKnowledge(dto, result);
+            }
+        } catch (Exception e) {
+            log.warn("意图路由异常 intent={} sessionId={}", intentName, dto.getSessionId(), e);
+            return PromptConst.LLM_BUSY_REPLY;
+        }
     }
 
     /**
-     * 解析行业提示词叠加片段（占位）
+     * 【占位】转人工分支。
+     * <p>待 P0-序4「坐席分配」完成后补齐：需 {@code SessionFeign.transfer} 改会话状态并回填
+     * 坐席工号/姓名；<b>改状态失败时不得返回「已转接」话术</b>。</p>
+     */
+    private String routeToAgent(ChatDTO dto, ChatReplyDTO result) {
+        log.info("[占位] 转人工分支未实现 sessionId={}", dto.getSessionId());
+        return PromptConst.TRANSFER_FAIL_REPLY;
+    }
+
+    /**
+     * 【占位】工具分支（查物流/退款）。
+     * <p>待 P0-序5/6 完成后补齐：构造 {@code ToolInvokeDTO} 走 {@code OpenToolFeign.invoke}；
+     * 退款需用户消息含「确认」才置 confirmed，幂等键为 {@code sessionId:意图:实体}。</p>
+     */
+    private String routeToTool(IntentEnum intent, String entity, ChatDTO dto, ChatReplyDTO result) {
+        log.info("[占位] 工具分支未实现 intent={} entity={}", intent.getName(), entity);
+        return PromptConst.TOOL_BUSY_REPLY;
+    }
+
+    /**
+     * 【占位】投诉分支。
+     * <p>待建单能力接好后补齐：经 {@code WorkOrderFeign.createOrder} 建单并回报单号。</p>
+     */
+    private String routeToWorkOrder(String entity, ChatDTO dto, ChatReplyDTO result) {
+        log.info("[占位] 工单分支未实现 entity={}", entity);
+        return PromptConst.TOOL_BUSY_REPLY;
+    }
+
+    /**
+     * 咨询分支：调用知识库 RAG，按三态返回对应话术。
      *
-     * <p>TODO 后续实现：按 packCode 加载行业人设与拒答片段，叠加到 RAG 查询串。</p>
+     * <p><b>三态的核心区别（最容易被写错的地方）</b>——{@code MISS} 与
+     * {@code UNAVAILABLE} 必须区别对待，否则会把「系统故障」伪装成「知识库没资料」，
+     * 让用户以为是自己问错了、反复换问法，而实际是服务挂了：</p>
      *
-     * @param dto 对话请求
-     * @return 占位返回 null，RAG 走通用 PromptConst
+     * <table border="1">
+     *   <tr><th>状态</th><th>含义</th><th>返回话术</th></tr>
+     *   <tr><td>HIT</td><td>检索到相关知识</td><td>知识回复 + citations（前端展示「参考资料」）</td></tr>
+     *   <tr><td>MISS</td><td>知识库确实没有</td><td>换问法 / 转人工提示</td></tr>
+     *   <tr><td>UNAVAILABLE</td><td>知识服务或模型异常</td><td>「系统繁忙，请稍后再试」</td></tr>
+     * </table>
+     *
+     * <p>另外，{@code knowledgeStatus} 会回填到 {@code result} 并随响应返回前端，
+     * 便于前端做差异化展示（如 HIT 才渲染引用区）。</p>
+     *
+     * <p><b>异常兜底</b>：整个 Feign 调用包在 try-catch 中，异常一律视为 UNAVAILABLE
+     * （而非 MISS）——同样是「不谎称没找到」原则。</p>
+     */
+    private String routeToKnowledge(ChatDTO dto, ChatReplyDTO result) {
+        // 纯附件消息没有文本可检索。这里标 MISS 是因为「确实无从检索」，
+        // 而非服务故障；话术引导用户补充描述
+        if (!StringUtils.hasText(dto.getMsg())) {
+            result.setKnowledgeStatus(RagSearchResultDTO.MISS);
+            return "请补充一下您的问题描述，或直接联系人工客服。";
+        }
+        try {
+            String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
+            // 行业人设叠加：当前 resolveIndustryOverlay 为占位（返回 null），
+            // 传 null 时知识服务走通用 PromptConst，不影响功能
+            String industryPrompt = resolveIndustryOverlay(dto);
+            Result<RagSearchResultDTO> response = knowledgeFeign.ragSearch(
+                    dto.getMsg(), tenantCode, dto.getSessionId(), industryPrompt
+            );
+            RagSearchResultDTO rag = response == null ? null : response.getData();
+            // 拿不到有效响应（Feign 返回 null / body 缺 status）→ 按服务不可用处理
+            if (rag == null || !StringUtils.hasText(rag.getStatus())) {
+                result.setKnowledgeStatus(RagSearchResultDTO.UNAVAILABLE);
+                return PromptConst.LLM_BUSY_REPLY;
+            }
+            result.setKnowledgeStatus(rag.getStatus());
+            if (RagSearchResultDTO.HIT.equals(rag.getStatus())) {
+                // 命中：带上引用来源，前端可展示「参考资料」
+                if (rag.getCitations() != null) {
+                    result.setCitations(rag.getCitations());
+                }
+                // reply 为空属知识库数据异常，退化为「暂无资料」话术而非空白回复
+                return StringUtils.hasText(rag.getReply()) ? rag.getReply() : PromptConst.NO_KNOWLEDGE_REPLY;
+            }
+            if (RagSearchResultDTO.MISS.equals(rag.getStatus())) {
+                // 未命中：用知识服务给的兜底话术（通常是 PromptConst.NO_KNOWLEDGE_REPLY）
+                return StringUtils.hasText(rag.getReply()) ? rag.getReply() : PromptConst.NO_KNOWLEDGE_REPLY;
+            }
+            // UNAVAILABLE：上游故障，走繁忙文案，不谎称「没找到」。
+            // error 由知识服务透传，便于排查是向量库还是模型的问题
+            log.warn("知识库不可用 sessionId={} error={}", dto.getSessionId(),
+                    rag.getError() == null ? "" : rag.getError());
+            return PromptConst.LLM_BUSY_REPLY;
+        } catch (Exception e) {
+            log.warn("知识库检索失败 sessionId={}", dto.getSessionId(), e);
+            result.setKnowledgeStatus(RagSearchResultDTO.UNAVAILABLE);
+            return PromptConst.LLM_BUSY_REPLY;
+        }
+    }
+
+    /**
+     * 【占位】解析行业提示词叠加片段。
+     *
+     * <p>TODO 待 P1-序11 补齐：按 packCode 经 {@code IndustryPromptPackService.getOverlayPrompt}
+     * 加载行业人设与拒答片段，叠加到 RAG 查询串。</p>
+     *
+     * @return 当前返回 null，知识服务走通用 PromptConst，不影响功能
      */
     private String resolveIndustryOverlay(ChatDTO dto) {
-        log.info("[占位] 解析行业提示词叠加片段 packCode={}", dto == null ? null : dto.getPackCode());
-        return null;
+        if (industryPromptPackService == null || dto == null
+                || !StringUtils.hasText(dto.getPackCode())) {
+            return null;
+        }
+        try {
+            // 该服务当前为占位（getOverlayPrompt 返回 null），接通后无需改动此处
+            return industryPromptPackService.getOverlayPrompt(dto.getPackCode());
+        } catch (Exception e) {
+            log.warn("加载行业提示词失败 packCode={}", dto.getPackCode(), e);
+            return null;
+        }
     }
 }
