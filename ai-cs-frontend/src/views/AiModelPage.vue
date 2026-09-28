@@ -270,9 +270,15 @@ const providerOptions = [
   { value: 'DEEPSEEK', label: '深度求索' },
   { value: 'OTHER', label: '其他' }
 ]
-/** 能力类型：desc 会实时显示在表单下方，省得选的人靠猜 */
+/**
+ * 能力类型：desc 会实时显示在表单下方，省得选的人靠猜。
+ * <p>顺序即 SectionSwitch 标签的展示顺序，按使用频率排；与后端 ModelTypeEnum 保持一致。</p>
+ * <p>注意：INTENT 与 LLM 相互独立——对话模型不会自动承担意图识别，
+ * 未单独注册 INTENT 模型时，意图识别会回退到 yml 兜底配置（ai.llm）。</p>
+ */
 const typeOptions = [
   { value: 'LLM', label: '对话', desc: '理解并生成回答。客服机器人的主模型，一套配置里必须且只有一个生效。' },
+  { value: 'INTENT', label: '意图识别', desc: '判断用户来意（咨询/转人工/查物流/退款/投诉）。不注册时会回退到 yml 兜底配置；单独注册可换更便宜快的模型。' },
   { value: 'EMBEDDING', label: '向量', desc: '把文本转成向量做语义检索，知识库召回靠它。换模型或换维度需重建全部向量。' },
   { value: 'RERANK', label: '重排', desc: '对检索回来的候选做二次精排，把最相关的排前面。非必需，但召准率提升明显。' },
   { value: 'VISION', label: '视觉', desc: '识别图片内容，用于用户发截图、票据、商品图时的理解。' },

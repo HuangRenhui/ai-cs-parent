@@ -700,7 +700,7 @@ CREATE TABLE `cs_ai_model` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
     `model_name` VARCHAR(100) NOT NULL COMMENT '显示名称',
     `provider` VARCHAR(32) NOT NULL COMMENT '供应方: ollama/dashscope/openai/deepseek/other',
-    `model_type` VARCHAR(32) NOT NULL COMMENT '能力: LLM/EMBEDDING/RERANK/VISION/MULTIMODAL',
+    `model_type` VARCHAR(32) NOT NULL COMMENT '能力: LLM/INTENT/EMBEDDING/RERANK/VISION/MULTIMODAL/TTS/ASR（与 ModelTypeEnum 一致）',
     `base_url` VARCHAR(500) DEFAULT NULL COMMENT '服务地址',
     `api_key` VARCHAR(1000) DEFAULT NULL COMMENT '密钥(AES-GCM加密存储 enc: 前缀)',
     `api_secret` VARCHAR(1000) DEFAULT NULL COMMENT '附加密钥(AES-GCM加密存储)',
@@ -724,6 +724,40 @@ CREATE TABLE `cs_ai_model` (
     KEY `idx_model_type` (`model_type`),
     KEY `idx_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI模型注册表';
+
+-- =====================================================================
+-- 关于「意图识别」能力（model_type = 'INTENT'）的配置说明
+-- =====================================================================
+-- 意图识别走 ModelRouter.chatForType("INTENT", ...)，与主对话（LLM）是独立能力：
+--
+--   · 未注册 INTENT 模型 → 候选池为空 → 回退 yml 兜底配置（ai.llm），功能可用；
+--     此时意图识别与对话共用同一个模型，无法单独调优。
+--   · 已注册 INTENT 模型 → 走注册表，可单独配置更便宜/更快的模型（如 qwen-turbo），
+--     并享有独立的故障转移、熔断与每日配额控制。
+--
+-- 建议：意图识别是高频短任务，单独注册一个小模型可显著降低成本。
+--
+-- 添加方式（推荐用管理页「模型管理 → 注册模型」，能力类型选「意图识别」，
+-- 由后端自动加密 api_key 并同步 Redis 注册表）。
+-- 如需直接 SQL 插入，注意 api_key 必须以 AES-GCM 加密（enc: 前缀），
+-- 明文写入会导致解密失败；加密工具：com.ai.cs.common.util.SecretCipherUtil.encrypt()。
+--
+-- 参考示例（api_key 需替换为真实密文，切勿直接执行）：
+--
+--   INSERT INTO `cs_ai_model`
+--     (`model_name`, `provider`, `model_type`, `base_url`, `api_key`, `remote_model`,
+--      `temperature`, `priority`, `timeout_ms`, `enabled`, `is_active`, `remark`)
+--   VALUES
+--     ('意图识别模型', 'DASHSCOPE', 'INTENT',
+--      'https://dashscope.aliyuncs.com/compatible-mode/v1', 'enc:<密文>', 'qwen-turbo',
+--      0.10, 1, 10000, 1, 1, '意图分类用，temperature 需偏低以保证输出稳定');
+--
+-- 说明：
+--   · is_active —— 同能力仅允许一条为 1，首条插入时后端会自动置 1
+--   · priority  —— 故障转移优先级，越小越优先
+--   · temperature —— 分类任务建议 0.1 左右，过高会导致意图判断不稳定
+-- =====================================================================
+
 
 CREATE TABLE `cs_model_usage` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
