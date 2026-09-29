@@ -30,6 +30,8 @@ public class ChatReplyDTO {
     private Long agentId;
     /** HIT / MISS / UNAVAILABLE，仅咨询意图有值 */
     private String knowledgeStatus;
+    /** 本轮用户消息与回复是否已写入会话记录。false 时回复正文会附带未能落库的说明 */
+    private boolean historySaved = true;
     /** 知识库引用来源（命中时返回，前端可展示"参考资料"） */
     private List<RagCitationDTO> citations = new ArrayList<>();
 }

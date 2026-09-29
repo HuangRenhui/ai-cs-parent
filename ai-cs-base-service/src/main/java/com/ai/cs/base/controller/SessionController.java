@@ -74,6 +74,18 @@ public class SessionController {
     }
 
     /**
+     * 同一事务保存用户消息与回复
+     */
+    @PostMapping("/turn")
+    public Result<String> saveTurn(@RequestBody List<SessionDTO> messages) {
+        if (messages == null || messages.size() != 2) {
+            return Result.fail(400, "需要用户消息与回复两条");
+        }
+        chatSessionService.saveTurn(messages.get(0), messages.get(1));
+        return Result.success("对话已保存");
+    }
+
+    /**
      * 查询会话的消息记录
      */
     @GetMapping("/{sessionId}/messages")
