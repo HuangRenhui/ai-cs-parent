@@ -45,6 +45,14 @@ Page({
     pending: [],
     /** 附件来源选择面板 */
     showAttachPanel: false,
+    /** 已接入的坐席（null 表示未接入） */
+    transferredAgent: null,
+    /**
+     * 排队态：已转人工但暂无在线坐席可指派。
+     * 与 transferredAgent 互斥 —— 后端返回 transferred=true 且 agentId 为空时置此标记，
+     * 只提示排队，不展示任何坐席信息（展示即构成谎称已接入）。
+     */
+    transferQueued: false,
     scrollIntoView: ''
   },
 
@@ -234,14 +242,32 @@ Page({
       attachments: payloadAttachments
     })
       .then((res) => {
-        const reply = (res.data && res.data.reply) || '（演示）已收到您的问题，正在为您处理。'
-        const sid = (res.data && res.data.sessionId) || this.data.sessionId
+        const data = res.data || {}
+        const reply = data.reply || '（演示）已收到您的问题，正在为您处理。'
+        const sid = data.sessionId || this.data.sessionId
         const bot = { id: Date.now() + 1, msgContent: reply, msgType: 2, mine: false, createTime: '刚刚' }
         if (sid) {
           app.globalData.sessionId = sid
           this.setData({ sessionId: sid })
         }
         this.setData({ messages: this.data.messages.concat(bot) })
+
+        // 转人工：按后端语义区分「已指派坐席」与「排队中」。
+        // agentId 为空表示暂无在线坐席，此时只提示排队，不展示坐席工号姓名
+        if (data.transferred) {
+          if (data.agentId) {
+            this.setData({
+              transferredAgent: {
+                agentId: data.agentId,
+                agentNo: data.agentNo || '',
+                agentName: data.agentName || '客服'
+              },
+              transferQueued: false
+            })
+          } else {
+            this.setData({ transferredAgent: null, transferQueued: true })
+          }
+        }
         this.scrollBottom()
       })
       .catch(() => {})

@@ -1,4 +1,22 @@
 <view class="chat">
+  <!-- 已接入坐席 -->
+  <view wx:if="{{transferredAgent}}" class="agent-banner">
+    <view class="agent-dot">{{transferredAgent.agentName}}</view>
+    <view class="agent-info">
+      <text class="agent-title">工号 {{transferredAgent.agentNo}} {{transferredAgent.agentName}}</text>
+      <text class="agent-sub">综合客服 · 正在为您服务</text>
+    </view>
+  </view>
+
+  <!-- 排队态：已转人工但暂无在线坐席，不展示坐席信息 -->
+  <view wx:elif="{{transferQueued}}" class="agent-banner queued">
+    <view class="agent-dot queued">…</view>
+    <view class="agent-info">
+      <text class="agent-title">正在等待人工坐席接入</text>
+      <text class="agent-sub">已为您转接人工客服，当前坐席繁忙，请稍候</text>
+    </view>
+  </view>
+
   <scroll-view class="msgs" scroll-y scroll-into-view="{{scrollIntoView}}" scroll-with-animation>
     <view wx:if="{{messages.length === 0}}" class="empty">
       开始和智能小客聊天吧～

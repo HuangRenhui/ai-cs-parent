@@ -79,7 +79,22 @@ function handle(method, url, data) {
         return
       }
       if (path === '/ai/chat/send' || path === '/ai/chat') {
-        resolve(ok({ reply: replyOf(body.msg || body.question || body.content), sessionId: body.sessionId || 'sess_demo_1001' }))
+        const question = body.msg || body.question || body.content || ''
+        const base = {
+          reply: replyOf(question),
+          sessionId: body.sessionId || 'sess_demo_1001'
+        }
+        // 演示转人工：带上坐席信息，便于前端展示接待卡
+        if (question.indexOf('转人工') >= 0) {
+          Object.assign(base, {
+            transferred: true,
+            intent: '转人工',
+            agentId: 2,
+            agentNo: 'A002',
+            agentName: '张晓梅'
+          })
+        }
+        resolve(ok(base))
         return
       }
       // 对话附件上传（演示）：返回附件元信息，供前端预览与随消息发送

@@ -11,6 +11,57 @@
   box-sizing: border-box;
 }
 
+/* ===== 接待条：已接入坐席 ===== */
+.agent-banner {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: 20rpx 24rpx 0;
+  padding: 20rpx 24rpx;
+  background: #ecfdf3;
+  border: 1rpx solid #a6f4c5;
+  border-radius: 16rpx;
+}
+.agent-dot {
+  flex: none;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #12b76a;
+  color: #fff;
+  font-size: 24rpx;
+  text-align: center;
+  line-height: 64rpx;
+  overflow: hidden;
+}
+.agent-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.agent-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #054f31;
+}
+.agent-sub {
+  font-size: 24rpx;
+  color: #087443;
+}
+
+/* ===== 排队态：琥珀色，与「已接入」的绿色区分 ===== */
+.agent-banner.queued {
+  background: #fffaeb;
+  border-color: #fedf89;
+}
+.agent-banner.queued .agent-dot {
+  background: #f79009;
+}
+.agent-banner.queued .agent-title,
+.agent-banner.queued .agent-sub {
+  color: #b54708;
+}
+
 .msg {
   display: flex;
   flex-direction: column;

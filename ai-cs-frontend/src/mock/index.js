@@ -1308,6 +1308,17 @@ const handle = (method, path, config) => {
       row.sessionType = 2
       row.agentId = agent?.id || 2
     }
+    // 无在线坐席时按真实后端语义返回：transferred=true 但 agentId 为空，表示排队中。
+    // 前端据此渲染排队态，而不是借一位坐席展示
+    if (!agent) {
+      return ok({
+        agentId: null,
+        agentNo: '',
+        agentName: null,
+        skill: '综合客服',
+        waitSeconds: 0
+      }, '已转接人工')
+    }
     return ok({
       agentId: agent.id,
       agentNo: agent.agentNo || ('A' + String(agent.id).padStart(3, '0')),
