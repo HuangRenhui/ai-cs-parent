@@ -814,17 +814,38 @@ INSERT INTO `cs_open_connector` (`name`, `type`, `enabled`, `pack_code`) VALUES
 ('demo-mock', 'MOCK', 1, 'ecommerce'),
 ('finance-mock', 'MOCK', 1, 'finance');
 
-INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `intent_bind`, `pack_code`)
-SELECT 'query_logistics', '按实体查询进度（演示，非订单表）', 'read', id, '查物流', 'ecommerce'
+-- http_path 与 intent_bind 必须配套：intent_bind 供 Agent 意图路由查找（关卡 1），
+-- http_path 供 REST 连接器拼 URL。当前均为 MOCK，http_path 仅作演示与后续切 REST 的占位。
+INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `http_method`, `http_path`, `timeout_ms`, `intent_bind`, `pack_code`)
+SELECT 'query_logistics', '按实体查询进度（演示，非订单表）', 'read', id, 'POST', '/api/logistics/query', 5000, '查物流', 'ecommerce'
 FROM `cs_open_connector` WHERE `name` = 'demo-mock';
 
-INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `intent_bind`, `pack_code`)
-SELECT 'apply_refund', '提交退款类动作到对方系统（演示）', 'write', id, '退款', 'ecommerce'
+-- apply_refund 为 write 级：未带 confirmed=true 时 invoke 会返回 source=confirm-required，
+-- 用于验证「高危操作必须二次确认」这条链路
+INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `http_method`, `http_path`, `timeout_ms`, `intent_bind`, `pack_code`)
+SELECT 'apply_refund', '提交退款类动作到对方系统（演示）', 'write', id, 'POST', '/api/refund/apply', 8000, '退款', 'ecommerce'
 FROM `cs_open_connector` WHERE `name` = 'demo-mock';
 
-INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `intent_bind`, `pack_code`)
-SELECT 'query_account', '查询账户状态（金融演示，脱敏）', 'read', id, NULL, 'finance'
+-- query_account 不绑意图（intent_bind 为 NULL）：只能按 toolName 显式调用，
+-- 用于验证「无意图绑定的工具不会被 Agent 误路由到」
+INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `http_method`, `http_path`, `timeout_ms`, `intent_bind`, `pack_code`)
+SELECT 'query_account', '查询账户状态（金融演示，脱敏）', 'read', id, 'POST', '/api/account/query', 5000, NULL, 'finance'
 FROM `cs_open_connector` WHERE `name` = 'finance-mock';
+
+-- 连接器字段映射：source_field 是对方系统字段名，target_field 是内核字段名。
+-- 内核字段名必须与 OpenPlatformService#buildSourceData 产出的 key 一致
+-- （sessionId / entityId / entityType / intentBind / confirm），否则 reverseMapping
+-- 取不到值会退化为「按原始入参发送」并发 warn 日志。
+INSERT INTO `cs_connector_field_mapping` (`connector_id`, `source_field`, `target_field`, `field_type`, `required`, `remark`)
+SELECT id, 'orderNo', 'entityId', 'string', 1, '对方订单号 ← 内核实体ID' FROM `cs_open_connector` WHERE `name` = 'demo-mock'
+UNION ALL
+SELECT id, 'bizType', 'entityType', 'string', 0, '对方业务类型 ← 内核实体类型' FROM `cs_open_connector` WHERE `name` = 'demo-mock'
+UNION ALL
+SELECT id, 'requestId', 'sessionId', 'string', 0, '对方请求流水 ← 内核会话ID，便于双方对账' FROM `cs_open_connector` WHERE `name` = 'demo-mock'
+UNION ALL
+SELECT id, 'accountNo', 'entityId', 'string', 1, '对方账号 ← 内核实体ID（金融）' FROM `cs_open_connector` WHERE `name` = 'finance-mock'
+UNION ALL
+SELECT id, 'requestId', 'sessionId', 'string', 0, '对方请求流水 ← 内核会话ID（金融）' FROM `cs_open_connector` WHERE `name` = 'finance-mock';
 
 INSERT INTO `cs_role` (`role_name`, `role_code`, `description`, `sort_num`) VALUES
 ('超级管理员', 'SUPER_ADMIN', '系统超级管理员，拥有所有权限', 1),
