@@ -23,13 +23,17 @@ public class AuditEventPublisher {
      * 投递一条审计事件。Redis 不可用时仅记日志，不阻断主流程。
      */
     public void publish(JSONObject event) {
-        if (event == null || redisTemplate == null) {
+        if (event == null) {
+            return;
+        }
+        if (redisTemplate == null) {
+            log.warn("审计事件未投递：Redis 不可用");
             return;
         }
         try {
             redisTemplate.opsForList().leftPush(QUEUE_KEY, event.toJSONString());
         } catch (Exception e) {
-            log.debug("审计事件投递失败: {}", e.getMessage());
+            log.warn("审计事件投递失败", e);
         }
     }
 }

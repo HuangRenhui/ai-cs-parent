@@ -227,19 +227,35 @@ public class AiModelConfigService extends ServiceImpl<AiModelConfigMapper, AiMod
     }
 
     /**
-     * 把启用模型写入 Redis 注册表 + 版本号，并刷新本地路由池
+     * 把启用模型写入 Redis 注册表 + 版本号，并刷新本地路由池。
      *
      * <p>委托 {@link ModelRouter#registerLocal(java.util.List)}：按能力聚成 Hash
      * （field = modelType，value = 该能力启用模型 JSON 数组）写入 {@code RedisKeyConst.AI_MODEL_REGISTRY}，
      * active 模型写入 {@code AI_MODEL_ACTIVE}，时间戳写入 {@code AI_MODEL_VERSION}，
-     * 同时刷新本地候选池；Redis 不可用时只影响广播，不影响本地路由。</p>
+     * 同时刷新本地候选池。广播失败会重试，仍失败则抛出，避免保存接口把未生效配置当成成功。
+     * 启动预热的调用方自行捕获，不阻断进程启动。</p>
      */
     public void publishRegistry() {
-        try {
-            modelRouter.registerLocal(allEnabledForRoute());
-        } catch (Exception e) {
-            log.warn("模型注册表发布失败: {}", e.getMessage());
+        BusinessException last = null;
+        for (int i = 0; i < 3; i++) {
+            try {
+                modelRouter.registerLocal(allEnabledForRoute());
+                return;
+            } catch (Exception e) {
+                log.warn("模型注册表发布失败，第{}次", i + 1, e);
+                last = new BusinessException("模型配置已写入，但注册表广播失败，请重试生效");
+                if (i + 1 >= 3) {
+                    break;
+                }
+                try {
+                    Thread.sleep(200L * (i + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new BusinessException("广播被中断");
+                }
+            }
         }
+        throw last;
     }
 
     /** 查询全部启用模型并转为路由对象列表 */

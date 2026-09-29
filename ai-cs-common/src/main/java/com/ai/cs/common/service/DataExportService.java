@@ -59,7 +59,7 @@ public class DataExportService {
 
         } catch (IOException e) {
             log.error("CSV导出失败: {}", e.getMessage());
-            throw new RuntimeException("数据导出失败: " + e.getMessage());
+            throw new RuntimeException("数据导出失败");
         }
     }
 
