@@ -1,5 +1,6 @@
 package com.ai.cs.common.llm;
 
+import com.ai.cs.common.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -31,11 +32,12 @@ public class TenantQuotaService {
      * 检查租户是否超过当日配额
      *
      * @param tenantCode 租户编码
-     * @return true=已超限，应拒绝或降级
+     * @return true=已超限或无法核对配额，调用方应拒绝。未配置上限（limit&lt;=0）视为不限
      */
     public boolean isQuotaExceeded(String tenantCode) {
-        if (redisTemplate == null || tenantCode == null || tenantCode.isBlank()) {
-            return false;
+        if (tenantCode == null || tenantCode.isBlank() || redisTemplate == null) {
+            log.warn("租户配额无法核对，按超限拒绝 tenant={}", tenantCode);
+            return true;
         }
         try {
             String configKey = QUOTA_CONFIG_KEY + tenantCode;
@@ -49,8 +51,8 @@ public class TenantQuotaService {
             long current = currentStr != null ? Long.parseLong(currentStr) : 0;
             return current >= dailyLimit;
         } catch (Exception e) {
-            log.warn("租户配额检查失败 tenant={}: {}", tenantCode, e.getMessage());
-            return false;
+            log.warn("租户配额检查失败，按超限拒绝 tenant={}", tenantCode, e);
+            return true;
         }
     }
 
@@ -69,7 +71,7 @@ public class TenantQuotaService {
             redisTemplate.opsForValue().increment(usageKey, tokens);
             redisTemplate.expire(usageKey, 50, TimeUnit.HOURS);
         } catch (Exception e) {
-            log.warn("记录租户Token消耗失败 tenant={}: {}", tenantCode, e.getMessage());
+            log.warn("记录租户Token消耗失败 tenant={}", tenantCode, e);
         }
     }
 
@@ -81,13 +83,14 @@ public class TenantQuotaService {
      */
     public void setQuota(String tenantCode, long dailyLimit) {
         if (redisTemplate == null || tenantCode == null || tenantCode.isBlank()) {
-            return;
+            throw new BusinessException("配额服务不可用");
         }
         try {
             String configKey = QUOTA_CONFIG_KEY + tenantCode;
             redisTemplate.opsForValue().set(configKey, String.valueOf(dailyLimit));
         } catch (Exception e) {
-            log.warn("设置租户配额失败 tenant={}: {}", tenantCode, e.getMessage());
+            log.warn("设置租户配额失败 tenant={}", tenantCode, e);
+            throw new BusinessException("配额保存失败，请稍后重试");
         }
     }
 
@@ -103,6 +106,7 @@ public class TenantQuotaService {
             String currentStr = redisTemplate.opsForValue().get(usageKey);
             return currentStr != null ? Long.parseLong(currentStr) : 0;
         } catch (Exception e) {
+            log.warn("读取租户用量失败 tenant={}", tenantCode, e);
             return 0;
         }
     }
@@ -119,6 +123,7 @@ public class TenantQuotaService {
             String limitStr = redisTemplate.opsForValue().get(configKey);
             return parseLimit(limitStr);
         } catch (Exception e) {
+            log.warn("读取租户配额上限失败 tenant={}", tenantCode, e);
             return 0;
         }
     }
