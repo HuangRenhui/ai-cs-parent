@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * AI 模型路由器
@@ -155,8 +156,8 @@ public class ModelRouter {
                     onCallSuccess(route, sessionId, result);
                     return result.getText();
                 } catch (Exception e) {
-                    // 失败统一收口：累计熔断 + 记失败用量，并保留最后一次异常用于最终抛出
                     lastError = onCallFailure(route, sessionId, "对话", System.currentTimeMillis() - start, e, i + 1);
+                    pauseBeforeRetry(i, attempts);
                 }
             }
         }
@@ -210,6 +211,7 @@ public class ModelRouter {
                     return vector;
                 } catch (Exception e) {
                     lastError = onCallFailure(route, sessionId, "向量化", System.currentTimeMillis() - start, e, i + 1);
+                    pauseBeforeRetry(i, attempts);
                 }
             }
         }
@@ -217,6 +219,21 @@ public class ModelRouter {
             return legacyEmbed(type, text);
         }
         throw lastError != null ? lastError : new ModelCallException("向量化失败，无可用候选: " + type);
+    }
+
+    /** 同一模型再次调用前等待，避免超时重试立刻打满供应商。最后一次失败不再等待。 */
+    private void pauseBeforeRetry(int failedAttemptIndex, int attempts) {
+        if (failedAttemptIndex + 1 >= attempts) {
+            return;
+        }
+        long delay = Math.min(2000L, 200L * (failedAttemptIndex + 1));
+        long jitter = ThreadLocalRandom.current().nextLong(80);
+        try {
+            Thread.sleep(delay + jitter);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ModelCallException("模型重试被中断");
+        }
     }
 
     // ==================== 探测与注册表 ====================
