@@ -22,9 +22,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.Resource;
@@ -88,7 +90,15 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
         session.setSessionType(dto.getSessionType() == null ? 1 : dto.getSessionType());
         session.setSessionStatus(SessionStatusEnum.ONGOING.getCode());
         session.setStartTime(LocalDateTime.now());
-        this.save(session);
+        try {
+            this.save(session);
+        } catch (DuplicateKeyException e) {
+            ChatSession raced = getBySessionId(dto.getSessionId());
+            if (raced != null) {
+                return raced;
+            }
+            throw e;
+        }
         fireWebhook("session_start", session);
         return session;
     }
@@ -125,6 +135,7 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
     /**
      * 保存一条聊天消息（消息落库前先确保会话存在）
      */
+    @Transactional(rollbackFor = Exception.class)
     public void saveMessage(SessionDTO dto) {
         if (dto == null || !StringUtils.hasText(dto.getSessionId())) {
             throw new BusinessException("会话ID不能为空");
@@ -143,6 +154,15 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
         msg.setMsgType(dto.getSenderType() == null ? MsgTypeEnum.USER.getCode() : dto.getSenderType());
         msg.setAttachments(toAttachmentMaps(dto.getAttachments()));
         chatMsgMapper.insert(msg);
+    }
+
+    /**
+     * 同一事务写入用户消息与回复。任一条失败则两条一起回滚。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void saveTurn(SessionDTO userMsg, SessionDTO aiMsg) {
+        saveMessage(userMsg);
+        saveMessage(aiMsg);
     }
 
     /**
