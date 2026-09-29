@@ -47,7 +47,7 @@ public class RagController {
             String answer = ragChatService.chat(userId, question);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("问答失败: " + e.getMessage());
+            return Result.fail("问答失败");
         }
     }
 
@@ -65,7 +65,7 @@ public class RagController {
             fileUploadService.deleteTempFile(tempPath);
             return Result.success(res);
         } catch (Exception e) {
-            return Result.fail("文件解析失败：" + e.getMessage());
+            return Result.fail("文件解析失败");
         }
     }
 
@@ -83,7 +83,7 @@ public class RagController {
             fileUploadService.deleteTempFile(tempPath);
             return Result.success(res);
         } catch (Exception e) {
-            return Result.fail("文件解析失败：" + e.getMessage());
+            return Result.fail("文件解析失败");
         }
     }
 
@@ -99,7 +99,7 @@ public class RagController {
             String msg = ragChatService.clearUserChatMemory(userId);
             return Result.success(msg);
         } catch (Exception e) {
-            return Result.fail("清空记忆失败: " + e.getMessage());
+            return Result.fail("清空记忆失败");
         }
     }
 
@@ -114,7 +114,7 @@ public class RagController {
             String msg = ragChatService.clearAllChatMemory();
             return Result.success(msg);
         } catch (Exception e) {
-            return Result.fail("清空记忆失败: " + e.getMessage());
+            return Result.fail("清空记忆失败");
         }
     }
 
@@ -143,7 +143,7 @@ public class RagController {
             fileUploadService.deleteTempFile(tempPath);
             return Result.success(res);
         } catch (Exception e) {
-            return Result.fail("文件解析失败：" + e.getMessage());
+            return Result.fail("文件解析失败");
         }
     }
 
@@ -172,7 +172,7 @@ public class RagController {
             fileUploadService.deleteTempFile(tempPath);
             return Result.success(res);
         } catch (Exception e) {
-            return Result.fail("文件解析失败：" + e.getMessage());
+            return Result.fail("文件解析失败");
         }
     }
 

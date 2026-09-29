@@ -2,6 +2,7 @@ package com.ai.cs.knowledge.controller;
 
 import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.service.*;
+import com.ai.cs.knowledge.util.UploadFiles;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,7 +83,7 @@ public class AudioEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("批量上传音频失败", e);
-            return Result.fail("批量上传失败: " + e.getMessage());
+            return Result.fail("批量上传失败");
         }
     }
 
@@ -123,7 +124,7 @@ public class AudioEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("音频去重检测失败", e);
-            return Result.fail("去重检测失败: " + e.getMessage());
+            return Result.fail("去重检测失败");
         }
     }
 
@@ -143,7 +144,7 @@ public class AudioEnhanceController {
             return Result.success(deduplicationService.findSimilar(fingerprint, topK));
         } catch (Exception e) {
             log.error("查找相似音频失败", e);
-            return Result.fail("查找相似音频失败: " + e.getMessage());
+            return Result.fail("查找相似音频失败");
         }
     }
 
@@ -168,7 +169,7 @@ public class AudioEnhanceController {
         try {
             return Result.success(versionService.switchToVersion(fileId, versionNumber));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -181,7 +182,7 @@ public class AudioEnhanceController {
         try {
             return Result.success(versionService.rollback(fileId));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -248,18 +249,17 @@ public class AudioEnhanceController {
             @Parameter(description = "是否生成立体声波形图") @RequestParam(defaultValue = "false") boolean stereo) {
         try {
             // 按fileId前缀在音频存储目录中查找文件（扩展名不定）
-            File audioDir = new File("./uploads/audios");
-            File[] files = audioDir.listFiles((d, name) -> name.startsWith(fileId));
-            if (files == null || files.length == 0) {
+            File found = UploadFiles.findById(new File("./uploads/audios"), fileId);
+            if (found == null) {
                 return Result.fail("音频文件不存在");
             }
 
             // 立体声波形图走FFmpeg双通道渲染，单声道走Java采样绘制
             String waveformPath;
             if (stereo) {
-                waveformPath = waveformService.generateStereoWaveform(files[0], fileId);
+                waveformPath = waveformService.generateStereoWaveform(found, fileId);
             } else {
-                waveformPath = waveformService.generateWaveformWithJava(files[0], fileId);
+                waveformPath = waveformService.generateWaveformWithJava(found, fileId);
             }
 
             Map<String, String> result = new HashMap<>();
@@ -269,7 +269,7 @@ public class AudioEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("生成波形图失败", e);
-            return Result.fail("生成波形图失败: " + e.getMessage());
+            return Result.fail("生成波形图失败");
         }
     }
 
@@ -294,7 +294,7 @@ public class AudioEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("语音识别失败", e);
-            return Result.fail("语音识别失败: " + e.getMessage());
+            return Result.fail("语音识别失败");
         }
     }
 
@@ -315,7 +315,7 @@ public class AudioEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("音频审核失败", e);
-            return Result.fail("内容审核失败: " + e.getMessage());
+            return Result.fail("内容审核失败");
         }
     }
 
@@ -384,9 +384,6 @@ public class AudioEnhanceController {
      * 文件名加时间戳前缀避免并发上传同名文件互相覆盖，调用方使用完需自行删除
      */
     private File saveTempFile(MultipartFile file) throws Exception {
-        String tempPath = System.getProperty("java.io.tmpdir") + "/" +
-                System.currentTimeMillis() + "_" + file.getOriginalFilename();
-        file.transferTo(new File(tempPath));
-        return new File(tempPath);
+        return UploadFiles.saveTemp(file);
     }
 }

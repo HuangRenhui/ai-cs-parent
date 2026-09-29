@@ -93,7 +93,7 @@ public class FileController {
             return Result.success(info);
         } catch (IOException e) {
             log.error("获取文件信息失败: {}", e.getMessage());
-            return Result.fail("获取文件信息失败: " + e.getMessage());
+            return Result.fail("获取文件信息失败");
         }
     }
 
@@ -110,7 +110,7 @@ public class FileController {
             return Result.success(files);
         } catch (IOException e) {
             log.error("列出文件失败: {}", e.getMessage());
-            return Result.fail("列出文件失败: " + e.getMessage());
+            return Result.fail("列出文件失败");
         }
     }
 
@@ -177,7 +177,7 @@ public class FileController {
             return Result.success(result);
         } catch (IOException e) {
             log.error("解压失败: {}", e.getMessage());
-            return Result.fail("解压失败: " + e.getMessage());
+            return Result.fail("解压失败");
         }
     }
 
@@ -193,7 +193,7 @@ public class FileController {
             return Result.success(result);
         } catch (IOException e) {
             log.error("解压本地文件失败: {}", e.getMessage());
-            return Result.fail("解压失败: " + e.getMessage());
+            return Result.fail("解压失败");
         }
     }
 
@@ -209,7 +209,7 @@ public class FileController {
             return Result.success(entries);
         } catch (IOException e) {
             log.error("查看压缩内容失败: {}", e.getMessage());
-            return Result.fail("查看失败: " + e.getMessage());
+            return Result.fail("查看失败");
         }
     }
 
@@ -246,7 +246,7 @@ public class FileController {
             return Result.success(files);
         } catch (IOException e) {
             log.error("列出解压文件失败: {}", e.getMessage());
-            return Result.fail("列出文件失败: " + e.getMessage());
+            return Result.fail("列出文件失败");
         }
     }
 

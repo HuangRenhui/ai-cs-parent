@@ -37,7 +37,7 @@ public class DocumentVersionController {
             List<DocumentVersion> documents = documentVersionService.getAllDocuments();
             return Result.success(documents);
         } catch (Exception e) {
-            return Result.fail("获取文档列表失败: " + e.getMessage());
+            return Result.fail("获取文档列表失败");
         }
     }
     
@@ -54,7 +54,7 @@ public class DocumentVersionController {
             List<DocumentVersion> versions = documentVersionService.getVersionsByDocumentId(documentId);
             return Result.success(versions);
         } catch (Exception e) {
-            return Result.fail("获取版本列表失败: " + e.getMessage());
+            return Result.fail("获取版本列表失败");
         }
     }
     
@@ -74,7 +74,7 @@ public class DocumentVersionController {
             }
             return Result.success(version);
         } catch (Exception e) {
-            return Result.fail("获取当前版本失败: " + e.getMessage());
+            return Result.fail("获取当前版本失败");
         }
     }
     
@@ -93,7 +93,7 @@ public class DocumentVersionController {
             String result = documentVersionService.rollbackToVersion(documentId, targetVersion);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("版本回退失败: " + e.getMessage());
+            return Result.fail("版本回退失败");
         }
     }
     
@@ -110,7 +110,7 @@ public class DocumentVersionController {
             String result = documentVersionService.deleteVersion(id);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("删除版本失败: " + e.getMessage());
+            return Result.fail("删除版本失败");
         }
     }
     
@@ -129,7 +129,7 @@ public class DocumentVersionController {
             String result = documentVersionService.compareVersions(version1Id, version2Id);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("版本比较失败: " + e.getMessage());
+            return Result.fail("版本比较失败");
         }
     }
     
@@ -146,7 +146,7 @@ public class DocumentVersionController {
             boolean exists = documentVersionService.existsByMd5(fileMd5);
             return Result.success(exists);
         } catch (Exception e) {
-            return Result.fail("检查文件失败: " + e.getMessage());
+            return Result.fail("检查文件失败");
         }
     }
     
@@ -166,7 +166,7 @@ public class DocumentVersionController {
             }
             return Result.success(version);
         } catch (Exception e) {
-            return Result.fail("获取版本详情失败: " + e.getMessage());
+            return Result.fail("获取版本详情失败");
         }
     }
 }

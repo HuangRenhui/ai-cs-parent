@@ -39,7 +39,7 @@ public class DataRetentionController {
             return Result.success(list);
         } catch (Exception e) {
             log.error("查询数据保留策略列表失败", e);
-            return Result.error("查询数据保留策略列表失败: " + e.getMessage());
+            return Result.error("查询数据保留策略列表失败");
         }
     }
 
@@ -60,7 +60,7 @@ public class DataRetentionController {
             return Result.success(retention);
         } catch (Exception e) {
             log.error("查询数据保留策略失败", e);
-            return Result.error("查询数据保留策略失败: " + e.getMessage());
+            return Result.error("查询数据保留策略失败");
         }
     }
 
@@ -77,7 +77,7 @@ public class DataRetentionController {
             return Result.success(success);
         } catch (Exception e) {
             log.error("保存数据保留策略失败", e);
-            return Result.error("保存数据保留策略失败: " + e.getMessage());
+            return Result.error("保存数据保留策略失败");
         }
     }
 
@@ -94,7 +94,7 @@ public class DataRetentionController {
             return Result.success(success);
         } catch (Exception e) {
             log.error("删除数据保留策略失败", e);
-            return Result.error("删除数据保留策略失败: " + e.getMessage());
+            return Result.error("删除数据保留策略失败");
         }
     }
 }

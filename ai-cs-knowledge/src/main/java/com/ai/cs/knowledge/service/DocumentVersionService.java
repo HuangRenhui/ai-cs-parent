@@ -88,7 +88,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return version;
         } catch (Exception e) {
             log.error("创建文档版本失败: documentId={}", documentId, e);
-            throw new BusinessException(500, "创建文档版本失败: " + e.getMessage());
+            throw new BusinessException(500, "创建文档版本失败");
         }
     }
     
@@ -144,7 +144,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return "版本回退成功，当前版本: " + targetVersion;
         } catch (Exception e) {
             log.error("文档版本回退失败: documentId={}, targetVersion={}", documentId, targetVersion, e);
-            throw new BusinessException(500, "版本回退失败: " + e.getMessage());
+            throw new BusinessException(500, "版本回退失败");
         }
     }
     
@@ -188,7 +188,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return "版本删除成功";
         } catch (Exception e) {
             log.error("删除文档版本失败: id={}", id, e);
-            throw new BusinessException(500, "删除版本失败: " + e.getMessage());
+            throw new BusinessException(500, "删除版本失败");
         }
     }
     
@@ -249,7 +249,7 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             return sb.toString();
         } catch (Exception e) {
             log.error("计算文件MD5失败: filePath={}", filePath, e);
-            throw new BusinessException(500, "计算文件MD5失败: " + e.getMessage());
+            throw new BusinessException(500, "计算文件MD5失败");
         }
     }
     

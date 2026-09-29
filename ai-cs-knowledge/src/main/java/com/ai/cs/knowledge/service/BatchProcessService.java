@@ -160,7 +160,7 @@ public class BatchProcessService {
                     successCount.incrementAndGet();
                 } catch (Exception e) {
                     fr.setSuccess(false);
-                    fr.setErrorMessage(e.getMessage());
+                    fr.setErrorMessage("处理失败");
                     failCount.incrementAndGet();
                     log.warn("批量处理文件失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
                 }

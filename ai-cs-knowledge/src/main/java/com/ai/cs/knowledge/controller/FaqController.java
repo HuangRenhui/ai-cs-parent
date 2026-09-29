@@ -122,7 +122,7 @@ public class FaqController {
             return Result.success("新增成功，已向量化插入Milvus");
         } catch (IOException e) {
             // FAQ 已落库：向量化失败只提示，不当作整体失败（其余异常交给全局异常处理）
-            return Result.fail("新增成功，但向量化失败: " + e.getMessage());
+            return Result.fail("新增成功，但向量化失败");
         }
     }
 
@@ -152,7 +152,7 @@ public class FaqController {
             return Result.success("修改成功，已增量更新Milvus");
         } catch (IOException e) {
             // FAQ 已落库：向量化失败只提示，不当作整体失败（其余异常交给全局异常处理）
-            return Result.fail("修改成功，但向量化失败: " + e.getMessage());
+            return Result.fail("修改成功，但向量化失败");
         }
     }
 
@@ -294,6 +294,9 @@ public class FaqController {
                 log.warn("批量导入FAQ向量化失败 faqId={}: {}", faq.getId(), e.getMessage());
             }
         }
+        if (indexed < saved) {
+            return Result.fail("导入 " + saved + " 条，其中 " + (saved - indexed) + " 条未写入向量库，检索暂时不可用");
+        }
         return Result.success("导入 " + saved + " 条，已写入向量库 " + indexed + " 条");
     }
 
@@ -317,7 +320,7 @@ public class FaqController {
             
             return Result.success("向量化插入成功，FAQ ID: " + faq.getId());
         } catch (IOException e) {
-            return Result.fail("向量化失败: " + e.getMessage());
+            return Result.fail("向量化失败");
         }
     }
 

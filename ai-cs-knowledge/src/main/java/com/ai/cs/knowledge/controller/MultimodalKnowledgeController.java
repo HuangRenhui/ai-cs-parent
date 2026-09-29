@@ -47,7 +47,7 @@ public class MultimodalKnowledgeController {
                     resourceId, resourcePath, title, description, analysis, keywords, tags);
             return Result.success(knowledge);
         } catch (Exception e) {
-            return Result.fail("图片知识入库失败: " + e.getMessage());
+            return Result.fail("图片知识入库失败");
         }
     }
 
@@ -69,7 +69,7 @@ public class MultimodalKnowledgeController {
                     resourceId, resourcePath, title, description, analysis, keywords, tags);
             return Result.success(knowledge);
         } catch (Exception e) {
-            return Result.fail("音频知识入库失败: " + e.getMessage());
+            return Result.fail("音频知识入库失败");
         }
     }
 
@@ -92,7 +92,7 @@ public class MultimodalKnowledgeController {
                     resourceId, resourcePath, title, description, analysis, keywords, tags, entities);
             return Result.success(knowledge);
         } catch (Exception e) {
-            return Result.fail("视频知识入库失败: " + e.getMessage());
+            return Result.fail("视频知识入库失败");
         }
     }
 
@@ -110,7 +110,7 @@ public class MultimodalKnowledgeController {
             String answer = knowledgeService.imageQa(question, imageResourceId);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("图片问答失败: " + e.getMessage());
+            return Result.fail("图片问答失败");
         }
     }
 
@@ -126,7 +126,7 @@ public class MultimodalKnowledgeController {
             String answer = knowledgeService.audioQa(question, audioResourceId);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("音频问答失败: " + e.getMessage());
+            return Result.fail("音频问答失败");
         }
     }
 
@@ -142,7 +142,7 @@ public class MultimodalKnowledgeController {
             String answer = knowledgeService.videoQa(question, videoResourceId);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("视频问答失败: " + e.getMessage());
+            return Result.fail("视频问答失败");
         }
     }
 
@@ -157,7 +157,7 @@ public class MultimodalKnowledgeController {
             String answer = knowledgeService.mixedModalityQa(question);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("混合模态问答失败: " + e.getMessage());
+            return Result.fail("混合模态问答失败");
         }
     }
 
@@ -178,7 +178,7 @@ public class MultimodalKnowledgeController {
                     hybridRetrievalService.hybridSearch(query, modalityList, topK);
             return Result.success(results);
         } catch (Exception e) {
-            return Result.fail("混合检索失败: " + e.getMessage());
+            return Result.fail("混合检索失败");
         }
     }
 
@@ -195,7 +195,7 @@ public class MultimodalKnowledgeController {
             String answer = hybridRetrievalService.multimodalChat(question, includeImages, includeAudios);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("多模态问答失败: " + e.getMessage());
+            return Result.fail("多模态问答失败");
         }
     }
 
@@ -214,7 +214,7 @@ public class MultimodalKnowledgeController {
                     hybridRetrievalService.crossModalSearch(query, sourceModality, targetModality, topK);
             return Result.success(results);
         } catch (Exception e) {
-            return Result.fail("跨模态搜索失败: " + e.getMessage());
+            return Result.fail("跨模态搜索失败");
         }
     }
 
@@ -232,7 +232,7 @@ public class MultimodalKnowledgeController {
         try {
             return Result.success(knowledgeService.getAllKnowledge(modality, offset, limit));
         } catch (Exception e) {
-            return Result.fail("获取知识列表失败: " + e.getMessage());
+            return Result.fail("获取知识列表失败");
         }
     }
 
@@ -254,7 +254,7 @@ public class MultimodalKnowledgeController {
             }
             return Result.success(knowledge);
         } catch (Exception e) {
-            return Result.fail("获取知识详情失败: " + e.getMessage());
+            return Result.fail("获取知识详情失败");
         }
     }
 
@@ -269,7 +269,7 @@ public class MultimodalKnowledgeController {
             boolean deleted = knowledgeService.deleteKnowledge(knowledgeId);
             return Result.success(deleted);
         } catch (Exception e) {
-            return Result.fail("删除知识条目失败: " + e.getMessage());
+            return Result.fail("删除知识条目失败");
         }
     }
 
@@ -288,7 +288,7 @@ public class MultimodalKnowledgeController {
             Map<String, Object> result = knowledgeService.analyzeVideo(videoPath, frameInterval, maxFrames);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("视频分析失败: " + e.getMessage());
+            return Result.fail("视频分析失败");
         }
     }
 
@@ -304,7 +304,7 @@ public class MultimodalKnowledgeController {
             Map<String, Object> stats = knowledgeService.getStatistics();
             return Result.success(stats);
         } catch (Exception e) {
-            return Result.fail("获取统计信息失败: " + e.getMessage());
+            return Result.fail("获取统计信息失败");
         }
     }
 }

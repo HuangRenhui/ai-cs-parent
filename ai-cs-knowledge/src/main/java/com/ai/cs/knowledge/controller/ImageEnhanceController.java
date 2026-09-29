@@ -2,6 +2,7 @@ package com.ai.cs.knowledge.controller;
 
 import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.service.*;
+import com.ai.cs.knowledge.util.UploadFiles;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,10 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileInputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 
 /**
@@ -92,7 +89,7 @@ public class ImageEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("批量上传失败", e);
-            return Result.fail("批量上传失败: " + e.getMessage());
+            return Result.fail("批量上传失败");
         }
     }
 
@@ -142,7 +139,7 @@ public class ImageEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("去重检测失败", e);
-            return Result.fail("去重检测失败: " + e.getMessage());
+            return Result.fail("去重检测失败");
         }
     }
 
@@ -166,7 +163,7 @@ public class ImageEnhanceController {
             return Result.success(results);
         } catch (Exception e) {
             log.error("查找相似图片失败", e);
-            return Result.fail("查找相似图片失败: " + e.getMessage());
+            return Result.fail("查找相似图片失败");
         }
     }
 
@@ -194,7 +191,7 @@ public class ImageEnhanceController {
             ImageVersionService.ImageVersion version = versionService.switchToVersion(fileId, versionNumber);
             return Result.success(version);
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -209,7 +206,7 @@ public class ImageEnhanceController {
             ImageVersionService.ImageVersion version = versionService.rollback(fileId);
             return Result.success(version);
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -226,7 +223,7 @@ public class ImageEnhanceController {
             ImageVersionService.VersionDiff diff = versionService.compareVersions(fileId, version1, version2);
             return Result.success(diff);
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -362,7 +359,7 @@ public class ImageEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("OCR识别失败", e);
-            return Result.fail("OCR识别失败: " + e.getMessage());
+            return Result.fail("OCR识别失败");
         }
     }
 
@@ -383,7 +380,7 @@ public class ImageEnhanceController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("内容审核失败", e);
-            return Result.fail("内容审核失败: " + e.getMessage());
+            return Result.fail("内容审核失败");
         }
     }
 
@@ -491,9 +488,6 @@ public class ImageEnhanceController {
      * 文件名加时间戳前缀避免并发上传同名文件互相覆盖，调用方使用完需自行删除
      */
     private File saveTempFile(MultipartFile file) throws Exception {
-        String tempPath = System.getProperty("java.io.tmpdir") + "/" +
-                System.currentTimeMillis() + "_" + file.getOriginalFilename();
-        file.transferTo(new File(tempPath));
-        return new File(tempPath);
+        return UploadFiles.saveTemp(file);
     }
 }

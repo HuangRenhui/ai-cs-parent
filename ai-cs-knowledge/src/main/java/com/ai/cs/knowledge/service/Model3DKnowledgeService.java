@@ -122,7 +122,7 @@ public class Model3DKnowledgeService {
                 success++;
             } catch (Exception e) {
                 fail++;
-                errors.add(info.get("name") + ": " + e.getMessage());
+                errors.add(info.get("name") + ": 导入失败");
                 log.error("导入3D模型失败: {}", info.get("name"), e);
             }
         }

@@ -116,7 +116,7 @@ public class MediaModerationService {
             log.error("图片审核异常: {}", e.getMessage());
             result.setPassed(false);
             result.setRiskLevel("MEDIUM");
-            result.setSuggestion("审核过程异常: " + e.getMessage());
+            result.setSuggestion("审核过程异常");
         }
 
         result.setDuration(System.currentTimeMillis() - startTime);

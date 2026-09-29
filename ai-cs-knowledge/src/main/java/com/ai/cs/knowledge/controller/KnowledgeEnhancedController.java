@@ -49,7 +49,7 @@ public class KnowledgeEnhancedController {
             MultimodalKnowledge knowledge = model3DService.import3DModel(modelPath, modelName, description, tagList);
             return Result.success(knowledge);
         } catch (Exception e) {
-            return Result.fail("导入3D模型失败: " + e.getMessage());
+            return Result.fail("导入3D模型失败");
         }
     }
 
@@ -62,7 +62,7 @@ public class KnowledgeEnhancedController {
         try {
             return Result.success(model3DService.batchImport3DModels(modelInfos));
         } catch (Exception e) {
-            return Result.fail("批量导入失败: " + e.getMessage());
+            return Result.fail("批量导入失败");
         }
     }
 
@@ -114,7 +114,7 @@ public class KnowledgeEnhancedController {
         try {
             return Result.success(model3DService.getModelAnalysisReport(knowledgeId));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -129,7 +129,7 @@ public class KnowledgeEnhancedController {
         try {
             return Result.success(model3DService.compare3DModels(knowledgeId1, knowledgeId2));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -176,7 +176,7 @@ public class KnowledgeEnhancedController {
         try {
             return Result.success(neo4jService.executeCypher(cypher));
         } catch (Exception e) {
-            return Result.fail("Cypher查询失败: " + e.getMessage());
+            return Result.fail("Cypher查询失败");
         }
     }
 
@@ -295,7 +295,7 @@ public class KnowledgeEnhancedController {
             }
             return Result.fail("未找到规则: " + ruleName);
         } catch (Exception e) {
-            return Result.fail("执行规则失败: " + e.getMessage());
+            return Result.fail("执行规则失败");
         }
     }
 
@@ -342,7 +342,7 @@ public class KnowledgeEnhancedController {
         try {
             return Result.success(reasoningEngine.mergeEntities(keepNodeId, removeNodeId));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -378,7 +378,7 @@ public class KnowledgeEnhancedController {
             temporalService.createTemporalRelation(sourceNodeId, targetNodeId, relationType, description, validFromTime, validUntilTime);
             return Result.success("时序关系创建成功");
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -393,7 +393,7 @@ public class KnowledgeEnhancedController {
             var time = java.time.LocalDateTime.parse(snapshotTime);
             return Result.success(temporalService.getSnapshot(time));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -410,7 +410,7 @@ public class KnowledgeEnhancedController {
             var toTime = java.time.LocalDateTime.parse(to);
             return Result.success(temporalService.getGraphChanges(fromTime, toTime));
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -487,7 +487,7 @@ public class KnowledgeEnhancedController {
             multilingualService.createCrossLingualLink(entityName1, lang1, entityName2, lang2);
             return Result.success("跨语言链接创建成功");
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -536,7 +536,7 @@ public class KnowledgeEnhancedController {
             multilingualService.tagNodeLanguage(nodeId, language);
             return Result.success("语言标签添加成功");
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 
@@ -552,7 +552,7 @@ public class KnowledgeEnhancedController {
             multilingualService.addMultilingualAliases(nodeId, aliases);
             return Result.success("多语言别名添加成功");
         } catch (Exception e) {
-            return Result.fail(e.getMessage());
+            return Result.fail("操作失败，请稍后重试");
         }
     }
 

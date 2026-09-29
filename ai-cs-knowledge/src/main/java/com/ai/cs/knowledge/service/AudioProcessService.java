@@ -56,7 +56,7 @@ public class AudioProcessService {
             log.info("音频存储目录初始化完成: {}", audioProperties.getStoragePath());
         } catch (IOException e) {
             log.error("初始化存储目录失败", e);
-            throw new BusinessException(500, "初始化存储目录失败: " + e.getMessage());
+            throw new BusinessException(500, "初始化存储目录失败");
         }
     }
 

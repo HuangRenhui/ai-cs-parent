@@ -46,7 +46,7 @@ public class MultimodalSearchController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("多模态检索失败", e);
-            return Result.fail("多模态检索失败: " + e.getMessage());
+            return Result.fail("多模态检索失败");
         }
     }
 
@@ -75,7 +75,7 @@ public class MultimodalSearchController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("跨模态检索失败", e);
-            return Result.fail("跨模态检索失败: " + e.getMessage());
+            return Result.fail("跨模态检索失败");
         }
     }
 
@@ -104,7 +104,7 @@ public class MultimodalSearchController {
             return Result.success(result);
         } catch (Exception e) {
             log.error("图文混合问答失败", e);
-            return Result.fail("问答失败: " + e.getMessage());
+            return Result.fail("问答失败");
         }
     }
 

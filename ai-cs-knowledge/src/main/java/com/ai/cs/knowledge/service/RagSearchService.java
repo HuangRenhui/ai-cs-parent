@@ -105,8 +105,8 @@ public class RagSearchService {
             return RagSearchResultDTO.hit(reply, buildCitations(hits, faqs));
         } catch (Exception e) {
             // 模型/向量任何一环不可用都归 UNAVAILABLE，让上层走「服务不可用」话术而不是「没查到」
-            log.warn("RAG 语义检索不可用 tenant={} question({}): {}", tenant, maskQuestion(question), e.getMessage());
-            return RagSearchResultDTO.unavailable("知识库检索暂不可用: " + e.getMessage());
+            log.warn("RAG 语义检索不可用 tenant={} question({})", tenant, maskQuestion(question), e);
+            return RagSearchResultDTO.unavailable("知识库检索暂不可用");
         }
     }
 

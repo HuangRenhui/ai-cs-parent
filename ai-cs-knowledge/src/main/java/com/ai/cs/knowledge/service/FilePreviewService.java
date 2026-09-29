@@ -1,6 +1,7 @@
 package com.ai.cs.knowledge.service;
 
 import com.ai.cs.knowledge.config.FileProperties;
+import com.ai.cs.knowledge.util.UploadFiles;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -87,13 +88,12 @@ public class FilePreviewService {
             throw new IOException("存储目录不存在: " + storageDir);
         }
 
-        // 按fileId前缀查找文件
-        File[] files = dir.listFiles((d, name) -> name.startsWith(fileId));
-        if (files == null || files.length == 0) {
-            throw new IOException("未找到文件: fileId=" + fileId);
+        File found = UploadFiles.findById(dir, fileId);
+        if (found == null) {
+            throw new IOException("未找到文件");
         }
 
-        return preview(files[0].getAbsolutePath());
+        return preview(found.getAbsolutePath());
     }
 
     /**

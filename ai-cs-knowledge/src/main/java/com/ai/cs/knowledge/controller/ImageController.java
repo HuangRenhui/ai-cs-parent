@@ -4,6 +4,7 @@ import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.entity.ImageMetadata;
 import com.ai.cs.knowledge.service.ImageProcessService;
 import com.ai.cs.knowledge.service.ImageVectorService;
+import com.ai.cs.knowledge.util.UploadFiles;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,8 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -80,7 +79,7 @@ public class ImageController {
             return Result.fail(e.getMessage());
         } catch (Exception e) {
             log.error("图片上传处理异常", e);
-            return Result.fail("图片上传失败: " + e.getMessage());
+            return Result.fail("图片上传失败");
         }
     }
 
@@ -99,7 +98,7 @@ public class ImageController {
             return Result.success(metadata);
         } catch (Exception e) {
             log.error("获取图片元数据失败", e);
-            return Result.fail("获取元数据失败: " + e.getMessage());
+            return Result.fail("获取元数据失败");
         }
     }
 
@@ -114,15 +113,13 @@ public class ImageController {
         try {
             // 构建文件路径（实际应从数据库查询）
             String basePath = thumbnail ? "./uploads/thumbnails" : "./uploads/images";
-            Path filePath = Paths.get(basePath, fileId + ".*");
-            
-            // 查找匹配的文件
-            File[] files = new File(basePath).listFiles((dir, name) -> name.startsWith(fileId));
-            if (files == null || files.length == 0) {
+            File dir = new File(basePath);
+            File targetFile = thumbnail
+                    ? UploadFiles.findDerived(dir, fileId, "_thumb")
+                    : UploadFiles.findById(dir, fileId);
+            if (targetFile == null) {
                 return ResponseEntity.notFound().build();
             }
-            
-            File targetFile = files[0];
             Resource resource = new FileSystemResource(targetFile);
             
             String contentType = Files.probeContentType(targetFile.toPath());
@@ -151,10 +148,8 @@ public class ImageController {
             @Parameter(description = "图片文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "目标格式(jpg/png/gif/webp)") @RequestParam String targetFormat) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 执行格式转换
             String convertedPath = imageProcessService.convertFormat(
@@ -171,7 +166,7 @@ public class ImageController {
             
         } catch (Exception e) {
             log.error("图片格式转换失败", e);
-            return Result.fail("格式转换失败: " + e.getMessage());
+            return Result.fail("格式转换失败");
         }
     }
 
@@ -186,10 +181,8 @@ public class ImageController {
             @Parameter(description = "目标高度") @RequestParam int height,
             @Parameter(description = "保持宽高比") @RequestParam(defaultValue = "true") boolean keepAspectRatio) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 执行尺寸调整
             String resizedPath = imageProcessService.resizeImage(
@@ -207,7 +200,7 @@ public class ImageController {
             
         } catch (Exception e) {
             log.error("图片尺寸调整失败", e);
-            return Result.fail("尺寸调整失败: " + e.getMessage());
+            return Result.fail("尺寸调整失败");
         }
     }
 
@@ -223,10 +216,8 @@ public class ImageController {
             @Parameter(description = "裁剪宽度") @RequestParam int width,
             @Parameter(description = "裁剪高度") @RequestParam int height) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 执行裁剪
             String croppedPath = imageProcessService.cropImage(
@@ -246,7 +237,7 @@ public class ImageController {
             
         } catch (Exception e) {
             log.error("图片裁剪失败", e);
-            return Result.fail("裁剪失败: " + e.getMessage());
+            return Result.fail("裁剪失败");
         }
     }
 
@@ -258,24 +249,17 @@ public class ImageController {
     public Result<Void> deleteImage(
             @Parameter(description = "文件ID") @PathVariable String fileId) {
         try {
-            // 删除原图和缩略图
-            String[] paths = {
-                    "./uploads/images/" + fileId + ".*",
-                    "./uploads/thumbnails/" + fileId + "_thumb.*"
-            };
-            
-            for (String pathPattern : paths) {
-                String dir = pathPattern.substring(0, pathPattern.lastIndexOf("/"));
-                String prefix = fileId;
-                
-                File directory = new File(dir);
-                if (directory.exists()) {
-                    File[] files = directory.listFiles((d, name) -> name.startsWith(prefix));
-                    if (files != null) {
-                        for (File f : files) {
-                            imageProcessService.deleteImage(f.getAbsolutePath());
-                        }
-                    }
+            if (!UploadFiles.safeId(fileId)) {
+                return Result.fail("文件ID无效");
+            }
+            for (File f : UploadFiles.listById(new File("./uploads/images"), fileId)) {
+                imageProcessService.deleteImage(f.getAbsolutePath());
+            }
+            File thumbDir = new File("./uploads/thumbnails");
+            File[] thumbs = thumbDir.listFiles((d, name) -> UploadFiles.matchesDerived(name, fileId, "_thumb"));
+            if (thumbs != null) {
+                for (File f : thumbs) {
+                    imageProcessService.deleteImage(f.getAbsolutePath());
                 }
             }
             
@@ -283,7 +267,7 @@ public class ImageController {
             
         } catch (Exception e) {
             log.error("删除图片失败", e);
-            return Result.fail("删除失败: " + e.getMessage());
+            return Result.fail("删除失败");
         }
     }
 
@@ -326,7 +310,7 @@ public class ImageController {
 
         } catch (Exception e) {
             log.error("图片向量化失败", e);
-            return Result.fail("向量化失败: " + e.getMessage());
+            return Result.fail("向量化失败");
         }
     }
 
@@ -350,7 +334,7 @@ public class ImageController {
 
         } catch (Exception e) {
             log.error("图片语义搜索失败", e);
-            return Result.fail("搜索失败: " + e.getMessage());
+            return Result.fail("搜索失败");
         }
     }
 
@@ -366,7 +350,7 @@ public class ImageController {
             return Result.success(null);
         } catch (Exception e) {
             log.error("删除图片向量失败", e);
-            return Result.fail("删除向量失败: " + e.getMessage());
+            return Result.fail("删除向量失败");
         }
     }
 }

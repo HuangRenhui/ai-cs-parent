@@ -4,6 +4,7 @@ import com.ai.cs.common.result.Result;
 import com.ai.cs.knowledge.entity.AudioMetadata;
 import com.ai.cs.knowledge.service.AudioProcessService;
 import com.ai.cs.knowledge.service.AudioVectorService;
+import com.ai.cs.knowledge.util.UploadFiles;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,8 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -85,7 +84,7 @@ public class AudioController {
             return Result.fail(e.getMessage());
         } catch (Exception e) {
             log.error("音频上传处理异常", e);
-            return Result.fail("音频上传失败: " + e.getMessage());
+            return Result.fail("音频上传失败");
         }
     }
 
@@ -104,7 +103,7 @@ public class AudioController {
             return Result.success(metadata);
         } catch (Exception e) {
             log.error("获取音频元数据失败", e);
-            return Result.fail("获取元数据失败: " + e.getMessage());
+            return Result.fail("获取元数据失败");
         }
     }
 
@@ -117,15 +116,10 @@ public class AudioController {
             @Parameter(description = "文件ID") @PathVariable String fileId) {
         try {
             // 构建文件路径（实际应从数据库查询）
-            String basePath = "./uploads/audios";
-            
-            // 查找匹配的文件
-            File[] files = new File(basePath).listFiles((dir, name) -> name.startsWith(fileId));
-            if (files == null || files.length == 0) {
+            File targetFile = UploadFiles.findById(new File("./uploads/audios"), fileId);
+            if (targetFile == null) {
                 return ResponseEntity.notFound().build();
             }
-            
-            File targetFile = files[0];
             Resource resource = new FileSystemResource(targetFile);
             
             String contentType = Files.probeContentType(targetFile.toPath());
@@ -154,10 +148,8 @@ public class AudioController {
             @Parameter(description = "音频文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "目标格式(mp3/wav/aac/flac)") @RequestParam String targetFormat) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 执行格式转换
             String convertedPath = audioProcessService.convertFormat(
@@ -174,7 +166,7 @@ public class AudioController {
             
         } catch (Exception e) {
             log.error("音频格式转换失败", e);
-            return Result.fail("格式转换失败: " + e.getMessage());
+            return Result.fail("格式转换失败");
         }
     }
 
@@ -187,10 +179,8 @@ public class AudioController {
             @Parameter(description = "音频文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "目标比特率(kbps)") @RequestParam int bitrate) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 执行比特率调整
             String outputPath = audioProcessService.adjustBitrate(
@@ -207,7 +197,7 @@ public class AudioController {
             
         } catch (Exception e) {
             log.error("音频比特率调整失败", e);
-            return Result.fail("比特率调整失败: " + e.getMessage());
+            return Result.fail("比特率调整失败");
         }
     }
 
@@ -219,10 +209,8 @@ public class AudioController {
     public Result<Map<String, Object>> getDuration(
             @Parameter(description = "音频文件") @RequestParam("file") MultipartFile file) {
         try {
-            // 先保存临时文件
-            String tempPath = System.getProperty("java.io.tmpdir") + "/" + 
-                    System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            file.transferTo(new File(tempPath));
+            File tempFile = UploadFiles.saveTemp(file);
+            String tempPath = tempFile.getAbsolutePath();
             
             // 提取元数据获取时长
             AudioMetadata metadata = audioProcessService.extractMetadata(new File(tempPath));
@@ -238,7 +226,7 @@ public class AudioController {
             
         } catch (Exception e) {
             log.error("获取音频时长失败", e);
-            return Result.fail("获取时长失败: " + e.getMessage());
+            return Result.fail("获取时长失败");
         }
     }
 
@@ -265,24 +253,16 @@ public class AudioController {
     public Result<Void> deleteAudio(
             @Parameter(description = "文件ID") @PathVariable String fileId) {
         try {
-            // 删除原音频和波形图
-            String[] paths = {
-                    "./uploads/audios/" + fileId + ".*",
-                    "./uploads/audios/" + fileId + "_waveform.png"
-            };
-            
-            for (String pathPattern : paths) {
-                String dir = pathPattern.substring(0, pathPattern.lastIndexOf("/"));
-                String prefix = fileId;
-                
-                File directory = new File(dir);
-                if (directory.exists()) {
-                    File[] files = directory.listFiles((d, name) -> name.startsWith(prefix));
-                    if (files != null) {
-                        for (File f : files) {
-                            audioProcessService.deleteAudio(f.getAbsolutePath());
-                        }
-                    }
+            if (!UploadFiles.safeId(fileId)) {
+                return Result.fail("文件ID无效");
+            }
+            File audioDir = new File("./uploads/audios");
+            File[] files = audioDir.listFiles((d, name) ->
+                    UploadFiles.matchesId(name, fileId)
+                            || UploadFiles.matchesDerived(name, fileId, "_waveform"));
+            if (files != null) {
+                for (File f : files) {
+                    audioProcessService.deleteAudio(f.getAbsolutePath());
                 }
             }
             
@@ -290,7 +270,7 @@ public class AudioController {
             
         } catch (Exception e) {
             log.error("删除音频失败", e);
-            return Result.fail("删除失败: " + e.getMessage());
+            return Result.fail("删除失败");
         }
     }
 
@@ -339,7 +319,7 @@ public class AudioController {
 
         } catch (Exception e) {
             log.error("音频向量化失败", e);
-            return Result.fail("向量化失败: " + e.getMessage());
+            return Result.fail("向量化失败");
         }
     }
 
@@ -385,7 +365,7 @@ public class AudioController {
 
         } catch (Exception e) {
             log.error("转录并向量化失败", e);
-            return Result.fail("转录并向量化失败: " + e.getMessage());
+            return Result.fail("转录并向量化失败");
         }
     }
 
@@ -409,7 +389,7 @@ public class AudioController {
 
         } catch (Exception e) {
             log.error("音频语义搜索失败", e);
-            return Result.fail("搜索失败: " + e.getMessage());
+            return Result.fail("搜索失败");
         }
     }
 
@@ -425,7 +405,7 @@ public class AudioController {
             return Result.success(null);
         } catch (Exception e) {
             log.error("删除音频向量失败", e);
-            return Result.fail("删除向量失败: " + e.getMessage());
+            return Result.fail("删除向量失败");
         }
     }
 }

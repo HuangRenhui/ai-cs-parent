@@ -40,7 +40,7 @@ public class KnowledgeGraphController {
             String result = graphService.buildFromText(text, documentId, documentName);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("图谱构建失败: " + e.getMessage());
+            return Result.fail("图谱构建失败");
         }
     }
 
@@ -55,7 +55,7 @@ public class KnowledgeGraphController {
             Map<String, Object> result = graphService.extractEntities(text);
             return Result.success(result);
         } catch (Exception e) {
-            return Result.fail("实体关系抽取失败: " + e.getMessage());
+            return Result.fail("实体关系抽取失败");
         }
     }
 
@@ -71,7 +71,7 @@ public class KnowledgeGraphController {
             KnowledgeGraphNode saved = graphService.saveNode(node);
             return Result.success(saved);
         } catch (Exception e) {
-            return Result.fail("创建节点失败: " + e.getMessage());
+            return Result.fail("创建节点失败");
         }
     }
 
@@ -85,7 +85,7 @@ public class KnowledgeGraphController {
         try {
             return Result.success(graphService.listNodes(keyword));
         } catch (Exception e) {
-            return Result.fail("获取节点失败: " + e.getMessage());
+            return Result.fail("获取节点失败");
         }
     }
 
@@ -99,7 +99,7 @@ public class KnowledgeGraphController {
         try {
             return Result.success(graphService.getNodesByLabel(label));
         } catch (Exception e) {
-            return Result.fail("获取节点失败: " + e.getMessage());
+            return Result.fail("获取节点失败");
         }
     }
 
@@ -114,7 +114,7 @@ public class KnowledgeGraphController {
             boolean deleted = graphService.deleteNode(nodeId);
             return Result.success(deleted);
         } catch (Exception e) {
-            return Result.fail("删除节点失败: " + e.getMessage());
+            return Result.fail("删除节点失败");
         }
     }
 
@@ -130,7 +130,7 @@ public class KnowledgeGraphController {
             KnowledgeGraphRelation saved = graphService.saveRelation(relation);
             return Result.success(saved);
         } catch (Exception e) {
-            return Result.fail("创建关系失败: " + e.getMessage());
+            return Result.fail("创建关系失败");
         }
     }
 
@@ -144,7 +144,7 @@ public class KnowledgeGraphController {
         try {
             return Result.success(graphService.getNodeRelations(nodeId));
         } catch (Exception e) {
-            return Result.fail("获取关系失败: " + e.getMessage());
+            return Result.fail("获取关系失败");
         }
     }
 
@@ -159,7 +159,7 @@ public class KnowledgeGraphController {
             boolean deleted = graphService.deleteRelation(relationId);
             return Result.success(deleted);
         } catch (Exception e) {
-            return Result.fail("删除关系失败: " + e.getMessage());
+            return Result.fail("删除关系失败");
         }
     }
 
@@ -176,7 +176,7 @@ public class KnowledgeGraphController {
             String answer = graphService.graphQa(question);
             return Result.success(answer);
         } catch (Exception e) {
-            return Result.fail("图谱问答失败: " + e.getMessage());
+            return Result.fail("图谱问答失败");
         }
     }
 
@@ -190,7 +190,7 @@ public class KnowledgeGraphController {
         try {
             return Result.success(graphService.searchRelatedNodes(keyword));
         } catch (Exception e) {
-            return Result.fail("搜索节点失败: " + e.getMessage());
+            return Result.fail("搜索节点失败");
         }
     }
 
@@ -206,7 +206,7 @@ public class KnowledgeGraphController {
             Map<String, Object> data = graphService.getGraphVisualizationData();
             return Result.success(data);
         } catch (Exception e) {
-            return Result.fail("获取可视化数据失败: " + e.getMessage());
+            return Result.fail("获取可视化数据失败");
         }
     }
 
@@ -222,7 +222,7 @@ public class KnowledgeGraphController {
             Map<String, Object> subGraph = graphService.getSubGraph(nodeId, degree);
             return Result.success(subGraph);
         } catch (Exception e) {
-            return Result.fail("获取子图谱失败: " + e.getMessage());
+            return Result.fail("获取子图谱失败");
         }
     }
 
@@ -238,7 +238,7 @@ public class KnowledgeGraphController {
             Map<String, Object> stats = graphService.getGraphStatistics();
             return Result.success(stats);
         } catch (Exception e) {
-            return Result.fail("获取统计信息失败: " + e.getMessage());
+            return Result.fail("获取统计信息失败");
         }
     }
 }
