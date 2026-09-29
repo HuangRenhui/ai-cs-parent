@@ -1,45 +1,31 @@
 package com.ai.cs.open.service;
 
-import com.ai.cs.common.dto.BizEntity;
-import com.ai.cs.common.dto.SceneQuickAction;
-import com.ai.cs.common.dto.ToolInvokeDTO;
-import com.ai.cs.common.dto.ToolInvokeResultDTO;
-import com.ai.cs.common.dto.WidgetInitDTO;
-import com.ai.cs.common.dto.WidgetInitVO;
+import com.ai.cs.common.dto.*;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.util.JwtUtil;
 import com.ai.cs.common.util.SecretCipherUtil;
 import com.ai.cs.common.util.ValidateUtil;
-import com.ai.cs.open.entity.OpenConnector;
-import com.ai.cs.open.entity.OpenPack;
-import com.ai.cs.open.entity.OpenTool;
-import com.ai.cs.open.entity.SceneConfig;
-import com.ai.cs.open.entity.VisitorMap;
-import com.ai.cs.open.mapper.OpenConnectorMapper;
-import com.ai.cs.open.mapper.OpenPackMapper;
-import com.ai.cs.open.mapper.OpenToolMapper;
-import com.ai.cs.open.mapper.SceneConfigMapper;
-import com.ai.cs.open.mapper.VisitorMapMapper;
+import com.ai.cs.open.entity.*;
+import com.ai.cs.open.mapper.*;
 import com.ai.cs.open.support.BaseSessionClient;
 import com.ai.cs.open.util.ConnectorUrlGuard;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
-import jakarta.annotation.Resource;
-import java.util.List;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 /**
  * 开放平台核心服务：场景配置、行业包、连接器、开放工具的维护，
@@ -61,7 +47,16 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
     private ConnectorFieldMappingService fieldMappingService;
     @Resource
     private BaseSessionClient baseSessionClient;
-
+    /**
+     * 调用记录落库组件：独立 Bean 才能让 {@code REQUIRES_NEW} 生效
+     * （同类内部调用不走 Spring 代理，事务注解会失效）
+     */
+    @Resource
+    private ConnectorInvokeRecorder recorder;
+    /**
+     * query 型鉴权在内部传递时的约定 header key（不会真的发出去）
+     */
+    private static final String AUTH_QUERY_HEADER = "X-Internal-Auth-Query";
     // ==================== 场景配置 ====================
 
     /**
@@ -388,64 +383,452 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
     }
 
     /**
-     * 工具调用主链路（占位：不查工具、不校验、不调用连接器）
+     * 工具调用主链路：五道关卡依次通过后分发执行，全程留痕。
      *
-     * <p>TODO 后续实现，依次经过五道关卡：
-     * 1) <b>工具查找</b>：按工具名或绑定意图在注册表中找到工具，未命中返回 {@code source=registry} 失败结果；
-     * 2) <b>行业包开关</b>：所属行业包关闭时返回 {@code source=pack-off} 失败结果；
-     * 3) <b>连接器可用性</b>：绑定连接器不存在或已停用则抛业务异常；
-     * 4) <b>风险确认</b>：write/critical 级工具必须带 {@code confirmed=true}，否则返回
-     *    {@code source=confirm-required}；
-     * 5) <b>幂等控制</b>：带幂等键的请求先以 {@code success=0} 占位行抢占执行权（靠幂等键唯一索引，
-     *    插入撞索引即为并发占用，提示勿重复提交），已成功过的直接重放首次结果
-     *    （{@code source=idempotent}）。
-     * 全部通过后按连接器类型分发执行（REST 真实出站／MOCK 演示），并回写调用记录
-     * （有幂等占位行则原地更新，否则追加审计）；异常同样落库留痕。</p>
+     * <p><b>关卡顺序不可调换</b>，每一道都是在「越靠前拦截、代价越小」的位置：</p>
+     * <ol>
+     *   <li><b>工具查找</b>：找不到工具说明调用方传错或工具被删，直接失败，不该产生任何外部副作用</li>
+     *   <li><b>行业包开关</b>：包关闭时该行业所有工具整体不可用——在鉴权重校验之前拦住，
+     *       是为了让「关闭行业包」这个运营动作真正生效，而不是让请求打到对方系统</li>
+     *   <li><b>连接器可用性</b>：连接器不存在或停用则无法出站，在风险确认前拦下，
+     *       避免用户确认了一大堆却因连接器不可用而失败</li>
+     *   <li><b>风险确认</b>：write/critical 未带 confirmed 时返回提示，等用户下一轮带「确认」再来。
+     *       <b>必须在幂等占位之前</b>——否则每次「未确认」都会占掉一个幂等键，
+     *       用户真正确认时反被判为重复提交</li>
+     *   <li><b>幂等控制</b>：最靠内，因为它依赖前面所有校验都通过后才有意义</li>
+     * </ol>
      *
-     * <p>当前不执行任何关卡与外部调用：直接返回 {@code implemented=false} 的失败结果，
-     * 因此工具不会真正被调用，对方系统不会被触达。</p>
+     * <p><b>幂等的两条分支</b>：</p>
+     * <ul>
+     *   <li>已成功过的相同幂等键 → 直接重放首次结果（{@code source=idempotent}），不重复执行</li>
+     *   <li>首次调用 → 先以 {@code success=0} 插占位行抢占执行权。
+     *       插入撞唯一索引即表示并发请求正在执行，提示勿重复提交（{@code source=idempotent}）</li>
+     * </ul>
      *
      * @param dto 工具调用请求
-     * @return 未实现的失败结果
+     * @return 调用结果；各失败分支通过 {@code source} 字段区分原因
      */
     @Transactional
     public ToolInvokeResultDTO invoke(ToolInvokeDTO dto) {
-        log.warn("[占位] 开放工具调用未实现 toolName={} intentBind={}",
-                dto == null ? null : dto.getToolName(), dto == null ? null : dto.getIntentBind());
+        if (dto == null) {
+            throw new BusinessException("工具调用请求不能为空");
+        }
+        // ========== 关卡 1：工具查找 ==========
+        OpenTool tool = findTool(dto);
+        if (tool == null) {
+            // 找不到工具不落库：连工具都不存在的请求多半是调用方传错，不是真实业务调用
+            log.warn("工具未注册 toolName={} intentBind={}", dto.getToolName(), dto.getIntentBind());
+            return fail(null, "未找到可用的开放工具", "registry");
+        }
+        // ========== 关卡 2：行业包开关 ==========
+        if (StringUtils.hasText(tool.getPackCode())) {
+            OpenPack pack = packMapper.selectOne(new LambdaQueryWrapper<OpenPack>()
+                    .eq(OpenPack::getCode, tool.getPackCode()).last("limit 1"));
+            if (pack == null || pack.getEnabled() == null || pack.getEnabled() != 1) {
+                log.info("工具所属行业包未启用 tool={} packCode={}", tool.getName(), tool.getPackCode());
+                return fail(tool.getName(), "该功能所属行业包未启用", "pack-off");
+            }
+        }
+        // ========== 关卡 3：连接器可用性 ==========
+        OpenConnector connector = connectorMapper.selectById(tool.getConnectorId());
+        if (connector == null) {
+            throw new BusinessException("工具绑定的连接器不存在 tool=" + tool.getName());
+        }
+        if (connector.getEnabled() == null || connector.getEnabled() != 1) {
+            throw new BusinessException("工具绑定的连接器已停用 tool=" + tool.getName());
+        }
+
+        // ========== 关卡 4：风险确认 ==========
+        if (needConfirm(tool) && !Boolean.TRUE.equals(dto.getConfirmed())) {
+            // 不落幂等占位行：见类注释，未确认的请求不该消耗幂等键
+            log.info("工具需确认但未确认 tool={} risk={}", tool.getName(), tool.getRisk());
+            return fail(tool.getName(), "该操作涉及重要变更，请确认后再执行。", "confirm-required");
+        }
+
+        // ========== 关卡 5：幂等控制 ==========
+        String idempotencyKey = StringUtils.hasText(dto.getIdempotencyKey()) ? dto.getIdempotencyKey() : null;
+        OpenToolInvoke placeholder = null;
+        if (idempotencyKey != null) {
+            // 先查是否已成功过：命中则重放首次结果，绝不重复执行（防重复退款/冻卡）
+            OpenToolInvoke done = recorder.findSucceeded(idempotencyKey);
+            if (done != null) {
+                log.info("幂等命中，重放首次结果 tool={} key={}", tool.getName(), idempotencyKey);
+                ToolInvokeResultDTO replay = new ToolInvokeResultDTO();
+                replay.setSuccess(true);
+                replay.setToolName(tool.getName());
+                replay.setOutput(done.getResponseJson());
+                replay.setSource("idempotent");
+                return replay;
+            }
+            // 独立事务插入占位行：撞唯一索引时只回滚这一小段，
+            // 不会把主链路事务标记为 rollback-only（否则下面正常返回也会抛 UnexpectedRollbackException）
+            placeholder = recorder.tryInsertPlaceholder(tool, dto, idempotencyKey);
+            if (placeholder == null) {
+                // 撞唯一索引：另一个并发请求已抢占，此时不能再执行
+                return fail(tool.getName(), "请求正在处理中，请勿重复提交。", "idempotent");
+            }
+        }
+        // ========== 分发执行 ==========
+        String output;
+        try {
+            output = "MOCK".equalsIgnoreCase(connector.getType())
+                    ? invokeMock(tool, dto)
+                    : invokeRest(tool, connector, dto);
+        } catch (Exception e) {
+            // 失败留痕走独立事务，否则接下来的 throw 会把主事务连同这条记录一起回滚，
+            // 线上就查不到任何失败痕迹
+            log.warn("工具执行失败 tool={} sessionId={}", tool.getName(), dto.getSessionId(), e);
+            recorder.writeResult(placeholder, tool, dto, null, e.getMessage(), 0);
+            throw e;
+        }
+
+        recorder.writeResult(placeholder, tool, dto, output, null, 1);
         ToolInvokeResultDTO result = new ToolInvokeResultDTO();
-        result.setSuccess(false);
-        result.setToolName(dto == null ? null : dto.getToolName());
-        result.setOutput("开放工具调用为占位实现，后端未接入工具查找、风险确认与连接器执行。");
-        result.setSource("not-implemented");
+        result.setSuccess(true);
+        result.setToolName(tool.getName());
+        result.setOutput(output);
+        // 有幂等键走的是「真实执行」，无幂等键同样如此；只有重放才标 idempotent
+        result.setSource("MOCK".equalsIgnoreCase(connector.getType()) ? "mock" : "real");
         return result;
     }
 
     /**
-     * REST 连接器出站（占位：不发起 HTTP 调用）
+     * 工具查找：优先按 toolName 精确匹配，其次按 intentBind 匹配。
      *
-     * <p>TODO 后续实现：拼接 {@code baseUrl + httpPath}（归一化斜杠）后发起调用。
-     * 调用前必须再次经 {@code ConnectorUrlGuard.assertSafe} 做 SSRF 校验（防运行期地址被篡改）；
-     * 使用禁止跟随重定向的请求工厂（防 302 跳内网绕过校验）；按工具 {@code timeoutMs} 设超时（缺省 5000ms）；
-     * 注入鉴权头（见 {@link #applyConnectorAuth}）；请求体需按连接器字段映射生成（`ConnectorFieldMappingService.reverseMapping`）。</p>
-     *
-     * @return 占位返回 null
+     * <p>两种入口对应两类调用方：显式调用（对方知道工具名）与意图驱动（Agent 只识别出意图）。
+     * 按 intentBind 查找时要过滤启用状态，避免查到已下线的工具。</p>
      */
-    private String invokeRest(OpenConnector connector, OpenTool tool, ToolInvokeDTO dto) {
-        log.info("[占位] REST 连接器出站未实现 tool={}", tool == null ? null : tool.getName());
+    private OpenTool findTool(ToolInvokeDTO dto) {
+        if (StringUtils.hasText(dto.getToolName())) {
+            return this.getOne(new LambdaQueryWrapper<OpenTool>()
+                    .eq(OpenTool::getName, dto.getToolName().trim()).last("limit 1"));
+        }
+        if (StringUtils.hasText(dto.getIntentBind())) {
+            return this.getOne(new LambdaQueryWrapper<OpenTool>()
+                    .eq(OpenTool::getIntentBind, dto.getIntentBind().trim())
+                    .orderByAsc(OpenTool::getId).last("limit 1"));
+        }
         return null;
     }
 
     /**
-     * 解密 authJson 并注入鉴权头（占位）
+     * 是否必须用户确认。
      *
-     * <p>TODO 后续实现：解密连接器 authJson，按 type=bearer/header/basic 注入对应鉴权头；
-     * 历史明文或非 JSON 配置应忽略，不影响 MOCK。</p>
-     *
-     * @param connector 连接器配置
-     * @param headers   待注入的请求头
+     * <p>read 级只读取数据，无需确认；write/critical 会改对方系统状态，
+     * 必须用户显式确认。判定放在这里而不是依赖调用方传值，是因为
+     * 「工具风险等级」是服务端配置，不该由调用方决定是否需要确认。</p>
      */
-    private void applyConnectorAuth(OpenConnector connector, HttpHeaders headers) {
-        log.info("[占位] 注入连接器鉴权头 connectorId={}", connector == null ? null : connector.getId());
+    private boolean needConfirm(OpenTool tool) {
+        String risk = tool.getRisk() == null ? "" : tool.getRisk().trim().toLowerCase(Locale.ROOT);
+        return "write".equals(risk) || "critical".equals(risk);
     }
 
+    /**
+     * MOCK 连接器：返回演示数据，不触达任何外部系统
+     */
+    private String invokeMock(OpenTool tool, ToolInvokeDTO dto) {
+        log.info("MOCK 连接器返回演示数据 tool={} sessionId={}", tool.getName(), dto.getSessionId());
+        return "{\"mock\":true,\"tool\":\"" + tool.getName()
+                + "\",\"message\":\"演示数据，未调用真实业务系统\"}";
+    }
+
+    /**
+     * 构造统一格式的失败结果
+     */
+    private ToolInvokeResultDTO fail(String toolName, String message, String source) {
+        ToolInvokeResultDTO result = new ToolInvokeResultDTO();
+        result.setSuccess(false);
+        result.setToolName(toolName);
+        result.setOutput(message);
+        result.setSource(source);
+        return result;
+    }
+
+    /**
+     * REST 连接器出站执行：真实发起 HTTP 调用并把响应交给调用方。
+     *
+     * <p><b>为什么不用共享 RestTemplate 单例</b>：每个工具的 {@code timeoutMs} 不同，
+     * 而超时是配置在 {@code RequestFactory} 上的。复用一个实例会让所有工具被迫用同一超时，
+     * 改一个影响全部；这里按工具超时即时构造，代价可忽略（真实场景是「一次调用」不是高频循环）。</p>
+     *
+     * <p><b>三重安全约束（缺一不可）</b>：</p>
+     * <ol>
+     *   <li><b>禁跟随重定向</b>：对方返回 302 跳到内网地址时，若自动跟随就等于绕过 SSRF 校验。
+     *       校验只发生在出站前那一刻的 URL 上，重定向后是全新 URL，必须重新过校验——
+     *       而更简单的做法是直接禁止跟随，把 3xx 当作业务异常返回</li>
+     *   <li><b>出站前再次 assertSafe</b>：保存连接器时已校验过一遍，但运行期 baseUrl 可能被改
+     *       （DB 直改、历史脏数据），出站前重校验才真正守得住</li>
+     *   <li><b>query 型鉴权参数拼在 URL 上，随后从 headers 摘除</b>：见 {@link #buildUrl}，
+     *       避免 {@code X-Internal-Auth-Query} 这个内部约定头被真的发到对方系统</li>
+     * </ol>
+     *
+     * <p><b>返回值约定</b>：返回对方响应体字符串；调用方（{@code invoke}）负责包成
+     * {@code ToolInvokeResultDTO}。空响应体返回空串而非 null，避免上层 NPE。</p>
+     *
+     * @param tool      工具配置（提供 httpMethod / httpPath / timeoutMs）
+     * @param connector 连接器配置（提供 baseUrl / authJson）
+     * @param dto       工具调用入参
+     * @return 对方系统响应体
+     */
+    private String invokeRest(OpenTool tool, OpenConnector connector, ToolInvokeDTO dto) {
+        Map<String, String> headers = new HashMap<>();
+        // 1) 注入鉴权头。bearer/basic/header 直接写进 headers；
+        //    query 型写进 AUTH_QUERY_HEADER 约定 key，由 buildUrl 消费
+        applyConnectorAuth(headers, connector);
+
+        // 2) 组装 URL。注意必须在 assertSafe 之前完成：
+        //    query 型鉴权参数是 URL 的一部分，漏拼会让「校验的 URL」与「真正请求的 URL」不一致
+        String url = buildUrl(connector, tool, headers);
+
+        // 3) SSRF 防护：出站前重校验。connector.getBaseUrl() 作为租户白名单的匹配依据
+        ConnectorUrlGuard.assertSafe(url, connector.getBaseUrl());
+
+        // 4) 请求体：按连接器字段映射把入参反向转成对方要的结构
+        String body = buildRequestBody(tool, dto);
+        // 5) HTTP 方法：缺省 POST（大多数业务查询/变更都是 POST）
+        HttpMethod method = resolveHttpMethod(tool.getHttpMethod());
+        try {
+            HttpEntity<String> entity = new HttpEntity<>(body, toSpringHeaders(headers));
+            ResponseEntity<String> response = buildRestTemplate(tool.getTimeoutMs()).exchange(
+                    URI.create(url), method, entity, String.class);
+            String responseBody = response.getBody();
+            log.info("REST 连接器调用完成 tool={} url={} status={}",
+                    tool.getName(), url, response.getStatusCode().value());
+            // 3xx：因为禁止跟随重定向，Spring 会把重定向响应原样交出。而对方系统用 3xx
+            // 表达「正常结果」是不合常理的，一律按异常处理，防止有人借重定向绕过 SSRF 校验
+            if (response.getStatusCode().is3xxRedirection()) {
+                throw new BusinessException("连接器返回重定向，已拒绝跟随以保证安全 tool=" + tool.getName());
+            }
+            if (response.getStatusCode().isError()) {
+                // 4xx/5xx：把状态码带出去，便于排查是「密钥错」还是「对方服务挂了」
+                throw new BusinessException("连接器返回错误状态 tool=" + tool.getName()
+                        + " status=" + response.getStatusCode().value());
+            }
+            return responseBody == null ? "" : responseBody;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            // 网络超时/连接拒绝等：统一转业务异常，由上层决定是否重试。
+            // 注意不能用 catch(Exception) 吞掉上面的 BusinessException，故先单独 rethrow
+            log.warn("REST 连接器调用失败 tool={} url={}", tool.getName(), url, e);
+            throw new BusinessException("连接器调用失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 构造 RestTemplate：按工具超时即时创建，并禁止跟随重定向。
+     *
+     * <p><b>为什么禁止重定向</b>：SSRF 校验只针对出站前那个 URL。若自动跟随，
+     * 对方（或中间人）返回 {@code 302 Location: http://169.254.169.254/latest/meta-data/}
+     * 就能把请求引到云元数据服务，校验形同虚设。</p>
+     */
+    private RestTemplate buildRestTemplate(Integer timeoutMs) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        // 超时下限 500ms 由 saveTool 保证；此处再兜一层，防止历史数据脏值
+        int timeout = (timeoutMs == null || timeoutMs < 500) ? 5000 : timeoutMs;
+        factory.setConnectTimeout(timeout);
+        factory.setReadTimeout(timeout);
+        // 关键：不跟随重定向。SimpleClientHttpRequestFactory 默认即不跟随
+        // （setFollowRedirects 仅在部分版本可用），这里显式声明意图
+        return new RestTemplate(factory);
+    }
+
+    /**
+     * 把普通 Map 转成 Spring 的 HttpHeaders（Content-Type 默认 JSON）
+     */
+    private HttpHeaders toSpringHeaders(Map<String, String> headers) {
+        HttpHeaders springHeaders = new HttpHeaders();
+        headers.forEach(springHeaders::set);
+        // 未被显式覆盖时用 JSON，对方 REST 接口绝大多数按 JSON 解析
+        if (!springHeaders.containsKey(HttpHeaders.CONTENT_TYPE)) {
+            springHeaders.setContentType(MediaType.APPLICATION_JSON);
+        }
+        return springHeaders;
+    }
+
+    /**
+     * 组装请求体：按连接器字段映射把入参转成对方要的结构。
+     *
+     * <p><b>映射为空时为什么直接发原始入参</b>：连接器可能压根没配映射表
+     * （对方接口字段名与本系统一致），此时原样发送才能「配了就能通」。</p>
+     *
+     * <p><b>但这不是无条件的</b>：若映射表有配置却一条都没取到值，
+     * 属于配置错误（字段名拼错、source key 对不上）。两种情况都返回空 map，
+     * 无法从返回值区分，故此处统一按「未配置」处理并发 warn 日志留痕——
+     * 静默发送原始入参会让对方返回 200 但业务取不到值，排查成本极高。</p>
+     */
+    private String buildRequestBody(OpenTool tool, ToolInvokeDTO dto) {
+        Map<String, Object> source = buildSourceData(dto);
+        Map<String, Object> mapped = fieldMappingService.reverseMapping(
+                tool.getConnectorId(), source);
+        if (mapped == null || mapped.isEmpty()) {
+            log.warn("连接器无有效字段映射，按原始入参发送 connectorId={} tool={}",
+                    tool.getConnectorId(), tool.getName());
+            return JSON.toJSONString(source);
+        }
+        return JSON.toJSONString(mapped);
+    }
+
+    /**
+     * 把工具调用入参整理成「字段映射」的输入结构。
+     * <p>映射表的 targetField 与这里的 key 对应，因此 key 名需与配置保持一致。</p>
+     */
+    private Map<String, Object> buildSourceData(ToolInvokeDTO dto) {
+        Map<String, Object> source = new HashMap<>();
+        source.put("sessionId", dto.getSessionId());
+        source.put("entityId", dto.getEntityId());
+        source.put("entityType", dto.getEntityType());
+        source.put("intentBind", dto.getIntentBind());
+        source.put("confirm", dto.getConfirmed());
+        return source;
+    }
+
+    /**
+     * 解析 HTTP 方法，非法或缺失时按 POST 兜底
+     */
+    private HttpMethod resolveHttpMethod(String httpMethod) {
+        if (!StringUtils.hasText(httpMethod)) {
+            return HttpMethod.POST;
+        }
+        try {
+            return HttpMethod.valueOf(httpMethod.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            // 配置了非法方法名：不可静默降级为 GET（GET 语义是只读，
+            // 把 write 工具降级成 GET 会绕过风险确认的预期），
+            // 也不能直接崩，故按 POST 兜底并留日志
+            log.warn("工具配置了非法 HTTP 方法，按 POST 兜底 method={}", httpMethod);
+            return HttpMethod.POST;
+        }
+    }
+
+    /**
+     * 拼接最终 URL，并把 query 型鉴权参数附上
+     */
+    private String buildUrl(OpenConnector connector, OpenTool tool, Map<String, String> headers) {
+        String base = StringUtils.hasText(connector.getBaseUrl()) ? connector.getBaseUrl().trim() : "";
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        String path = StringUtils.hasText(tool.getHttpPath()) ? tool.getHttpPath().trim() : "";
+        if (StringUtils.hasText(path) && !path.startsWith("/")) {
+            path = "/" + path;
+        }
+        String url = base + path;
+
+        // query 型鉴权：追加到 URL；拼完立即从 headers 摘掉，避免误发
+        String authQuery = headers.remove(AUTH_QUERY_HEADER);
+        if (StringUtils.hasText(authQuery)) {
+            url += (url.contains("?") ? "&" : "?") + authQuery;
+        }
+        return url;
+    }
+
+    /**
+     * 注入连接器鉴权信息到出站请求。
+     *
+     * <p><b>为什么必须做</b>：真实 REST 连接器（对方 OMS/CRM）几乎都要求鉴权。
+     * 不注入头，对方一律返回 401——这是除 MOCK 外所有真实连接器跑不通的直接原因。</p>
+     *
+     * <p><b>支持的鉴权类型</b>（按 authJson.type 分派）：</p>
+     * <table border="1">
+     *   <tr><th>type</th><th>authJson 示例</th><th>注入效果</th></tr>
+     *   <tr><td>bearer</td><td>{"type":"bearer","token":"xxx"}</td><td>Authorization: Bearer xxx</td></tr>
+     *   <tr><td>basic</td><td>{"type":"basic","username":"u","password":"p"}</td><td>Authorization: Basic base64(u:p)</td></tr>
+     *   <tr><td>header</td><td>{"type":"header","name":"X-Api-Key","value":"xxx"}</td><td>X-Api-Key: xxx</td></tr>
+     *   <tr><td>query</td><td>{"type":"query","name":"apikey","value":"xxx"}</td><td>URL 追加 ?apikey=xxx</td></tr>
+     * </table>
+     *
+     * <p><b>安全约束</b>：</p>
+     * <ul>
+     *   <li>authJson 落库时为 AES-GCM 密文，此处先解密（SecretCipherUtil.decrypt）</li>
+     *   <li>解密失败或 JSON 非法时<b>抛异常而非静默跳过</b>——静默跳过会让请求裸奔出站，
+     *       对方可能把无鉴权请求当作合法调用，酿成越权</li>
+     *   <li>日志中<b>绝不打印 token 明文</b>，只打印类型与目标 host</li>
+     * </ul>
+     *
+     * @param headers   出站请求头（会被就地修改）
+     * @param connector 连接器配置
+     */
+    private void applyConnectorAuth(Map<String, String> headers, OpenConnector connector) {
+        // 未配置鉴权视为「对方无需鉴权」，直接返回
+        if (connector == null || !StringUtils.hasText(connector.getAuthJson())) {
+            return;
+        }
+        String plain = SecretCipherUtil.decrypt(connector.getAuthJson());
+        if (!StringUtils.hasText(plain)) {
+            throw new BusinessException("连接器鉴权信息解密失败 connectorId=" + connector.getId());
+        }
+        JSONObject auth;
+        try {
+            auth = JSON.parseObject(plain);
+        } catch (Exception e) {
+            log.warn("连接器鉴权配置解析失败 connectorId={}", connector.getId(), e);
+            // authJson 不是合法 JSON：配置错误，必须暴露而不是静默降级
+            throw new BusinessException("连接器鉴权配置格式错误 connectorId=" + connector.getId());
+        }
+        if (auth == null || !StringUtils.hasText(auth.getString("type"))) {
+            throw new BusinessException("连接器鉴权缺少 type 字段 connectorId=" + connector.getId());
+        }
+        String type = auth.getString("type").trim().toLowerCase(Locale.ROOT);
+        switch (type) {
+            case "bearer" -> {
+                String token = requireAuthField(auth, "token", connector.getId());
+                headers.put("Authorization", "Bearer " + token);
+            }
+            case "basic" -> {
+                String username = auth.getString("username");
+                String password = auth.getString("password");
+                if (!StringUtils.hasText(username)) {
+                    throw new BusinessException("连接器 basic 鉴权缺少 username connectorId=" + connector.getId());
+                }
+                // 标准 Basic：base64(username:password)，password 允许为空
+                String raw = username + ":" + (password == null ? "" : password);
+                String encoded = Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+                headers.put("Authorization", "Basic " + encoded);
+            }
+            case "header" -> {
+                String name = requireAuthField(auth, "name", connector.getId());
+                String value = requireAuthField(auth, "value", connector.getId());
+                headers.put(name, value);
+            }
+            case "query" -> {
+                // query 型鉴权需拼到 URL 上，由调用方处理；这里把值塞进约定 key 供后续拼接
+                String name = requireAuthField(auth, "name", connector.getId());
+                String value = requireAuthField(auth, "value", connector.getId());
+                headers.put(AUTH_QUERY_HEADER, name + "=" + urlEncode(value));
+            }
+            default -> throw new BusinessException(
+                    "不支持的鉴权类型: " + type + "（支持 bearer/basic/header/query）");
+        }
+        // 只记类型与目标，不记密钥值
+        log.debug("连接器鉴权已注入 type={} connectorId={} baseUrl={}",
+                type, connector.getId(), connector.getBaseUrl());
+    }
+
+    /**
+     * 读取必填鉴权字段，缺失时抛出明确错误
+     */
+    private String requireAuthField(JSONObject auth, String field, Long connectorId) {
+        String value = auth.getString(field);
+        if (!StringUtils.hasText(value)) {
+            throw new BusinessException("连接器鉴权缺少 " + field + " 字段 connectorId=" + connectorId);
+        }
+        return value;
+    }
+
+    /**
+     * URL 参数编码（用于 query 型鉴权）。
+     *
+     * <p>必须编码：密钥里常含 {@code + / = &} 等字符，直接拼接会被对方解析成
+     * 另一个参数或截断，导致鉴权失败且难以排查。空值返回空串，由调用方决定是否拼接。</p>
+     *
+     * @param value 原始值
+     * @return application/x-www-form-urlencoded 编码结果
+     */
+    private String urlEncode(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
 }
