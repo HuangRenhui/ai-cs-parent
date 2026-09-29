@@ -13,10 +13,11 @@
         </el-button>
         <div class="status-chip" :class="transferredAgent ? 'human' : 'ai'">
           <i class="pulse"></i>
-          <span>{{ transferredAgent ? `工号 ${transferredAgent.agentNo} ${transferredAgent.agentName}` : '智能接待' }}</span>
+          <span>{{ statusText }}</span>
         </div>
+        <!-- 已转人工（含排队态）后不再提供转人工入口，避免重复提交 -->
         <el-button
-          v-if="!transferredAgent"
+          v-if="!transferredAgent && !transferQueued"
           class="hdr-btn"
           size="small"
           :loading="transferring"
@@ -35,6 +36,15 @@
       <div>
         <strong>工号 {{ transferredAgent.agentNo }}　{{ transferredAgent.agentName }}</strong>
         <span>{{ transferredAgent.skill || '综合客服' }} · 正在为您服务</span>
+      </div>
+    </div>
+
+    <!-- 排队态：已转人工但暂无在线坐席，不展示任何坐席信息，避免谎称已接入 -->
+    <div v-else-if="transferQueued" class="agent-banner queued">
+      <div class="avatar-dot queued"><el-icon><Clock /></el-icon></div>
+      <div>
+        <strong>正在等待人工坐席接入</strong>
+        <span>已为您转接人工客服，当前坐席繁忙，请稍候</span>
       </div>
     </div>
 
@@ -164,10 +174,10 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { ChatDotRound, Headset, Reading, User, Loading, Document, Paperclip } from '@element-plus/icons-vue'
+import { ChatDotRound, Headset, Reading, User, Loading, Document, Paperclip, Clock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
-import { createWorkOrder, ensureSession, interruptChat, listCustomers, listOpenPacks, listAgents, transferSession } from '../api'
+import { createWorkOrder, ensureSession, interruptChat, listCustomers, listOpenPacks, transferSession } from '../api'
 import { isMockEnabled } from '../mock'
 import { openHelpCenter } from '../composables/useHelpCenter'
 import WorkOrderDialog from '../components/WorkOrderDialog.vue'
@@ -241,6 +251,13 @@ const useStream = ref(false)
 const transferring = ref(false)
 /** 当前接入坐席；有值表示已转人工 */
 const transferredAgent = ref(null)
+/**
+ * 是否处于「已转人工但无在线坐席」的排队态。
+ * <p>后端在无在线坐席时返回 transferred=true 且 agentId 为空，此时会话已转为人工接待，
+ * 只是尚未指派具体坐席。<b>不能像以前那样借一位在线坐席展示</b>——那会让用户以为
+ * 已有人接待，与「排队中」的真实状态相反。</p>
+ */
+const transferQueued = ref(false)
 const customers = ref([])
 /** 聊天页工单锁定当前会话，下拉只展示这一条 */
 const orderSessions = computed(() => [{ sessionId: sessionId.value, sessionStatus: 1 }])
@@ -250,6 +267,15 @@ let reconnectTimer = null
 let replyTimer = null
 let streamAbort = null
 const REPLY_TIMEOUT_MS = 35000
+
+/** 顶栏接待状态文案：已接入坐席 / 排队中 / 智能接待 */
+const statusText = computed(() => {
+  if (transferredAgent.value) {
+    return `工号 ${transferredAgent.value.agentNo} ${transferredAgent.value.agentName}`
+  }
+  if (transferQueued.value) return '等待人工接入'
+  return '智能接待'
+})
 
 const orderForm = ref({
   orderType: '咨询',
@@ -430,6 +456,8 @@ const applyTransfer = (agent) => {
   const normalized = normalizeAgent(agent)
   if (!normalized) return
   transferredAgent.value = normalized
+  // 已指派到具体坐席，退出排队态
+  transferQueued.value = false
   const exists = archive.value.some(
     (m) => m.kind === 'agent-join' && m.agent?.agentNo === normalized.agentNo
   )
@@ -444,19 +472,15 @@ const applyTransfer = (agent) => {
   scrollToBottom()
 }
 
-/** 接口没带回坐席时，从在线坐席列表兜底一位，保证演示/降级仍能展示工号姓名 */
-const fallbackOnlineAgent = async () => {
-  try {
-    const res = await listAgents()
-    const list = res.data || []
-    return normalizeAgent(
-      list.find((a) => a.agentStatus === 1 && a.id !== 1)
-      || list.find((a) => a.agentStatus === 1)
-      || list[0]
-    )
-  } catch {
-    return null
-  }
+/**
+ * 进入排队态：已转人工但当前没有在线坐席可指派。
+ * <p>后端语义是「会话已改人工接待，等班长派单或坐席上线」，因此这里<b>只标记排队</b>，
+ * 不展示任何坐席工号姓名——借一位在线坐席展示会构成「谎称已接入」。
+ * 用户主动问「转人工」时，这个状态也用于确认按钮已被消费。</p>
+ */
+const applyTransferQueued = () => {
+  transferQueued.value = true
+  transferredAgent.value = null
 }
 
 const wsUrl = () => {
@@ -533,7 +557,8 @@ const connectWs = () => {
           time: new Date().toLocaleTimeString(),
           citations: data.citations || []
         })
-        // 服务端在意图为转人工时会改会话状态并带回 transferred / 工号姓名
+        // 服务端在意图为转人工时会改会话状态并带回 transferred / 工号姓名。
+        // 无坐席字段时表示排队中，同样不做「借坐席」兜底
         if (data.transferred) {
           const fromWs = normalizeAgent({
             agentNo: data.agentNo,
@@ -541,7 +566,7 @@ const connectWs = () => {
             agentId: data.agentId
           })
           if (fromWs) applyTransfer(fromWs)
-          else fallbackOnlineAgent().then((agent) => applyTransfer(agent))
+          else applyTransferQueued()
         }
         scrollToBottom()
       }
@@ -631,11 +656,13 @@ const sendMessage = async () => {
       time: new Date().toLocaleTimeString(),
       citations: payload?.citations || []
     })
-    // HTTP 演示路径：用户说「转人工」或接口标记 transferred 时同样展示接待卡
+    // 转人工：按后端语义分「已指派坐席」与「排队中」两种情况渲染。
+    // 注意不能再用 fallbackOnlineAgent 兜底——后端明确返回 agentId 为空时，
+    // 表示暂无在线坐席，借一位坐席展示会谎称已接入
     if (payload?.transferred) {
       const agent = normalizeAgent(payload)
       if (agent) applyTransfer(agent)
-      else fallbackOnlineAgent().then((a) => applyTransfer(a))
+      else applyTransferQueued()
     }
   } catch (error) {
     appendMessage({
@@ -720,8 +747,10 @@ const handleTransfer = async () => {
   try {
     const res = await transferSession(sessionId.value)
     const data = res?.data
-    const agent = normalizeAgent(typeof data === 'object' ? data : null) || await fallbackOnlineAgent()
-    applyTransfer(agent)
+    // 后端在无在线坐席时返回 agentId 为空，此时进入排队态而非借一位坐席展示
+    const agent = normalizeAgent(typeof data === 'object' ? data : null)
+    if (agent) applyTransfer(agent)
+    else applyTransferQueued()
   } catch {
     /* 拦截器已提示 */
   } finally {
@@ -733,6 +762,7 @@ const clearSession = () => {
   if (!confirm('确定要开始新对话吗？当前窗口会回到开场白。')) return
   sessionId.value = 'sess_' + Date.now()
   transferredAgent.value = null
+  transferQueued.value = false
   archive.value = [{
     id: nextMsgId(),
     content: '您好！我是智能客服，请问有什么可以帮助您的？',
@@ -1173,6 +1203,22 @@ const createOrder = async () => {
 }
 .chat-container > .agent-banner {
   margin: 10px 16px 0;
+}
+/* 排队态接待条：用琥珀色与「已接入」的绿色区分，避免用户误以为已有坐席服务 */
+.agent-banner.queued {
+  background: #fffaeb;
+  border-color: #fedf89;
+}
+.agent-banner.queued strong {
+  color: #b54708;
+}
+.agent-banner.queued span {
+  color: #b54708;
+  opacity: .85;
+}
+.agent-banner .avatar-dot.queued {
+  background: #f79009;
+  font-size: 18px;
 }
 .agent-join-wrap {
   display: flex;
