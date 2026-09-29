@@ -197,7 +197,10 @@ public class AiAgentService {
 
         result.setIntent(intentName);
         result.setEntity(entity);
-        result.setTransferred("转人工".equals(intentName));
+        // 此处先置 false，真正的「已转接」由 routeToAgent 在分配成功后才置 true。
+        // 若在意图层就置 true，routeToAgent 失败时前端仍会渲染接待卡，
+        // 等于向用户谎称已接入人工——正是 routeToAgent 注释中明确禁止的行为
+        result.setTransferred(false);
 
         // 第三步：填槽检查（如果配置了槽位）
         SlotFillResultDTO slotResult = checkSlotFilling(dto, intentName);
@@ -222,18 +225,17 @@ public class AiAgentService {
         }
 
         // 第五步：消息落库（含附件），保证刷新页面后附件仍可回显
-        persistMessages(dto, reply);
+        persistMessages(dto, result);
         return result;
     }
 
     /**
-     * 持久化本轮对话的用户消息与 AI 回复。
-     *
-     * <p>附件随用户消息一起落库，前端拉取历史消息时按 {@code attachments} 字段渲染。
-     * 落库失败不影响本次回复返回，仅记录告警。</p>
+     * 同一事务写入用户消息与 AI 回复。落库失败时在回复中说明，并标记 historySaved=false。
      */
-    private void persistMessages(ChatDTO dto, String reply) {
+    private void persistMessages(ChatDTO dto, ChatReplyDTO result) {
+        String reply = result.getReply();
         if (sessionFeign == null || !StringUtils.hasText(dto.getSessionId())) {
+            result.setHistorySaved(false);
             return;
         }
         try {
@@ -242,15 +244,29 @@ public class AiAgentService {
             userMsg.setMsgContent(dto.getMsg());
             userMsg.setSenderType(1);
             userMsg.setAttachments(dto.getAttachments());
-            sessionFeign.saveMessage(userMsg);
+            userMsg.setCustomerId(dto.getCustomerId());
+            userMsg.setVisitorRef(dto.getVisitorRef());
 
             SessionDTO aiMsg = new SessionDTO();
             aiMsg.setSessionId(dto.getSessionId());
             aiMsg.setMsgContent(reply);
             aiMsg.setSenderType(2);
-            sessionFeign.saveMessage(aiMsg);
+
+            Result<String> saved = sessionFeign.saveTurn(java.util.List.of(userMsg, aiMsg));
+            if (saved == null || !saved.isOk()) {
+                markHistoryMissing(result, reply, dto.getSessionId(), null);
+            }
         } catch (Exception e) {
-            log.warn("对话消息落库失败 sessionId={}", dto.getSessionId(), e);
+            markHistoryMissing(result, reply, dto.getSessionId(), e);
+        }
+    }
+
+    private void markHistoryMissing(ChatReplyDTO result, String reply, String sessionId, Exception e) {
+        log.error("对话消息落库失败 sessionId={}", sessionId, e);
+        result.setHistorySaved(false);
+        String note = "（本次对话未能写入会话记录）";
+        if (reply == null || !reply.contains(note)) {
+            result.setReply((reply == null ? "" : reply) + "\n" + note);
         }
     }
 
@@ -291,8 +307,8 @@ public class AiAgentService {
         try {
             return slotFillingService.checkAndFillSlots(dto, intentName);
         } catch (Exception e) {
-            log.warn("填槽检查失败", e);
-            return SlotFillResultDTO.complete();
+            log.warn("填槽检查失败，中止本轮路由", e);
+            return SlotFillResultDTO.incomplete("slot", PromptConst.LLM_BUSY_REPLY);
         }
     }
 
@@ -346,23 +362,99 @@ public class AiAgentService {
     }
 
     /**
-     * 【占位】转人工分支。
-     * <p>待 P0-序4「坐席分配」完成后补齐：需 {@code SessionFeign.transfer} 改会话状态并回填
-     * 坐席工号/姓名；<b>改状态失败时不得返回「已转接」话术</b>。</p>
+     * 转人工分支：调会话服务分配坐席，成功时回填接待卡信息。
+     *
+     * <p><b>核心约束——失败必须如实告知</b>：只有 {@code SessionFeign.transfer}
+     * 返回成功且 {@code agentId} 非空，才回「已接入」话术。任何环节失败都回
+     * {@code TRANSFER_FAIL_REPLY}，<b>绝不假装已转接</b>。</p>
+     *
+     * <p>原因：转人工是用户在机器人答不上来时的兜底诉求。若系统实际没接入却提示
+     * 「已转接，请稍候」，用户会一直在页面上等一个永远不会来的客服——
+     * 这比直接说「暂时无法接入」的伤害大得多。</p>
+     *
+     * <p><b>三种情况的话术区分</b>：</p>
+     * <ul>
+     *   <li>成功且分到坐席 → 「已为您接入人工客服 工号 A002 张三」</li>
+     *   <li>成功但无在线坐席 → 排队提示（agentId 为空）</li>
+     *   <li>调用失败 → {@code TRANSFER_FAIL_REPLY}</li>
+     * </ul>
      */
     private String routeToAgent(ChatDTO dto, ChatReplyDTO result) {
-        log.info("[占位] 转人工分支未实现 sessionId={}", dto.getSessionId());
-        return PromptConst.TRANSFER_FAIL_REPLY;
+        if (sessionFeign == null || !StringUtils.hasText(dto.getSessionId())) {
+            log.warn("转人工失败：会话服务不可用或缺少 sessionId sessionId={}", dto.getSessionId());
+            return PromptConst.TRANSFER_FAIL_REPLY;
+        }
+        try {
+            Result<TransferResultDTO> response = sessionFeign.transfer(dto.getSessionId());
+            TransferResultDTO transfer = response == null ? null : response.getData();
+            if (transfer == null) {
+                log.warn("转人工失败：会话服务返回空 sessionId={}", dto.getSessionId());
+                return PromptConst.TRANSFER_FAIL_REPLY;
+            }
+            // 回填接待卡信息，供前端展示坐席工号/姓名（ChatPage 的 transferredAgent）
+            result.setTransferred(true);
+            result.setAgentId(transfer.getAgentId());
+            result.setAgentNo(transfer.getAgentNo());
+            result.setAgentName(transfer.getAgentName());
+            if (transfer.getAgentId() == null) {
+                // 已转人工但暂无在线坐席：会话状态已改为人工接待，只是尚未指派具体坐席。
+                // transferred 仍为 true（前端显示接待卡），agentId 为空由前端渲染「排队中」，
+                // 而不是谎称已接入具体某位客服
+                return "已为您转接人工客服，当前坐席繁忙，请稍候。";
+            }
+            return "已为您接入人工客服。工号 " + transfer.getAgentNo()
+                    + " " + transfer.getAgentName() + " 正在为您服务，请简要说明问题。";
+        } catch (Exception e) {
+            log.warn("转人工调用失败 sessionId={}", dto.getSessionId(), e);
+            return PromptConst.TRANSFER_FAIL_REPLY;
+        }
     }
 
     /**
-     * 【占位】工具分支（查物流/退款）。
-     * <p>待 P0-序5/6 完成后补齐：构造 {@code ToolInvokeDTO} 走 {@code OpenToolFeign.invoke}；
-     * 退款需用户消息含「确认」才置 confirmed，幂等键为 {@code sessionId:意图:实体}。</p>
+     * 工具分支：查物流 / 退款。
+     *
+     * <p><b>两条安全约束</b>（来自 [详细设计] 与幂等设计）：</p>
+     * <ol>
+     *   <li><b>退款等高危操作必须先确认</b>：用户消息含「确认」才置 confirmed=true，
+     *       否则返回确认提示，形成「确认循环」——防止误触导致真实退款</li>
+     *   <li><b>幂等键 = sessionId:意图:实体</b>：用户重试或网络重发时，
+     *       开放层凭唯一索引挡住重复执行，不会退两次款</li>
+     * </ol>
      */
     private String routeToTool(IntentEnum intent, String entity, ChatDTO dto, ChatReplyDTO result) {
-        log.info("[占位] 工具分支未实现 intent={} entity={}", intent.getName(), entity);
-        return PromptConst.TOOL_BUSY_REPLY;
+        ToolInvokeDTO toolDto = new ToolInvokeDTO();
+        toolDto.setSessionId(dto.getSessionId());
+        // 工具按「意图绑定」检索：注册表里工具可能只绑了意图而未指定工具名
+        toolDto.setIntentBind(intent.getName());
+        toolDto.setEntityId(entity);
+        toolDto.setEntityType("order");
+        // 幂等键：同一会话 + 同一意图 + 同一实体视为同一次操作
+        toolDto.setIdempotencyKey(dto.getSessionId() + ":" + intent.getName() + ":" + entity);
+        // 租户编码用于连接器出站白名单校验，避免跨租户调用对方系统
+        toolDto.setTenantCode(dto.getTenantCode());
+
+        // 高危操作需用户明确确认
+        boolean risky = intent == IntentEnum.REFUND;
+        boolean confirmed = StringUtils.hasText(dto.getMsg()) && dto.getMsg().contains("确认");
+        toolDto.setConfirmed(!risky || confirmed);
+        try {
+            Result<ToolInvokeResultDTO> response = openToolFeign.invoke(toolDto);
+            ToolInvokeResultDTO tool = response == null ? null : response.getData();
+            if (tool == null) {
+                return PromptConst.TOOL_BUSY_REPLY;
+            }
+            // 需确认但用户还没确认：返回确认提示，等下一轮
+            if (!tool.isSuccess()) {
+                if (StringUtils.hasText(tool.getOutput())) {
+                    return tool.getOutput();
+                }
+                return PromptConst.TOOL_BUSY_REPLY;
+            }
+            return StringUtils.hasText(tool.getOutput()) ? tool.getOutput() : PromptConst.TOOL_BUSY_REPLY;
+        } catch (Exception e) {
+            log.warn("工具调用失败 sessionId={} intent={}", dto.getSessionId(), intent.getName(), e);
+            return PromptConst.TOOL_BUSY_REPLY;
+        }
     }
 
     /**

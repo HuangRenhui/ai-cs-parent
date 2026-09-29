@@ -26,6 +26,10 @@ public interface SessionFeign {
     @PostMapping("/session/message")
     Result<String> saveMessage(@RequestBody SessionDTO dto);
 
+    /** 同一事务保存用户消息与 AI 回复，body 必须是两条 */
+    @PostMapping("/session/turn")
+    Result<String> saveTurn(@RequestBody java.util.List<SessionDTO> messages);
+
     /** 把指定会话转为人工接待，成功时 data 带接入坐席工号/姓名 */
     @PutMapping("/session/{sessionId}/transfer")
     Result<TransferResultDTO> transfer(@PathVariable("sessionId") String sessionId);

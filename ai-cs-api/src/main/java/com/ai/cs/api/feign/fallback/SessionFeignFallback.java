@@ -29,11 +29,22 @@ public class SessionFeignFallback implements SessionFeign {
         return Result.fail(503, "基础服务暂时不可用");
     }
 
-    /** 降级：转人工状态变更失败，返回 503，由上层决定是否重试 */
+    @Override
+    public Result<String> saveTurn(java.util.List<SessionDTO> messages) {
+        log.error("对话落库失败，触发熔断降级");
+        return Result.fail(503, "基础服务暂时不可用");
+    }
+
+    /**
+     * 转人工兜底：会话服务不可达时返回失败而非成功，
+     * 避免上层误判为「已转接」。
+     */
     @Override
     public Result<TransferResultDTO> transfer(String sessionId) {
-        log.error("会话转人工失败，触发熔断降级 sessionId={}", sessionId);
-        return Result.fail(503, "基础服务暂时不可用");
+        // 必须返回 fail 或 data=null，绝不能造一个「有坐席」的假数据，
+        // 否则上层会误判为「已转接」，向用户谎称已接入人工
+        log.error("转人工失败，触发熔断降级 sessionId={}", sessionId);
+        return Result.fail(503, "会话服务暂不可用");
     }
 
     /** 降级：会话快照查询失败，返回空数据由调用方按「会话不存在」处理 */
