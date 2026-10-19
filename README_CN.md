@@ -1,6 +1,6 @@
 # AI 智能客服系统 (智语)
 
-> [English](README.md) · [中文](README_CN.md)
+> [English](README.md) · [中文](README_CN.md) · [GitHub](https://github.com/huangrenhui/ai-cs-parent) · [Gitee](https://gitee.com/huangrenhui/ai-cs-parent)
 
 基于微服务架构的智能客服平台，集成大语言模型（LLM）、知识库检索、工单管理等功能，为企业提供智能化客户服务解决方案。
 
@@ -17,6 +17,83 @@
 - 💬 **实时通信**：基于 WebSocket 的即时消息推送
 - 👥 **客户管理**：完整的客户信息管理系统
 
+## 🖼️ 界面预览
+
+**知识库语义检索**：输入问题 → 向量召回 → 模型生成，答案下方带命中条目，可溯源
+
+![知识库语义检索](docs/images/92-knowledge-rag.gif)
+
+**全链路调用树**：一次对话跨网关 / 代理 / 知识库 / 开放平台，按服务 → 类 → 方法展开
+
+![全链路调用树](docs/images/94-ops-calltree.gif)
+
+**C 端智能对话**：转人工、引用来源、富媒体附件在这一页闭环
+
+![C 端智能对话](docs/images/80-chat.png)
+
+<details>
+<summary><b>展开更多截图</b>（工作台 / 知识库 / AI 能力 / 开放接入 / 运维与系统）</summary>
+
+### 数据概览与坐席
+
+| | |
+|---|---|
+| ![数据概览](docs/images/10-dashboard.png)<br>数据概览 | ![坐席工作台](docs/images/11-workspace.png)<br>坐席工作台（三栏 + 客户快照） |
+| ![会话记录](docs/images/12-session.png)<br>会话记录 | ![排队监控](docs/images/13-queue.png)<br>排队监控 |
+| ![客户管理](docs/images/16-customer.png)<br>客户管理 | ![报表中心](docs/images/17-report.png)<br>报表中心 |
+
+数据概览滚动：
+
+![数据概览滚动](docs/images/91-dashboard-scroll.gif)
+
+### 工单
+
+| | |
+|---|---|
+| ![工单管理](docs/images/14-workorder.png)<br>工单列表 | ![工单详情](docs/images/93-workorder-detail.gif)<br>工单详情（动图） |
+
+### 知识库
+
+| | |
+|---|---|
+| ![问答管理](docs/images/20-knowledge.png)<br>FAQ 管理与向量化 | ![文档知识库](docs/images/21-knowledge-document.png)<br>文档知识库 |
+| ![知识图谱](docs/images/22-knowledge-graph.png)<br>知识图谱 | ![图谱增强](docs/images/23-knowledge-graph-plus.png)<br>图谱增强 |
+| ![多模态知识](docs/images/24-knowledge-multimodal.png)<br>多模态知识 | ![提示词与检索](docs/images/26-knowledge-settings.png)<br>提示词与检索 |
+
+### AI 能力
+
+| | |
+|---|---|
+| ![模型管理](docs/images/30-ai-model.png)<br>模型管理（按能力注册） | ![意图配置](docs/images/31-ai-intent.png)<br>意图配置 |
+| ![填槽配置](docs/images/32-ai-slot.png)<br>填槽配置 | ![坐席辅助](docs/images/34-ai-assist.png)<br>坐席辅助 |
+
+### 开放接入
+
+| | |
+|---|---|
+| ![行业包与工具](docs/images/40-open.png)<br>行业包与工具 | ![回调通知](docs/images/41-open-webhook.png)<br>回调通知 |
+| ![卡片模板](docs/images/42-open-card.png)<br>卡片模板 | |
+
+### 运维与系统管理
+
+| | |
+|---|---|
+| ![运维总览](docs/images/50-ops.png)<br>运维总览 | ![日志查询](docs/images/51-ops-logs.png)<br>日志查询 |
+| ![链路追踪](docs/images/52-ops-traces.png)<br>链路追踪 | ![服务健康](docs/images/53-ops-health.png)<br>服务健康 |
+| ![用户管理](docs/images/60-system-user.png)<br>用户管理 | ![角色管理](docs/images/61-system-role.png)<br>角色管理 |
+| ![菜单管理](docs/images/62-system-menu.png)<br>菜单管理 | ![多租户管理](docs/images/63-system-tenant.png)<br>多租户管理 |
+
+### 上手引导
+
+| | |
+|---|---|
+| ![帮助中心](docs/images/04-help-center.png)<br>帮助中心（C 端自助） | ![功能指南](docs/images/70-guide.png)<br>功能指南（后台） |
+| ![接入向导](docs/images/71-onboarding.png)<br>接入向导 | |
+
+</details>
+
+> 想看不启后端也能跑的完整演示？前端内置 Mock 开关，`cd ai-cs-frontend && npm run dev` 打开 <http://localhost:5173> 即可浏览上述全部页面。
+
 ## 🚀 快速开始
 
 几分钟内即可运行！详细启动步骤请查看 [快速开始](docs/快速开始.md)。
@@ -24,8 +101,9 @@
 **环境要求**: JDK 17+, Maven 3.6+, MySQL 8.0+, Redis 6.0+
 
 ```bash
-# 克隆项目
+# 克隆项目（国内推荐 Gitee，海外可用 GitHub）
 git clone https://gitee.com/huangrenhui/ai-cs-parent.git
+# 或：git clone https://github.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 
 # 编译项目
@@ -122,8 +200,9 @@ ai-cs-parent/
 ## 👥 联系方式
 
 - **维护者**: huangrenhui
+- **GitHub**: https://github.com/huangrenhui/ai-cs-parent
 - **Gitee**: https://gitee.com/huangrenhui/ai-cs-parent
-- **问题反馈**: 请通过 Gitee Issues 提交
+- **问题反馈**: 请通过 [GitHub Issues](https://github.com/huangrenhui/ai-cs-parent/issues) 或 [Gitee Issues](https://gitee.com/huangrenhui/ai-cs-parent/issues) 提交
 
 ## 📊 项目状态
 

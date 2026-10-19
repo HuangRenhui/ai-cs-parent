@@ -1,6 +1,6 @@
 # AI Intelligent Customer Service (Zhiyu)
 
-> [English](README.md) · [中文](README_CN.md)
+> [English](README.md) · [中文](README_CN.md) · [GitHub](https://github.com/huangrenhui/ai-cs-parent) · [Gitee](https://gitee.com/huangrenhui/ai-cs-parent)
 
 A microservices-based intelligent customer service platform powered by Large Language Models (LLMs), Knowledge Retrieval (RAG), ticket workflows, and real-time WebSocket messaging.
 
@@ -17,6 +17,83 @@ A microservices-based intelligent customer service platform powered by Large Lan
 - 💬 **Real-Time Communication**: WebSocket-based instant message delivery
 - 👥 **Customer Management**: Complete customer information management system
 
+## 🖼️ Screenshots
+
+**Semantic search over the knowledge base** — question → vector recall → LLM answer, with the hit entries cited underneath
+
+![Knowledge base semantic search](docs/images/92-knowledge-rag.gif)
+
+**End-to-end call tree** — one conversation spans gateway / agent / knowledge / open platform, expanded as service → class → method
+
+![End-to-end call tree](docs/images/94-ops-calltree.gif)
+
+**Customer-facing chat** — human handoff, source citations and rich attachments all live on one page
+
+![Customer chat](docs/images/80-chat.png)
+
+<details>
+<summary><b>More screenshots</b> (workbench / knowledge base / AI capabilities / open platform / ops &amp; system)</summary>
+
+### Dashboard &amp; agents
+
+| | |
+|---|---|
+| ![Dashboard](docs/images/10-dashboard.png)<br>Dashboard | ![Agent workbench](docs/images/11-workspace.png)<br>Agent workbench (3 columns + customer snapshot) |
+| ![Sessions](docs/images/12-session.png)<br>Session records | ![Queue](docs/images/13-queue.png)<br>Queue monitoring |
+| ![Customers](docs/images/16-customer.png)<br>Customer management | ![Reports](docs/images/17-report.png)<br>Reports |
+
+Dashboard scrolling:
+
+![Dashboard scrolling](docs/images/91-dashboard-scroll.gif)
+
+### Tickets
+
+| | |
+|---|---|
+| ![Ticket list](docs/images/14-workorder.png)<br>Ticket list | ![Ticket detail](docs/images/93-workorder-detail.gif)<br>Ticket detail (GIF) |
+
+### Knowledge base
+
+| | |
+|---|---|
+| ![FAQ](docs/images/20-knowledge.png)<br>FAQ management &amp; vectorization | ![Documents](docs/images/21-knowledge-document.png)<br>Document knowledge base |
+| ![Graph](docs/images/22-knowledge-graph.png)<br>Knowledge graph | ![Graph plus](docs/images/23-knowledge-graph-plus.png)<br>Graph enhancement |
+| ![Multimodal](docs/images/24-knowledge-multimodal.png)<br>Multimodal knowledge | ![Prompt &amp; retrieval](docs/images/26-knowledge-settings.png)<br>Prompt &amp; retrieval |
+
+### AI capabilities
+
+| | |
+|---|---|
+| ![Models](docs/images/30-ai-model.png)<br>Model management (by capability) | ![Intent](docs/images/31-ai-intent.png)<br>Intent configuration |
+| ![Slots](docs/images/32-ai-slot.png)<br>Slot filling | ![Agent assist](docs/images/34-ai-assist.png)<br>Agent assist |
+
+### Open platform
+
+| | |
+|---|---|
+| ![Industry packs](docs/images/40-open.png)<br>Industry packs &amp; tools | ![Webhooks](docs/images/41-open-webhook.png)<br>Webhook callbacks |
+| ![Cards](docs/images/42-open-card.png)<br>Card templates | |
+
+### Ops &amp; system
+
+| | |
+|---|---|
+| ![Ops overview](docs/images/50-ops.png)<br>Ops overview | ![Logs](docs/images/51-ops-logs.png)<br>Log search |
+| ![Traces](docs/images/52-ops-traces.png)<br>Distributed traces | ![Health](docs/images/53-ops-health.png)<br>Service health |
+| ![Users](docs/images/60-system-user.png)<br>Users | ![Roles](docs/images/61-system-role.png)<br>Roles |
+| ![Menus](docs/images/62-system-menu.png)<br>Menus | ![Tenants](docs/images/63-system-tenant.png)<br>Tenants |
+
+### Getting started
+
+| | |
+|---|---|
+| ![Help center](docs/images/04-help-center.png)<br>Help center (customer self-service) | ![Guide](docs/images/70-guide.png)<br>Feature guide (admin) |
+| ![Onboarding](docs/images/71-onboarding.png)<br>Onboarding wizard | |
+
+</details>
+
+> Want to browse everything without starting the back end? The frontend ships a mock switch — run `cd ai-cs-frontend && npm run dev` and open <http://localhost:5173>.
+
 ## 🚀 Quick Start
 
 Up and running in minutes! See [Quick Start](docs/快速开始.md) for the detailed guide.
@@ -24,8 +101,9 @@ Up and running in minutes! See [Quick Start](docs/快速开始.md) for the detai
 **Prerequisites**: JDK 17+, Maven 3.6+, MySQL 8.0+, Redis 6.0+
 
 ```bash
-# Clone the repository
+# Clone the repository (Gitee recommended in mainland China, GitHub otherwise)
 git clone https://gitee.com/huangrenhui/ai-cs-parent.git
+# or: git clone https://github.com/huangrenhui/ai-cs-parent.git
 cd ai-cs-parent
 
 # Build the project
@@ -121,8 +199,9 @@ This project is licensed under the [MIT License](LICENSE).
 ## 👥 Contact
 
 - **Maintainer**: huangrenhui
+- **GitHub**: https://github.com/huangrenhui/ai-cs-parent
 - **Gitee**: https://gitee.com/huangrenhui/ai-cs-parent
-- **Issues**: Please report via Gitee Issues
+- **Issues**: Please report via [GitHub Issues](https://github.com/huangrenhui/ai-cs-parent/issues) or [Gitee Issues](https://gitee.com/huangrenhui/ai-cs-parent/issues)
 
 ## 📊 Project Status
 
