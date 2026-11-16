@@ -25,11 +25,13 @@ spring:
     url: jdbc:mysql://localhost:3306/ai_customer_service?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
-  redis:
-    host: 127.0.0.1
-    port: 6379
-    password:
-    database: 0
+  # Redis配置（Spring Boot 3 的前缀是 spring.data.redis，旧的 spring.redis 已不再被识别）
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

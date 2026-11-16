@@ -33,12 +33,6 @@ spring:
           default:
             connectTimeout: 5000
             readTimeout: 15000
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DATABASE:0}
 ai:
   jwt:
     secret: ${JWT_SECRET:}
