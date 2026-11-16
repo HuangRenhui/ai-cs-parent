@@ -330,13 +330,24 @@ CREATE TABLE `cs_open_tool_invoke` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `tool_name` VARCHAR(64) DEFAULT NULL,
     `session_id` VARCHAR(64) DEFAULT NULL,
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'CONFIRMING'
+        COMMENT 'CONFIRMING/CONFIRMED/SUCCEEDED/FAILED/REJECTED/EXPIRED/CANCELLED',
+    `risk` VARCHAR(16) DEFAULT NULL COMMENT '发起时风险等级快照',
+    `requested_by` VARCHAR(64) DEFAULT NULL COMMENT '发起方标识(坐席/访客ref/AI)',
+    `confirmed_by` VARCHAR(64) DEFAULT NULL COMMENT '确认人(JWT用户名，服务端取)',
+    `confirmed_at` DATETIME DEFAULT NULL,
+    `rejected_reason` VARCHAR(255) DEFAULT NULL,
+    `expire_at` DATETIME DEFAULT NULL COMMENT '空=不过期',
     `request_json` TEXT,
     `response_json` TEXT,
-    `idempotency_key` VARCHAR(128) DEFAULT NULL COMMENT '幂等键',
+    `idempotency_key` VARCHAR(128) DEFAULT NULL COMMENT '幂等键：确认那一刻才写入',
     `success` TINYINT DEFAULT 0,
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_open_invoke_session` (`session_id`),
+    KEY `idx_open_invoke_status` (`status`, `tenant_code`),
     UNIQUE KEY `uk_open_invoke_idem` (`idempotency_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具调用审计';
 
@@ -820,7 +831,8 @@ INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `http
 SELECT 'query_logistics', '按实体查询进度（演示，非订单表）', 'read', id, 'POST', '/api/logistics/query', 5000, '查物流', 'ecommerce'
 FROM `cs_open_connector` WHERE `name` = 'demo-mock';
 
--- apply_refund 为 write 级：未带 confirmed=true 时 invoke 会返回 source=confirm-required，
+-- apply_refund 为 write 级：未带 confirmed=true 时 invoke 返回 source=confirm-required，
+-- 并落一条 status=CONFIRMING 的待确认记录（返回 confirmId），坐席通过 /open/tool/confirm 确认后才执行；
 -- 用于验证「高危操作必须二次确认」这条链路
 INSERT INTO `cs_open_tool` (`name`, `description`, `risk`, `connector_id`, `http_method`, `http_path`, `timeout_ms`, `intent_bind`, `pack_code`)
 SELECT 'apply_refund', '提交退款类动作到对方系统（演示）', 'write', id, 'POST', '/api/refund/apply', 8000, '退款', 'ecommerce'

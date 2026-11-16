@@ -25,6 +25,10 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+open:
+  tool:
+    # 待确认记录有效期（分钟）：0 或负数表示不过期；超时判定在读列表/确认时惰性执行
+    confirm-expire-minutes: ${OPEN_TOOL_CONFIRM_EXPIRE_MINUTES:30}
 ai:
   jwt:
     secret: ${JWT_SECRET:}

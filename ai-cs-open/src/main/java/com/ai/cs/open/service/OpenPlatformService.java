@@ -2,16 +2,21 @@ package com.ai.cs.open.service;
 
 import com.ai.cs.common.dto.*;
 import com.ai.cs.common.exception.BusinessException;
+import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.common.util.JwtUtil;
 import com.ai.cs.common.util.SecretCipherUtil;
 import com.ai.cs.common.util.ValidateUtil;
+import com.ai.cs.open.config.OpenToolProperties;
 import com.ai.cs.open.entity.*;
+import com.ai.cs.open.enums.ToolInvokeStatus;
 import com.ai.cs.open.mapper.*;
 import com.ai.cs.open.support.BaseSessionClient;
 import com.ai.cs.open.util.ConnectorUrlGuard;
+import com.ai.cs.open.util.ToolInvokeSnapshot;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +30,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -53,6 +59,10 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
      */
     @Resource
     private ConnectorInvokeRecorder recorder;
+    @Resource
+    private OpenToolInvokeMapper invokeMapper;
+    @Resource
+    private OpenToolProperties openToolProperties;
     /**
      * query 型鉴权在内部传递时的约定 header key（不会真的发出去）
      */
@@ -442,7 +452,14 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         if (needConfirm(tool) && !Boolean.TRUE.equals(dto.getConfirmed())) {
             // 不落幂等占位行：见类注释，未确认的请求不该消耗幂等键
             log.info("工具需确认但未确认 tool={} risk={}", tool.getName(), tool.getRisk());
-            return fail(tool.getName(), "该操作涉及重要变更，请确认后再执行。", "confirm-required");
+            OpenToolInvoke pending = findOrCreatePending(tool, dto);
+            ToolInvokeResultDTO result = fail(tool.getName(),
+                    "该操作涉及重要变更，请确认后再执行。", "confirm-required");
+            // 带上待确认记录 ID，前端/会话据此渲染确认入口
+            result.setConfirmId(pending.getId());
+            result.setStatus(pending.getStatus());
+            result.setExpireAt(pending.getExpireAt());
+            return result;
         }
 
         // ========== 关卡 5：幂等控制 ==========
@@ -490,6 +507,121 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         // 有幂等键走的是「真实执行」，无幂等键同样如此；只有重放才标 idempotent
         result.setSource("MOCK".equalsIgnoreCase(connector.getType()) ? "mock" : "real");
         return result;
+    }
+
+    /**
+     * 人工确认后的执行入口（由 {@link ToolConfirmService} 调用）。
+     *
+     * <p><b>与 {@link #invoke} 的差异</b>：</p>
+     * <ul>
+     *   <li>跳过第 4 关风险确认——人已经同意，本方法只会在确认链路上被调用；</li>
+     *   <li>不插入幂等占位行——待确认记录本身就是审计行，确认时已写入幂等键并抢占执行权，
+     *       再插一条会让一次业务出现两条审计；</li>
+     *   <li>第 1~3 关<b>必须重跑</b>：待确认期间工具可能被删、行业包可能被关、连接器可能被停用，
+     *       不重跑就会拿旧配置出站。</li>
+     * </ul>
+     *
+     * <p>失败直接抛 {@link BusinessException}，由调用方回写 FAILED 终态并留痕。</p>
+     *
+     * @param dto 来自待确认记录 request_json 的快照（已强制 confirmed=true）
+     * @return 执行结果；{@code status} 为 CONFIRMED，终态由调用方回写
+     */
+    public ToolInvokeResultDTO executeAfterConfirm(ToolInvokeDTO dto) {
+        if (dto == null) {
+            throw new BusinessException("工具调用请求不能为空");
+        }
+        // 关卡 1：工具仍存在（确认期间可能被删除/改名）。
+        // 这里只按 toolName 精确查找，绝不回退到 intentBind：待确认参数是给某个具体工具确认的，
+        // 若原工具被删而按意图匹配到另一个工具，等于拿着 A 的授权去执行 B。
+        OpenTool tool = StringUtils.hasText(dto.getToolName())
+                ? this.getOne(new LambdaQueryWrapper<OpenTool>()
+                        .eq(OpenTool::getName, dto.getToolName().trim()).last("limit 1"))
+                : null;
+        if (tool == null) {
+            throw new BusinessException("工具已下线或名称变更，无法执行：" + dto.getToolName());
+        }
+        // 关卡 2：行业包仍启用
+        if (StringUtils.hasText(tool.getPackCode())) {
+            OpenPack pack = packMapper.selectOne(new LambdaQueryWrapper<OpenPack>()
+                    .eq(OpenPack::getCode, tool.getPackCode()).last("limit 1"));
+            if (pack == null || pack.getEnabled() == null || pack.getEnabled() != 1) {
+                throw new BusinessException("该功能所属行业包未启用");
+            }
+        }
+        // 关卡 3：连接器仍可用
+        OpenConnector connector = connectorMapper.selectById(tool.getConnectorId());
+        if (connector == null) {
+            throw new BusinessException("工具绑定的连接器不存在 tool=" + tool.getName());
+        }
+        if (connector.getEnabled() == null || connector.getEnabled() != 1) {
+            throw new BusinessException("工具绑定的连接器已停用 tool=" + tool.getName());
+        }
+
+        boolean mock = "MOCK".equalsIgnoreCase(connector.getType());
+        String output = mock ? invokeMock(tool, dto) : invokeRest(tool, connector, dto);
+
+        ToolInvokeResultDTO result = new ToolInvokeResultDTO();
+        result.setSuccess(true);
+        result.setToolName(tool.getName());
+        result.setOutput(output);
+        result.setSource(mock ? "mock" : "real");
+        result.setStatus(ToolInvokeStatus.CONFIRMED.name());
+        return result;
+    }
+
+    /**
+     * 查询或创建待确认记录。
+     *
+     * <p><b>为什么要复用</b>：AI 每轮重问、用户刷新页面都会再次触发 invoke，
+     * 每次都插一条会让坐席台堆满同一条待办。因此按「租户 + 会话 + 工具 + 参数快照」复用
+     * 未过期的 CONFIRMING 记录；已过期的先置 EXPIRED，再建新的。</p>
+     *
+     * <p>去重是尽力而为：同参数并发首次进入仍可能各插一条（无唯一索引），
+     * 但确认/拒绝都带状态条件更新，不会造成重复执行。</p>
+     */
+    private OpenToolInvoke findOrCreatePending(OpenTool tool, ToolInvokeDTO dto) {
+        String tenantCode = JwtContext.resolveTenantCode(dto.getTenantCode());
+        String snapshot = ToolInvokeSnapshot.of(dto);
+        LocalDateTime now = LocalDateTime.now();
+
+        OpenToolInvoke existing = invokeMapper.selectOne(new LambdaQueryWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getTenantCode, tenantCode)
+                .eq(OpenToolInvoke::getToolName, tool.getName())
+                .eq(OpenToolInvoke::getStatus, ToolInvokeStatus.CONFIRMING.name())
+                .eq(OpenToolInvoke::getRequestJson, snapshot)
+                .eq(StringUtils.hasText(dto.getSessionId()), OpenToolInvoke::getSessionId, dto.getSessionId())
+                .isNull(!StringUtils.hasText(dto.getSessionId()), OpenToolInvoke::getSessionId)
+                .orderByDesc(OpenToolInvoke::getId)
+                .last("limit 1"));
+        if (existing != null) {
+            if (existing.getExpireAt() == null || existing.getExpireAt().isAfter(now)) {
+                return existing;
+            }
+            // 已过期：条件更新为 EXPIRED，避免待确认列表继续显示旧记录
+            invokeMapper.update(null, new LambdaUpdateWrapper<OpenToolInvoke>()
+                    .eq(OpenToolInvoke::getId, existing.getId())
+                    .eq(OpenToolInvoke::getStatus, ToolInvokeStatus.CONFIRMING.name())
+                    .set(OpenToolInvoke::getStatus, ToolInvokeStatus.EXPIRED.name())
+                    .set(OpenToolInvoke::getUpdateTime, now));
+        }
+
+        OpenToolInvoke pending = new OpenToolInvoke();
+        pending.setToolName(tool.getName());
+        pending.setSessionId(dto.getSessionId());
+        pending.setTenantCode(tenantCode);
+        pending.setStatus(ToolInvokeStatus.CONFIRMING.name());
+        pending.setRisk(tool.getRisk());
+        pending.setRequestedBy(recorder.resolveRequestedBy(dto));
+        // 参数快照：确认页展示 + 下次同请求去重（字段按字典序，保证可复现）
+        pending.setRequestJson(snapshot);
+        // 未确认绝不占用幂等键，故此处不写 idempotencyKey
+        pending.setSuccess(0);
+        int expireMinutes = openToolProperties.getConfirmExpireMinutes();
+        pending.setExpireAt(expireMinutes > 0 ? now.plusMinutes(expireMinutes) : null);
+        invokeMapper.insert(pending);
+        log.info("已挂起高危工具调用待确认 tool={} sessionId={} confirmId={} expireAt={}",
+                tool.getName(), dto.getSessionId(), pending.getId(), pending.getExpireAt());
+        return pending;
     }
 
     /**

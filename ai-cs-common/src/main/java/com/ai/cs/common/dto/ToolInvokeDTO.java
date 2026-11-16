@@ -28,4 +28,9 @@ public class ToolInvokeDTO {
     private String idempotencyKey;
     /** 租户编码，用于连接器出站白名单校验 */
     private String tenantCode;
+    /**
+     * 发起方标识（可选）：坐席用户名 / 访客 ref / ai。
+     * 未传时服务端按「JWT 用户名 → session:会话ID → ai」兜底，用于待确认列表展示与取消归属判断。
+     */
+    private String requestedBy;
 }

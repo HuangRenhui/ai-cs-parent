@@ -2,8 +2,10 @@ package com.ai.cs.open.service;
 
 import com.ai.cs.open.entity.OpenTool;
 import com.ai.cs.open.entity.OpenToolInvoke;
+import com.ai.cs.open.enums.ToolInvokeStatus;
 import com.ai.cs.open.mapper.OpenToolInvokeMapper;
 import com.ai.cs.common.dto.ToolInvokeDTO;
+import com.ai.cs.common.security.JwtContext;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
@@ -54,6 +56,15 @@ public class ConnectorInvokeRecorder {
     }
 
     /**
+     * 按幂等键查记录（不限定成功状态），用于确认时判断「同键是否正在执行」。
+     */
+    public OpenToolInvoke findByIdempotencyKey(String idempotencyKey) {
+        return openToolInvokeMapper.selectOne(new LambdaQueryWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getIdempotencyKey, idempotencyKey)
+                .last("limit 1"));
+    }
+
+    /**
      * 插入幂等占位行抢占执行权（独立事务）。
      *
      * <p><b>为什么靠唯一索引而不是「先查后插」</b>：并发下两个请求都会查到空，
@@ -62,6 +73,10 @@ public class ConnectorInvokeRecorder {
      * <p>操作依赖 {@code cs_open_tool_invoke.idempotency_key} 上的唯一索引。
      * 该列允许 NULL 且 MySQL 下多个 NULL 不冲突，正好满足「未传幂等键不参与去重」。</p>
      *
+     * <p><b>status 为什么写 CONFIRMED</b>：能走到这里说明第 4 关已放行
+     * （read 级无需确认，或调用方显式 confirmed=true），记录「已获准执行」，
+     * 不能落 DDL 默认值 CONFIRMING——否则会被待确认列表误当成待办。</p>
+     *
      * @return 插入成功的占位记录；撞唯一索引（已被并发占用）返回 null
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
@@ -69,6 +84,10 @@ public class ConnectorInvokeRecorder {
         OpenToolInvoke invoke = new OpenToolInvoke();
         invoke.setToolName(tool.getName());
         invoke.setSessionId(dto.getSessionId());
+        invoke.setTenantCode(JwtContext.resolveTenantCode(dto.getTenantCode()));
+        invoke.setStatus(ToolInvokeStatus.CONFIRMED.name());
+        invoke.setRisk(tool.getRisk());
+        invoke.setRequestedBy(resolveRequestedBy(dto));
         invoke.setIdempotencyKey(idempotencyKey);
         invoke.setRequestJson(JSON.toJSONString(dto));
         // 0 表示「处理中」：占位行存在的意义就是占住幂等键，尚未有结果
@@ -101,16 +120,24 @@ public class ConnectorInvokeRecorder {
         String payload = StringUtils.hasText(failReason)
                 ? failReason
                 : (output == null ? "" : output);
+        String status = success == 1
+                ? ToolInvokeStatus.SUCCEEDED.name()
+                : ToolInvokeStatus.FAILED.name();
         try {
             if (placeholder != null && placeholder.getId() != null) {
                 placeholder.setResponseJson(payload);
                 placeholder.setSuccess(success);
+                placeholder.setStatus(status);
                 openToolInvokeMapper.updateById(placeholder);
                 return;
             }
             OpenToolInvoke record = new OpenToolInvoke();
             record.setToolName(tool.getName());
             record.setSessionId(dto.getSessionId());
+            record.setTenantCode(JwtContext.resolveTenantCode(dto.getTenantCode()));
+            record.setRisk(tool.getRisk());
+            record.setRequestedBy(resolveRequestedBy(dto));
+            record.setStatus(status);
             record.setRequestJson(JSON.toJSONString(dto));
             record.setResponseJson(payload);
             record.setSuccess(success);
@@ -120,4 +147,22 @@ public class ConnectorInvokeRecorder {
             log.error("工具调用记录落库失败 tool={} sessionId={}", tool.getName(), dto.getSessionId(), e);
         }
     }
+
+    /**
+     * 发起方兜底：显式传入优先，其次 JWT 用户名，最后按会话 / AI 标记。
+     * <p>供待确认记录挂起时复用，保证同一请求两种落库路径的发起方口径一致。</p>
+     */
+    public String resolveRequestedBy(ToolInvokeDTO dto) {
+        if (dto != null && StringUtils.hasText(dto.getRequestedBy())) {
+            return dto.getRequestedBy().trim();
+        }
+        String username = JwtContext.getCurrentUsername();
+        if (StringUtils.hasText(username)) {
+            return username;
+        }
+        return dto != null && StringUtils.hasText(dto.getSessionId())
+                ? "session:" + dto.getSessionId()
+                : "ai";
+    }
+
 }
