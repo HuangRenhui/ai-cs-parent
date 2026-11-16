@@ -5,6 +5,7 @@ import com.ai.cs.base.entity.User;
 import com.ai.cs.base.service.UserService;
 import com.ai.cs.common.result.Result;
 import com.ai.cs.common.security.RequirePermission;
+import com.ai.cs.common.util.ValidateUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.bind.annotation.*;
@@ -47,7 +48,8 @@ public class UserController {
     @GetMapping("/page")
     public Result<IPage<UserVO>> page(@RequestParam(defaultValue = "1") int pageNum,
                                       @RequestParam(defaultValue = "10") int pageSize) {
-        IPage<UserVO> page = userService.page(new Page<>(pageNum, pageSize)).convert(UserVO::from);
+        IPage<UserVO> page = userService.page(new Page<>(ValidateUtil.pageNum(pageNum),
+                ValidateUtil.pageSize(pageSize))).convert(UserVO::from);
         return Result.success(page);
     }
 

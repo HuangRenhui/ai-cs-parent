@@ -7,6 +7,7 @@ import com.ai.cs.common.dto.AccessAnalysisDTO;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.common.security.SuperAdminAccess;
+import com.ai.cs.common.util.ValidateUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -38,6 +39,9 @@ public class OperationLogService extends ServiceImpl<OperationLogMapper, Operati
      */
     public Page<OperationLog> queryPage(int pageNum, int pageSize, Long userId, String module,
                                         String username, String ip, LocalDateTime beginTime, LocalDateTime endTime) {
+        // 分页参数兜底：pageSize<1 时 MyBatis-Plus 会拼出非法 LIMIT，过大则可能拉全表
+        pageNum = ValidateUtil.pageNum(pageNum);
+        pageSize = ValidateUtil.pageSize(pageSize);
         boolean superAdmin = currentUserIsSuperAdmin();
         LocalDateTime now = LocalDateTime.now();
         // 结束时间整段落在一个月窗口之前：直接空页，避免把历史记录漏出去

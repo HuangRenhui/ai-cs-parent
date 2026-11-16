@@ -3,6 +3,7 @@ package com.ai.cs.base.controller;
 import com.ai.cs.base.entity.IntentConfig;
 import com.ai.cs.base.service.IntentConfigService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
@@ -32,13 +33,9 @@ public class IntentConfigController {
      */
     @GetMapping("/list")
     public Result<List<IntentConfig>> list(@RequestParam(required = false) String tenantCode) {
-        // TODO(租户令牌优先) 现在直接吃请求参数：绑定租户的坐席令牌改一下 URL 参数就能读别的租户意图（水平越权）。
-        //  实现三步：
-        //   1) import com.ai.cs.common.security.JwtContext;
-        //   2) String tenant = JwtContext.resolveTenantCode(tenantCode);
-        //      规则：令牌带租户 → 一律以令牌为准（忽略入参）；令牌未绑定租户（平台级账号）→ 用入参；都为空 → default
-        //   3) 把 tenant 传给 service（替换下面的 tenantCode）
-        return Result.success(intentConfigService.getEnabledIntents(tenantCode));
+        // 令牌带租户 → 一律以令牌为准（忽略入参）；平台级账号 → 用入参；都为空 → default
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        return Result.success(intentConfigService.getEnabledIntents(tenant));
     }
 
     /**
@@ -49,9 +46,9 @@ public class IntentConfigController {
      */
     @GetMapping("/listAll")
     public Result<List<IntentConfig>> listAll(@RequestParam(required = false) String tenantCode) {
-        // TODO(租户令牌优先) 同 list：管理页也要按令牌租户收敛，否则能翻到别的租户（含禁用）的意图配置。
-        //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode); 后把 tenant 传给 service。
-        return Result.success(intentConfigService.listByTenant(tenantCode));
+        // 同 list：管理页也按令牌租户收敛，避免翻到别的租户（含禁用）的意图配置
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        return Result.success(intentConfigService.listByTenant(tenant));
     }
 
     /**

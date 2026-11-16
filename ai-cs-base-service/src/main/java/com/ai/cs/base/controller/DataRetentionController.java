@@ -3,6 +3,7 @@ package com.ai.cs.base.controller;
 import com.ai.cs.base.entity.DataRetention;
 import com.ai.cs.base.service.DataRetentionService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,10 +33,9 @@ public class DataRetentionController {
     @GetMapping("/list")
     public Result<List<DataRetention>> list(@RequestParam(required = false) String tenantCode) {
         try {
-            // TODO(租户令牌优先) 保留策略属租户级配置，同样不能由请求参数决定读谁的数据。
-            //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode);（import com.ai.cs.common.security.JwtContext）
-            //  然后把 listByTenant(tenantCode) 换成 listByTenant(tenant)。
-            List<DataRetention> list = dataRetentionService.listByTenant(tenantCode);
+            // 保留策略属租户级配置：令牌带租户时忽略入参，平台级账号才用入参
+            String tenant = JwtContext.resolveTenantCode(tenantCode);
+            List<DataRetention> list = dataRetentionService.listByTenant(tenant);
             return Result.success(list);
         } catch (Exception e) {
             log.error("查询数据保留策略列表失败", e);
@@ -54,9 +54,9 @@ public class DataRetentionController {
     public Result<DataRetention> get(@RequestParam(required = false) String tenantCode,
                                      @RequestParam String dataType) {
         try {
-            // TODO(租户令牌优先) 同 list：String tenant = JwtContext.resolveTenantCode(tenantCode);
-            //  再 getDataRetention(tenant, dataType)；否则可跨租户读到别人的保留/匿名化策略。
-            DataRetention retention = dataRetentionService.getDataRetention(tenantCode, dataType);
+            // 同 list：令牌租户优先，避免读到别的租户的保留/匿名化策略
+            String tenant = JwtContext.resolveTenantCode(tenantCode);
+            DataRetention retention = dataRetentionService.getDataRetention(tenant, dataType);
             return Result.success(retention);
         } catch (Exception e) {
             log.error("查询数据保留策略失败", e);

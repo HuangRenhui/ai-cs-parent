@@ -7,6 +7,7 @@ import com.ai.cs.common.dto.ChatDTO;
 import com.ai.cs.common.dto.ChatReplyDTO;
 import com.ai.cs.common.llm.TenantQuotaService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import org.springframework.util.StringUtils;
@@ -184,31 +185,49 @@ public class AiChatController {
     /** 租户配额-查询当前用量 */
     @GetMapping("/quota/{tenantCode}")
     public Result<Map<String, Object>> getTenantQuota(@PathVariable String tenantCode) {
-        // TODO(租户令牌优先) 路径参数同样可被改写：绑定租户的坐席令牌把 URL 里的租户换成别人，就能查别家用量。
-        //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode);（import com.ai.cs.common.security.JwtContext）
-        //  然后把下面三处 tenantCode 全部换成 tenant。
-        long usage = tenantQuotaService.getCurrentUsage(tenantCode);
-        long limit = tenantQuotaService.getQuotaLimit(tenantCode);
+        // 令牌带租户时一律以令牌为准，路径参数无法读到别家用量；平台级账号才用路径参数
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        long usage = tenantQuotaService.getCurrentUsage(tenant);
+        long limit = tenantQuotaService.getQuotaLimit(tenant);
         Map<String, Object> data = Map.of(
                 "usage", usage,
                 "limit", limit,
-                "exceeded", tenantQuotaService.isQuotaExceeded(tenantCode)
+                "exceeded", tenantQuotaService.isQuotaExceeded(tenant)
         );
         return Result.success(data);
     }
 
-    /** 租户配额-设置上限 */
+    /** 租户配额-设置上限（0 表示不限） */
     @PostMapping("/quota/{tenantCode}")
     public Result<String> setTenantQuota(@PathVariable String tenantCode, @RequestBody Map<String, Object> params) {
-        // TODO(租户令牌优先) 这是**写操作**，口径要比查询更严，建议两步：
-        //   1) String tenant = JwtContext.resolveTenantCodeOrNull(tenantCode);
-        //      —— 令牌带租户时直接拿令牌租户；令牌未绑定（平台级运营账号）才用路径参数，都没有则返回 null；
-        //   2) 若 tenant == null，或（令牌租户非空且与路径参数不一致）→ 直接拒绝：
-        //      return Result.fail(403, "无权修改其他租户的配额");
-        //   3) 校验通过后用 tenant 调 setQuota。
-        //  为什么查询只"以令牌为准"、写操作却要额外拒绝：改错租户的配额会影响生产限流，宁可报错也不要静默改错人。
-        long limit = Long.parseLong(String.valueOf(params.getOrDefault("limit", "0")));
-        tenantQuotaService.setQuota(tenantCode, limit);
+        // 写操作比查询更严：令牌带租户时一律以令牌为准，路径参数指向其他租户直接拒绝，
+        // 避免绑定租户的坐席改 URL 就能重置别家的限流配额。
+        String tokenTenant = JwtContext.getCurrentTenantCode();
+        String pathTenant = StringUtils.hasText(tenantCode) ? tenantCode.trim() : null;
+        if (StringUtils.hasText(tokenTenant) && pathTenant != null && !tokenTenant.trim().equals(pathTenant)) {
+            return Result.fail(403, "无权修改其他租户的配额");
+        }
+        String tenant = JwtContext.resolveTenantCodeOrNull(pathTenant);
+        if (!StringUtils.hasText(tenant)) {
+            return Result.fail(400, "租户标识不能为空");
+        }
+
+        Object rawLimit = params == null ? null : params.get("limit");
+        if (rawLimit == null) {
+            return Result.fail(400, "limit 不能为空");
+        }
+        long limit;
+        try {
+            limit = Long.parseLong(String.valueOf(rawLimit).trim());
+        } catch (NumberFormatException e) {
+            // 原本直接抛 NumberFormatException 会变成 500，这里转成明确的 400
+            return Result.fail(400, "limit 必须为整数");
+        }
+        if (limit < 0) {
+            return Result.fail(400, "limit 不能为负数（0 表示不限）");
+        }
+
+        tenantQuotaService.setQuota(tenant, limit);
         return Result.success("配额已设置");
     }
 }

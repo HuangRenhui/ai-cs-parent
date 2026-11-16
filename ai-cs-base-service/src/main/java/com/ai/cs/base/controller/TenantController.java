@@ -2,6 +2,7 @@ package com.ai.cs.base.controller;
 
 import com.ai.cs.common.result.PageResult;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.util.ValidateUtil;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -57,7 +58,9 @@ public class TenantController {
                 rows.add(m);
             }
         }
-        int from = Math.max(0, (pageNum - 1) * pageSize);
+        pageNum = ValidateUtil.pageNum(pageNum);
+        pageSize = ValidateUtil.pageSize(pageSize);
+        int from = (pageNum - 1) * pageSize;
         int to = Math.min(rows.size(), from + pageSize);
         List<Map<String, Object>> records = from >= rows.size() ? List.of() : rows.subList(from, to);
         return Result.success(PageResult.of(records, rows.size(), pageNum, pageSize));

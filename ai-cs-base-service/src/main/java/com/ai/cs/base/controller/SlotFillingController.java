@@ -3,6 +3,7 @@ package com.ai.cs.base.controller;
 import com.ai.cs.base.entity.SlotFilling;
 import com.ai.cs.base.service.SlotFillingService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
@@ -34,12 +35,11 @@ public class SlotFillingController {
     @GetMapping("/list")
     public Result<List<SlotFilling>> list(@RequestParam(required = false) String tenantCode,
                                           @RequestParam(required = false) String intentCode) {
-        // TODO(租户令牌优先) 与 IntentConfigController 同一口径：绑定租户的令牌必须忽略入参 tenantCode。
-        //  实现：String tenant = JwtContext.resolveTenantCode(tenantCode);（需 import com.ai.cs.common.security.JwtContext）
-        //  然后把下面两处 service 调用里的 tenantCode 换成 tenant。
+        // 与 IntentConfigController 同一口径：绑定租户的令牌必须忽略入参 tenantCode
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
         List<SlotFilling> slots = (intentCode != null && !intentCode.isEmpty())
-                ? slotFillingService.getSlotsByIntent(tenantCode, intentCode)
-                : slotFillingService.listByTenant(tenantCode);
+                ? slotFillingService.getSlotsByIntent(tenant, intentCode)
+                : slotFillingService.listByTenant(tenant);
         return Result.success(slots);
     }
 
@@ -51,8 +51,9 @@ public class SlotFillingController {
      */
     @GetMapping("/listAll")
     public Result<List<SlotFilling>> listAll(@RequestParam(required = false) String tenantCode) {
-        // TODO(租户令牌优先) 同 list：改为 String tenant = JwtContext.resolveTenantCode(tenantCode); 再传 service。
-        return Result.success(slotFillingService.listByTenant(tenantCode));
+        // 同 list：管理页也按令牌租户收敛
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        return Result.success(slotFillingService.listByTenant(tenant));
     }
 
     /**

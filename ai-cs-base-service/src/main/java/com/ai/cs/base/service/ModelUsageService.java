@@ -2,6 +2,7 @@ package com.ai.cs.base.service;
 
 import com.ai.cs.base.entity.ModelUsageRecord;
 import com.ai.cs.base.mapper.ModelUsageRecordMapper;
+import com.ai.cs.common.util.ValidateUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -30,6 +31,9 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
      */
     public Page<ModelUsageRecord> page(int page, int size, Long modelId, String modelType,
                                        Integer success, String startTime, String endTime) {
+        // 分页参数兜底：负数/零会导致非法 LIMIT，超大 pageSize 会拖垮查询
+        page = ValidateUtil.pageNum(page);
+        size = ValidateUtil.pageSize(size);
         LambdaQueryWrapper<ModelUsageRecord> wrapper = new LambdaQueryWrapper<>();
         if (modelId != null) {
             wrapper.eq(ModelUsageRecord::getModelId, modelId);
