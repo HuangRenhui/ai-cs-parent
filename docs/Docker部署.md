@@ -3,7 +3,7 @@
 > ⚠️ **部分实现**：Compose / K8s 编排**有效**；FAQ RAG 已端到端可用（2026-09-22），
 > 因此 **`milvus` 容器必须启动**（它依赖的 `etcd` / `minio` 是 **Milvus 自身的内部存储**，与应用的对象存储无关，
 > 不启动 Milvus 起不来）；不启动则 knowledge 检索三态降级为「服务不可用」。
-> `ai-cs-job` 的定时任务仍多为占位（对账/统计等空跑），不影响其它服务。
+> `ai-cs-job` 的定时任务除 `ToolConfirmExpireTask`（每分钟清理过期确认单）外仍多为占位（对账/统计等空跑），不影响其它服务。
 > 见 [后端未完成清单 §2.1.1](后端未完成清单.md#211-占位方法清单按模块)。
 
 容器化部署。应用端口：8080 网关、8081 WS、8082 agent、8083 knowledge、8084 base、8085 workorder、**8086 open**、**8087 ops**、**8088 job**。MinIO 控制台 **9001**（对象存储，与基础服务端口无关）。
@@ -15,7 +15,7 @@
 - **文档版本**: v1.0
 - **创建日期**: 2026-06-20
 - **维护者**: huangrenhui
-- **最后更新**: 2026-10-13
+- **最后更新**: 2026-11-25
 - **状态**: 现行
 
 ---
@@ -95,27 +95,24 @@ docker images | grep ai-cs
 
 ### 2. 前端服务镜像
 
-**ai-cs-frontend 的 Dockerfile**
+**ai-cs-frontend 的 Dockerfile**（实际文件，注意 `BUILD_SCRIPT` 默认是 `build`=演示 mock）
 
 ```dockerfile
 # 构建阶段
-FROM node:18-alpine AS builder
-
+FROM node:18-alpine AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
-
+COPY package.json package-lock.json* ./
+RUN npm ci --registry=https://registry.npmmirror.com
 COPY . .
-RUN npm run build
+# 默认构建保留演示 mock；正式镜像请传 --build-arg BUILD_SCRIPT=build:release
+ARG BUILD_SCRIPT=build
+RUN npm run ${BUILD_SCRIPT}
 
 # 生产阶段
-FROM nginx:alpine
-
-COPY --from=builder /app/dist /usr/share/nginx/html
+FROM nginx:1.25-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
@@ -123,8 +120,19 @@ CMD ["nginx", "-g", "daemon off;"]
 
 ```bash
 cd ai-cs-frontend
-docker build -t ai-cs-frontend:latest .
+# 正式镜像（关闭 mock，读 .env.release 的 VITE_USE_REAL_API=true）
+docker build --build-arg BUILD_SCRIPT=build:release -t ai-cs-frontend:latest .
+# 演示镜像（默认 build，保留本地假数据）
+docker build -t ai-cs-frontend:demo .
 ```
+
+> ⚠️ **不要漏 `--build-arg BUILD_SCRIPT=build:release`**：不带参数构建出来的是演示镜像，上线后页面仍显示假数据。
+
+> **网关与后端密钥**：`SPRING_PROFILES_ACTIVE=docker` 属于严格模式，compose 中必须为网关及所有下游注入
+> `JWT_SECRET`、`INTERNAL_API_TOKEN`，并为 base-service / open 注入 `AI_MODEL_SECRET`，
+> 否则容器会按设计启动失败。
+> 下文 compose 片段为**结构示例**，`environment` 只列了数据源/Redis；复制时请为每个服务补上上述变量
+> （推荐统一用 `env_file: .env`，或 `x-common-env` 锚点复用）。
 
 ### 3. 镜像标签管理
 
@@ -159,7 +167,7 @@ services:
     container_name: ai-cs-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: ai_cs
+      MYSQL_DATABASE: ai_customer_service
       MYSQL_USER: ai_cs_user
       MYSQL_PASSWORD: ai_cs_password
     ports:
@@ -238,7 +246,7 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       SPRING_REDIS_HOST: redis
     networks:
       - ai-cs-network
@@ -257,7 +265,7 @@ services:
       - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       SPRING_REDIS_HOST: redis
     networks:
       - ai-cs-network
@@ -306,7 +314,7 @@ services:
       - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     networks:
       - ai-cs-network
     depends_on:
@@ -336,7 +344,7 @@ services:
       - "8086:8086"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     networks:
       - ai-cs-network
     depends_on:
@@ -363,7 +371,7 @@ services:
       - "8088:8088"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       SPRING_REDIS_HOST: redis
     networks:
       - ai-cs-network
@@ -453,7 +461,7 @@ docker compose restart gateway
 
 ## Kubernetes 部署
 
-可选。单机 / 内网 POC 与 [功能清单 §17-B](功能清单.md) **不依赖** K8s。示例清单需自行对照现行端口 **8080–8088** 与库名 `ai_customer_service`；未经验证的 yaml 不要当生产清单。WebSocket 多副本前须先会话同步（功能清单 §16.2 / §18.11）。
+可选。单机 / 内网 POC 与 [功能清单 §17-B](功能清单.md) **不依赖** K8s。示例清单需自行对照现行端口 **8080–8088** 与库名 `ai_customer_service`；未经验证的 yaml 不要当生产清单。WebSocket 跨实例推送已接（Redis `ws:push`），多副本可用，建议负载均衡配粘滞会话。
 
 ### 1. 创建命名空间
 
@@ -478,7 +486,7 @@ data:
   application.yml: |
     spring:
       datasource:
-        url: jdbc:mysql://mysql:3306/ai_cs?useUnicode=true&characterEncoding=utf8
+        url: jdbc:mysql://mysql:3306/ai_customer_service?useUnicode=true&characterEncoding=utf8
       redis:
         host: redis
     milvus:
@@ -573,7 +581,7 @@ kubectl logs -f deployment/gateway -n ai-cs
 - **多实例**: 无状态 HTTP 服务可加副本；`ai-cs-websocket` 连接在进程内，先 Redis/总线再扩副本。
 - **负载均衡**: 生产用 Nginx / 云 LB 打到网关；示例 compose 是单副本。
 - **备份**: 库与对象存储 RPO/RTO 写进合同；本文不提供现成备份脚本。
-- **灰度**: 无现成流水线；大改（如 Netty）按功能清单第 20 节评估，不要在未做会话同步时对 WS 灰度多副本。
+- **灰度**: 无现成流水线；大改（如 Netty）按功能清单第 20 节评估。WS 跨实例推送已接，可灰度多副本，建议负载均衡配粘滞会话。
 - **open / ops / job**: 已写入本文 compose 示例；生产副本数按压测定。
 
 ---
@@ -654,10 +662,10 @@ deploy:
 
 ```bash
 # 备份 MySQL 数据
-docker exec ai-cs-mysql mysqldump -u root -p ai_cs > backup.sql
+docker exec ai-cs-mysql mysqldump -u root -p ai_customer_service > backup.sql
 
 # 恢复数据
-docker exec -i ai-cs-mysql mysql -u root -p ai_cs < backup.sql
+docker exec -i ai-cs-mysql mysql -u root -p ai_customer_service < backup.sql
 ```
 
 ---
