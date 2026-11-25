@@ -64,3 +64,7 @@ mvnw.cmd
 
 ### Uploads ###
 uploads/
+
+### 仅本地保存、不提交的文档 ###
+docs/后端未完成清单.md
+docs/生产化差距清单.md
