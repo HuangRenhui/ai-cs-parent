@@ -3,10 +3,19 @@
 > ✅ **已实现**：§2/§6/§8 描述的 LLM 底座——`ModelRouter`（注册表链路 + 故障转移）、`ModelCircuitBreaker`（熔断/冷却/半开探测）、
 > `ModelUsageRecorder`（Redis 流用量 + 当日计数 + 80% 配额预警）、`DashscopeModelClient`（yml 兜底链路）、
 > `OpenAiCompatClient`（OpenAI 兼容协议）与 `AiModelConfigService.testConnect` / `publishRegistry`（真实探测 + Redis 广播）均已实现。
-> 仍为占位的是：`ai-cs-job` 的 `ModelUsageConsumeTask`（用量流消费落库）与 agent/knowledge 侧的上层消费方（意图/填槽/工具链/RAG 等），
+> 仍为占位的是：`ai-cs-job` 的 `ModelUsageConsumeTask`（用量流消费落库）。
+> agent 侧意图识别、咨询 RAG、Function Call 选工具与 knowledge 侧 `RagSearchService` 均已接入 `ModelRouter`，
 > 见 [后端未完成清单 §2.1.1](后端未完成清单.md#211-占位方法清单按模块)。
 
 > 目标：支持本地(Ollama)与在线(DashScope/OpenAI兼容/DeepSeek)模型自由切换、管理页注册/启停/设为生效、对话选用模型、以及模型故障时的自动切换（故障转移）。
+
+## 📋 文档信息
+
+- **文档版本**: v1.0
+- **创建日期**: 2026-09-17
+- **维护者**: huangrenhui
+- **最后更新**: 2026-11-25
+- **状态**: 现行（底座已实现；`ModelUsageConsumeTask` 仍为占位）
 
 ## 1. 需求
 
@@ -154,11 +163,11 @@
 
 | 文件 | 说明 |
 |------|------|
-| `common/util/SecretCipherUtil` | AES/GCM/NoPadding 加解密工具，密文带 `enc:` 前缀(Base64(iv+密文))；加密幂等、解密失败按明文透传(兼容历史存量) |
+| `common/util/SecretCipherUtil` | AES/GCM/NoPadding 加解密工具，密文带 `enc:` 前缀(Base64(iv+密文))；加密幂等，带 `enc:` 前缀但解密失败时抛异常（避免把密文当明文透传） |
 | `base-service/.../AiModelConfigService` | 落库(save/update)前 `encryptSecret` 加密；`toRoute`/`maskSecret` 改为先解密；`api_key`/`api_secret` 列加宽到 VARCHAR(1000) |
 | `base-service/application.yml` | 新增 `ai.model.secret`(${AI_MODEL_SECRET}) 可选密钥配置 |
 
-- 密钥解析：环境变量 `AI_MODEL_SECRET` → 系统属性 `ai.model.secret` → 内置默认(仅演示/本机)；生产务必注入独立密钥。
+- 密钥解析：环境变量 `AI_MODEL_SECRET` → 系统属性 `ai.model.secret` → 内置演示密钥（仅 `dev`/`local`/`test`）；生产与空 profile 未注入时拒绝启动。
 - 数据流：MySQL 存密文 → Redis 广播/测试连接经 `toRoute` 解密为明文 → 消费端正常调用；对外查询经 `maskSecret` 先解密再脱敏(4+****+2)。
 - 密钥一致性：base-service 需与消费端**不共享**加密密钥（消费端只收明文路由，无解密需求），密钥仅在 base-service 落库与读库两端使用。
 
@@ -175,8 +184,8 @@
 | `base-service/entity/AiModelConfig` | 新增 timeoutMs / failThreshold / costPer1kIn / costPer1kOut |
 | `base-service/entity/ModelUsageRecord` + Service/Mapper | 用量落库与查询 |
 | `base-service/controller/AiModelConfigController` | 新增 `/usage/page`、`/usage/summary`、`/usage/recent-fail` |
-| `job/task/ModelUsageConsumeTask` | 消费 Redis 流落库，近 5 分钟失败超阈值输出告警日志 |
-| `ops/OpsAlertStore` | 接入模型失败指标，生成「模型连续失败」告警事件 |
+| `job/task/ModelUsageConsumeTask` | 消费 Redis 流落库，近 5 分钟失败超阈值输出告警日志（**当前仍为占位**，见 §8.12 说明） |
+| `ops/OpsAlertStore` | 接入模型失败指标，生成「模型连续失败」告警事件（**当前仍为占位**） |
 | `frontend/AiModelPage.vue` | 注册表单新增超时/熔断/单价；新增「用量统计」页签 |
 
 - 表结构：`cs_ai_model`（含 `timeout_ms`、`fail_threshold`、`cost_per_1k_in`、`cost_per_1k_out`）与 `cs_model_usage` 均已在 `docs/database/init.sql` 中定义。已有库自行 `ALTER TABLE`。
@@ -254,3 +263,14 @@ ModelRouter.chat(messages, sessionId)
 | `ai:model:usage:stream` | Stream | 用量事件（字段 event=JSON、ts），由 ai-cs-job 消费落库（**待实现**） |
 | `ai:model:usage:daily:{id}:{yyyyMMdd}` | Hash | 当日 tokens/calls/costMicro 计数 |
 | `ai:model:usage:warn:{id}:{yyyyMMdd}` | String | 80% 配额预警当日去重 |
+
+---
+
+## 📚 相关文档
+
+- [系统架构](系统架构.md)
+- [模块说明](模块说明.md)
+- [配置说明](配置说明.md)
+- [接口说明](接口说明.md)
+- [后端未完成清单](后端未完成清单.md)
+- [生产化差距清单](生产化差距清单.md)
