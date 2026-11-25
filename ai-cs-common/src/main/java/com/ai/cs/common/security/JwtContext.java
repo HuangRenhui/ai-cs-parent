@@ -33,6 +33,8 @@ public class JwtContext {
     private static final ThreadLocal<String> TENANT_CODE = new ThreadLocal<>();
     private static final ThreadLocal<List<String>> PERMISSIONS = new ThreadLocal<>();
     private static final ThreadLocal<List<String>> ROLES = new ThreadLocal<>();
+    /** 令牌类型：staff / visitor，用于区分坐席与匿名访客的身份边界 */
+    private static final ThreadLocal<String> TOKEN_TYPE = new ThreadLocal<>();
 
     /** 默认租户：所有租户相关字段为空时的兜底值，避免拼出非法集合名或查全表 */
     public static final String DEFAULT_TENANT = "default";
@@ -68,6 +70,23 @@ public class JwtContext {
     /** 写入当前用户角色列表 */
     public static void setRoles(List<String> roles) {
         ROLES.set(roles);
+    }
+
+    /** 写入令牌类型（staff/visitor）；空白值忽略 */
+    public static void setTokenType(String tokenType) {
+        if (StringUtils.hasText(tokenType)) {
+            TOKEN_TYPE.set(tokenType.trim());
+        }
+    }
+
+    /** 当前令牌类型；未登录返回 null */
+    public static String getTokenType() {
+        return TOKEN_TYPE.get();
+    }
+
+    /** 当前请求是否为匿名访客令牌 */
+    public static boolean isVisitor() {
+        return JwtUtil.TYP_VISITOR.equals(TOKEN_TYPE.get());
     }
 
     /** 当前用户ID，未登录返回 null */
@@ -143,6 +162,7 @@ public class JwtContext {
         TENANT_CODE.remove();
         PERMISSIONS.remove();
         ROLES.remove();
+        TOKEN_TYPE.remove();
     }
 
     /**
@@ -152,21 +172,22 @@ public class JwtContext {
      */
     public static boolean setFromRequest(HttpServletRequest request) {
         String token = extractToken(request);
-        if (token == null) {
-            return false;
-        }
         Claims claims = JwtUtil.parseToken(token);
         if (claims == null) {
             return false;
         }
-        // subject 即 userId（生成 token 时的约定）
-        Long userId = Long.parseLong(claims.getSubject());
-        String username = claims.get("username", String.class);
-        setCurrentUser(userId, username);
+        // subject 即 userId（生成 token 时的约定）；非数字说明不是本系统签发的有效身份
+        Long userId = JwtUtil.getUserId(claims);
+        if (userId == null) {
+            log.warn("令牌 subject 不是合法用户ID，按无效令牌处理");
+            return false;
+        }
+        setCurrentUser(userId, JwtUtil.getUsername(claims));
         // 授权与租户同样从令牌还原：它们是签发时写死的，客户端无法篡改
-        setTenant(JwtUtil.getTenantCode(token));
-        setRoles(JwtUtil.getRoles(token));
-        setPermissions(JwtUtil.getPermissions(token));
+        setTenant(JwtUtil.getTenantCode(claims));
+        setRoles(JwtUtil.getRoles(claims));
+        setPermissions(JwtUtil.getPermissions(claims));
+        setTokenType(JwtUtil.getTokenType(claims));
         return true;
     }
 
@@ -179,6 +200,11 @@ public class JwtContext {
             // "Bearer " 共 7 个字符
             return bearerToken.substring(7);
         }
-        return request.getParameter("token");
+        // 仅 WebSocket 握手允许 query 传令牌，普通接口退化为 URL 令牌会泄漏到日志与 Referer
+        String path = request.getRequestURI();
+        if (path != null && path.startsWith("/ws/")) {
+            return request.getParameter("token");
+        }
+        return null;
     }
 }

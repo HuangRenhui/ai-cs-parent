@@ -58,6 +58,12 @@ public class ServletJwtAuthFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = request.getRequestURI();
         try {
+            // 归一化前置守卫：含 .. / 反斜杠 / 双斜杠的请求直接拒绝，避免白名单前缀被穿越路径绕过
+            if (isSuspiciousPath(path)) {
+                log.warn("拒绝可疑路径: {} {}", request.getMethod(), path);
+                writeStatus(response, HttpServletResponse.SC_BAD_REQUEST, "非法请求路径");
+                return;
+            }
             if (isWhiteListed(path)) {
                 JwtContext.setFromRequest(request);
                 filterChain.doFilter(request, response);
@@ -100,12 +106,17 @@ public class ServletJwtAuthFilter extends OncePerRequestFilter {
                 // 授权信息：网关从令牌 claim 解出后以逗号分隔透传，@RequirePermission 依赖它
                 JwtContext.setRoles(splitHeader(request.getHeader("X-User-Roles")));
                 JwtContext.setPermissions(splitHeader(request.getHeader("X-User-Perms")));
+                // 令牌类型：区分坐席与匿名访客，业务侧据此做会话归属校验
+                JwtContext.setTokenType(request.getHeader("X-Token-Type"));
                 return;
             } catch (NumberFormatException ignored) {
                 // 非法 userId 时再尝试 JWT
             }
         }
-        JwtContext.setFromRequest(request);
+        // 内部调用（Feign/AI）可能没有用户上下文，此处保持匿名执行；需要身份的接口由 @RequirePermission 拦截
+        if (!JwtContext.setFromRequest(request)) {
+            log.debug("内部调用未携带用户身份: {} {}", request.getMethod(), request.getRequestURI());
+        }
     }
 
     /**
@@ -128,14 +139,39 @@ public class ServletJwtAuthFilter extends OncePerRequestFilter {
         if (path == null) {
             return false;
         }
-        return WHITE_LIST.stream().anyMatch(path::startsWith);
+        // 按路径段匹配：/auth/login 命中 /auth/login/x，但不会命中 /auth/login-evil
+        for (String prefix : WHITE_LIST) {
+            if (path.equals(prefix)) {
+                return true;
+            }
+            String base = prefix.endsWith("/") ? prefix : prefix + "/";
+            if (path.startsWith(base)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 可疑路径：目录穿越、反斜杠、重复斜杠、编码后的点/反斜杠 */
+    private static boolean isSuspiciousPath(String path) {
+        if (path == null || path.isEmpty() || path.indexOf('\0') >= 0) {
+            return true;
+        }
+        String lower = path.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("..") || lower.contains("\\") || lower.contains("//")
+                || lower.contains("%2e") || lower.contains("%5c");
     }
 
     /** 返回 JSON 401，避免默认 HTML 错误页 */
     private static void writeUnauthorized(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        writeStatus(response, HttpServletResponse.SC_UNAUTHORIZED, "未登录或登录已过期");
+    }
+
+    /** 统一 JSON 错误响应 */
+    private static void writeStatus(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{\"code\":401,\"msg\":\"未登录或登录已过期\",\"data\":null}");
+        response.getWriter().write("{\"code\":" + status + ",\"msg\":\"" + message + "\",\"data\":null}");
     }
 }

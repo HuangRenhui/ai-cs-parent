@@ -4,6 +4,7 @@ import com.ai.cs.base.entity.OperationLog;
 import com.ai.cs.base.service.OperationLogService;
 import com.ai.cs.common.dto.AccessAnalysisDTO;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
  */
 @RestController
 @RequestMapping("/system/log")
+@RequirePermission("system:log:list")
 public class LogController {
 
     @Resource

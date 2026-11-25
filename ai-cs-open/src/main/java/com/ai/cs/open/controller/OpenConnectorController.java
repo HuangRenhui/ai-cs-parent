@@ -1,6 +1,7 @@
 package com.ai.cs.open.controller;
 
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.ai.cs.open.entity.OpenConnector;
 import com.ai.cs.open.service.OpenPlatformService;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,6 +21,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/open/connector")
+@RequirePermission("open:view")
 public class OpenConnectorController {
 
     @Resource

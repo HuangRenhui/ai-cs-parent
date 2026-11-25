@@ -2,6 +2,7 @@ package com.ai.cs.base.controller;
 
 import com.ai.cs.common.result.PageResult;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.ai.cs.common.util.ValidateUtil;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +20,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/system/tenant")
+@RequirePermission("system:tenant:list")
 public class TenantController {
 
     /** 演示数据：已开通租户列表 */

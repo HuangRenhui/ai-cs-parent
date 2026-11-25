@@ -5,6 +5,7 @@ import com.ai.cs.base.service.CustomerService;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.result.PageResult;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
@@ -20,6 +21,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/customer")
+@RequirePermission("customer:list")
 public class CustomerController {
 
     @Resource

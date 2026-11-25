@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JWT 工具。密钥优先读 {@code JWT_SECRET} / {@link #configure}，未配置时用内置默认值（仅本机）。
+ * JWT 工具。密钥优先读 {@code JWT_SECRET} / {@link #configure}。
+ *
+ * <p>默认 fail-closed：未配置密钥时拒绝签发/校验；仅 dev/local/test 由启动类显式打开演示密钥回退。</p>
  */
 @Slf4j
 public class JwtUtil {
@@ -38,8 +40,8 @@ public class JwtUtil {
     /** 超管通配权限：持有它即视为具备任意权限（超管兜底，避免权限点未配置时把自己锁死） */
     public static final String WILDCARD_PERMISSION = "*:*:*";
 
-    /** 内置默认密钥：仅为本机/演示兜底，生产必须通过 JWT_SECRET / ai.jwt.secret 覆盖 */
-    static final String DEFAULT_SECRET = "AiCsSystemJwtSecretKey2026ForTokenGenerationAndValidation";
+    /** 内置演示密钥：仅限 dev/local/test 环境兜底，生产与空 profile 必须显式配置 JWT_SECRET */
+    static final String DEV_DEFAULT_SECRET = "AiCsSystemJwtSecretKey2026ForTokenGenerationAndValidation";
 
     /** 员工 token 默认有效期：24 小时 */
     private static final long DEFAULT_EXPIRE = 24 * 60 * 60 * 1000L;
@@ -51,6 +53,11 @@ public class JwtUtil {
     private static volatile String configuredSecret;
     private static volatile long staffExpireMs = DEFAULT_EXPIRE;
     private static volatile long visitorExpireMs = DEFAULT_VISITOR_EXPIRE;
+    /**
+     * 是否允许回退到内置演示密钥。默认关闭（fail-closed），
+     * 由 JwtSettings / GatewayJwtConfig 在 dev/local/test profile 下显式打开。
+     */
+    private static volatile boolean allowDevFallback = false;
 
     /** 工具类禁止实例化 */
     private JwtUtil() {
@@ -61,6 +68,21 @@ public class JwtUtil {
      * 空值/非正值忽略，保留原配置。
      */
     public static void configure(String secret, Long staffExpire, Long visitorExpire) {
+        // 未显式声明环境时按严格模式处理，避免调用方忘了传 devFallback 就拿到演示密钥
+        configure(secret, staffExpire, visitorExpire, false);
+    }
+
+    /**
+     * 注入密钥与有效期，并显式指定是否允许回退到内置演示密钥。
+     *
+     * @param secret           签名密钥；空值表示未配置
+     * @param staffExpire      员工令牌有效期（毫秒）
+     * @param visitorExpire    访客令牌有效期（毫秒）
+     * @param devFallback      是否允许 dev/local/test 环境回退到内置演示密钥；
+     *                         false 时未配置密钥将在首次签名/验签时抛异常
+     */
+    public static void configure(String secret, Long staffExpire, Long visitorExpire, boolean devFallback) {
+        allowDevFallback = devFallback;
         if (StringUtils.hasText(secret)) {
             configuredSecret = secret.trim();
         }
@@ -72,7 +94,18 @@ public class JwtUtil {
         }
     }
 
-    /** 解析密钥：注入值 → 环境变量 JWT_SECRET → 系统属性 ai.jwt.secret → 内置默认 */
+    /**
+     * 判断给定密钥是否为仓库内公开的演示密钥，供启动时拒绝误用。
+     */
+    public static boolean isInsecureSecret(String secret) {
+        return StringUtils.hasText(secret) && DEV_DEFAULT_SECRET.equals(secret.trim());
+    }
+
+    /**
+     * 解析密钥：注入值 → 环境变量 JWT_SECRET → 系统属性 ai.jwt.secret → 内置演示密钥。
+     *
+     * <p>严格模式下不存在「兜底」：未配置时直接抛异常，避免用仓库里公开的默认串给线上签令牌。</p>
+     */
     static String resolveSecret() {
         if (StringUtils.hasText(configuredSecret)) {
             return configuredSecret;
@@ -85,7 +118,10 @@ public class JwtUtil {
         if (StringUtils.hasText(prop)) {
             return prop.trim();
         }
-        return DEFAULT_SECRET;
+        if (allowDevFallback) {
+            return DEV_DEFAULT_SECRET;
+        }
+        throw new IllegalStateException("未配置 JWT_SECRET / ai.jwt.secret，拒绝使用内置默认密钥签发或校验令牌");
     }
 
     /** 构造 HMAC-SHA 签名密钥；不足 32 字节时右侧补零，满足 HS256 最小密钥长度要求 */
@@ -200,25 +236,37 @@ public class JwtUtil {
 
     /** 从 token 取用户ID（subject），无效返回 null */
     public static Long getUserId(String token) {
-        Claims claims = parseToken(token);
+        return getUserId(parseToken(token));
+    }
+
+    /** 从已解析 claims 取用户ID；subject 非数字时按无效身份处理，避免把 NumberFormatException 抛到过滤器 */
+    public static Long getUserId(Claims claims) {
         if (claims == null || claims.getSubject() == null) {
             return null;
         }
-        return Long.parseLong(claims.getSubject());
+        try {
+            return Long.parseLong(claims.getSubject());
+        } catch (NumberFormatException e) {
+            log.warn("JWT subject 不是合法用户ID: {}", claims.getSubject());
+            return null;
+        }
     }
 
     /** 从 token 取用户名，无效返回 null */
     public static String getUsername(String token) {
-        Claims claims = parseToken(token);
-        if (claims == null) {
-            return null;
-        }
-        return claims.get("username", String.class);
+        return getUsername(parseToken(token));
+    }
+
+    public static String getUsername(Claims claims) {
+        return claims == null ? null : claims.get("username", String.class);
     }
 
     /** 从 token 取类型(staff/visitor)；旧 token 无 typ 字段时按 staff 处理 */
     public static String getTokenType(String token) {
-        Claims claims = parseToken(token);
+        return getTokenType(parseToken(token));
+    }
+
+    public static String getTokenType(Claims claims) {
         if (claims == null) {
             return null;
         }
@@ -228,7 +276,10 @@ public class JwtUtil {
 
     /** 从 token 取绑定租户；平台级账号（未绑定租户）或旧令牌返回 null */
     public static String getTenantCode(String token) {
-        Claims claims = parseToken(token);
+        return getTenantCode(parseToken(token));
+    }
+
+    public static String getTenantCode(Claims claims) {
         if (claims == null) {
             return null;
         }
@@ -238,12 +289,20 @@ public class JwtUtil {
 
     /** 从 token 取角色编码列表；无则返回空列表（不返回 null，避免调用方 NPE） */
     public static List<String> getRoles(String token) {
-        return readStringList(token, CLAIM_ROLES);
+        return getStringList(parseToken(token), CLAIM_ROLES);
+    }
+
+    public static List<String> getRoles(Claims claims) {
+        return getStringList(claims, CLAIM_ROLES);
     }
 
     /** 从 token 取权限标识列表；无则返回空列表 */
     public static List<String> getPermissions(String token) {
-        return readStringList(token, CLAIM_PERMS);
+        return getStringList(parseToken(token), CLAIM_PERMS);
+    }
+
+    public static List<String> getPermissions(Claims claims) {
+        return getStringList(claims, CLAIM_PERMS);
     }
 
     /** 是否为内部保留 claim（身份/授权字段，不允许通过 extraClaims 注入） */
@@ -255,8 +314,7 @@ public class JwtUtil {
     /**
      * 读取列表型 claim：jjwt 反序列化后是 {@code List<?>}，这里统一转成「去空 + 去空白」的字符串列表
      */
-    private static List<String> readStringList(String token, String claimKey) {
-        Claims claims = parseToken(token);
+    private static List<String> getStringList(Claims claims, String claimKey) {
         if (claims == null) {
             return List.of();
         }

@@ -1,5 +1,6 @@
 package com.ai.cs.common.util;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +17,12 @@ class JwtUtilTest {
 
     private static final Long TEST_USER_ID = 1001L;
     private static final String TEST_USERNAME = "admin";
+
+    /** JwtUtil 默认拒绝回退演示密钥，单测需显式声明测试密钥 */
+    @BeforeAll
+    static void setUp() {
+        JwtUtil.configure("unit-test-secret-0123456789abcdef", 86400000L, 7200000L, true);
+    }
 
     @Test
     @DisplayName("生成Token - 默认过期时间")

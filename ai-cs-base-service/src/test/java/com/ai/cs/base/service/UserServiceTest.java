@@ -89,15 +89,27 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("更新用户 - 已有加密密码不重复加密")
+    @DisplayName("更新用户 - 拒绝密文入参，避免已知哈希直接接管账号")
     void testUpdateUser_AlreadyEncrypted() {
         User updateUser = new User();
         updateUser.setId(1L);
         updateUser.setPassword("$2a$10$encrypted");
+
+        // 密文入参必须拒绝：否则可提交攻击者已知明文对应的哈希直接接管账号
+        assertThrows(com.ai.cs.common.exception.BusinessException.class,
+                () -> userService.updateUser(updateUser));
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
+    @Test
+    @DisplayName("更新用户 - 密码留空表示不修改")
+    void testUpdateUser_BlankPasswordKeepsUnchanged() {
+        User updateUser = new User();
+        updateUser.setId(1L);
+        updateUser.setPassword("");
         when(userMapper.updateById(any(User.class))).thenReturn(1);
 
-        boolean result = userService.updateUser(updateUser);
-        assertTrue(result);
-        assertTrue(updateUser.getPassword().startsWith("$2a$"));
+        assertTrue(userService.updateUser(updateUser));
+        assertNull(updateUser.getPassword());
     }
 }

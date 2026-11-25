@@ -221,7 +221,10 @@ public class UserService extends ServiceImpl<UserMapper, User> {
      * 创建用户（密码加密）
      */
     public boolean createUser(User user) {
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (user == null || user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new BusinessException(400, "密码不能为空");
+        }
+        user.setPassword(encodePlainPassword(user.getPassword()));
         return this.save(user);
     }
 
@@ -229,12 +232,26 @@ public class UserService extends ServiceImpl<UserMapper, User> {
      * 更新用户（如果密码有变化则加密）
      */
     public boolean updateUser(User user) {
-        // 密码非空且不是 BCrypt 密文（$2a$ 前缀）时视为新密码，需重新加密；
-        // 空密码/密文则原样保留，避免重复加密导致密文被二次加密
-        if (user.getPassword() != null && !user.getPassword().isBlank()
-                && !user.getPassword().startsWith("$2a$")) {
-            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        if (user == null) {
+            throw new BusinessException(400, "用户信息不能为空");
+        }
+        // 密码留空表示不修改；非空一律按明文处理并重新加密。
+        // 不再接受 $2a$/$2b$/$2y$ 密文入参：否则可提交「攻击者已知明文对应的哈希」直接接管账号。
+        if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            user.setPassword(encodePlainPassword(user.getPassword()));
+        } else {
+            user.setPassword(null);
         }
         return this.updateById(user);
+    }
+
+    /** 统一密码编码入口：拒绝密文入参，避免绕过密码策略与审计 */
+    private String encodePlainPassword(String rawPassword) {
+        String password = rawPassword == null ? "" : rawPassword;
+        if (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$")
+                || password.startsWith("$argon2")) {
+            throw new BusinessException(400, "密码必须为明文，不能提交换密码文");
+        }
+        return passwordEncoder.encode(password);
     }
 }

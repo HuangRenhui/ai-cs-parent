@@ -30,7 +30,8 @@ public class SecurityConfig {
      * 添加内部令牌验证，确保请求来自网关
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   com.ai.cs.common.security.InternalAuthProperties internalAuthProperties) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -44,7 +45,7 @@ public class SecurityConfig {
                 // 关闭 X-Frame-Options，便于内嵌 H2 控制台/文档页面等场景
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 // 添加请求头验证过滤器，确保请求来自网关
-                .addFilterBefore(new InternalTokenValidationFilter(), org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new InternalTokenValidationFilter(internalAuthProperties), org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

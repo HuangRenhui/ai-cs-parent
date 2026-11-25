@@ -1,6 +1,7 @@
 package com.ai.cs.open.controller;
 
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.ai.cs.open.entity.CardTemplate;
 import com.ai.cs.open.service.CardTemplateService;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/open/card")
+@RequirePermission("open:view")
 public class CardTemplateController {
 
     @Resource

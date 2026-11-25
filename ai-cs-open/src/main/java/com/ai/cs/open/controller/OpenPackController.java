@@ -1,6 +1,7 @@
 package com.ai.cs.open.controller;
 
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.ai.cs.open.entity.OpenPack;
 import com.ai.cs.open.service.OpenPlatformService;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/open/pack")
+@RequirePermission("open:view")
 public class OpenPackController {
 
     @Resource

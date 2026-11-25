@@ -3,6 +3,7 @@ package com.ai.cs.base.controller;
 import com.ai.cs.base.entity.Menu;
 import com.ai.cs.base.service.MenuService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 
@@ -16,6 +17,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/system/menu")
+@RequirePermission("system:menu:list")
 public class MenuController {
 
     @Resource
