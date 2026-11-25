@@ -1,6 +1,7 @@
 package com.ai.cs.aiagent.service;
 
 import cn.hutool.core.lang.UUID;
+import com.ai.cs.aiagent.dto.ToolCallOutcome;
 import com.ai.cs.aiagent.util.LlmUtil;
 import com.ai.cs.api.feign.KnowledgeFeign;
 import com.ai.cs.api.feign.OpenToolFeign;
@@ -12,6 +13,7 @@ import com.ai.cs.common.enums.IntentEnum;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.llm.TenantQuotaService;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.common.util.ContentSafetyChecker;
 import com.ai.cs.common.util.PromptInjectionProtection;
 import com.ai.cs.common.util.ValidateUtil;
@@ -24,6 +26,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * AI智能体服务（业务路由为占位实现）
@@ -74,6 +77,9 @@ public class AiAgentService {
 
     @Resource
     private TenantQuotaService tenantQuotaService;
+
+    @Resource
+    private FunctionCallService functionCallService;
 
     @Autowired(required = false)
     private IndustryPromptPackService industryPromptPackService;
@@ -131,8 +137,8 @@ public class AiAgentService {
         log.info("[对话] 收到消息 sessionId={} 文本长度={} 附件数={}",
                 dto.getSessionId(), dto.getMsg().length(), attachments.size());
 
-        // 租户日配额：超限直接返回繁忙话术，避免把账单打爆
-        String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
+        // 令牌绑定租户时以令牌为准，请求体 tenantCode 仅作未绑定时的兜底
+        String tenantCode = JwtContext.resolveTenantCode(dto.getTenantCode());
         dto.setTenantCode(tenantCode);
         if (tenantQuotaService != null && tenantQuotaService.isQuotaExceeded(tenantCode)) {
             ChatReplyDTO quota = new ChatReplyDTO();
@@ -350,10 +356,11 @@ public class AiAgentService {
                 case COMPLAINT:
                     return routeToWorkOrder(entity, dto, result);
                 case CONSULT:
-                default:
-                    // 兜底也走 RAG，而不是繁忙文案：模型分类偶发不准时，
-                    // 知识库问答是最安全且最有价值的兜底
-                    return routeToKnowledge(dto, result);
+                default: {
+                    // 先给模型一次按 Schema 选工具的机会；没选中再走 RAG
+                    String toolReply = routeByFunctionCall(dto, result, entity);
+                    return toolReply != null ? toolReply : routeToKnowledge(dto, result);
+                }
             }
         } catch (Exception e) {
             log.warn("意图路由异常 intent={} sessionId={}", intentName, dto.getSessionId(), e);
@@ -386,7 +393,12 @@ public class AiAgentService {
         }
         try {
             Result<TransferResultDTO> response = sessionFeign.transfer(dto.getSessionId());
-            TransferResultDTO transfer = response == null ? null : response.getData();
+            // 同时校验 Result 与 data，失败一律返回转接失败话术
+            if (response == null || !response.isOk()) {
+                log.warn("转人工失败：会话服务返回失败 sessionId={}", dto.getSessionId());
+                return PromptConst.TRANSFER_FAIL_REPLY;
+            }
+            TransferResultDTO transfer = response.getData();
             if (transfer == null) {
                 log.warn("转人工失败：会话服务返回空 sessionId={}", dto.getSessionId());
                 return PromptConst.TRANSFER_FAIL_REPLY;
@@ -413,15 +425,20 @@ public class AiAgentService {
     /**
      * 工具分支：查物流 / 退款。
      *
-     * <p><b>两条安全约束</b>（来自 [详细设计] 与幂等设计）：</p>
+     * <p><b>三条安全约束</b>（来自 [详细设计] 与幂等设计）：</p>
      * <ol>
-     *   <li><b>退款等高危操作必须先确认</b>：用户消息含「确认」才置 confirmed=true，
-     *       否则返回确认提示，形成「确认循环」——防止误触导致真实退款</li>
+     *   <li><b>AI 无执行权</b>：{@code confirmed} 恒传 false。write/critical 由开放层挂起，
+     *       必须坐席在确认接口放行后才执行；用户说一句「确认」不能让 AI 代执行</li>
      *   <li><b>幂等键 = sessionId:意图:实体</b>：用户重试或网络重发时，
      *       开放层凭唯一索引挡住重复执行，不会退两次款</li>
+     *   <li><b>退款必须有订单号</b>：空实体会让同一会话的所有退款共享一个幂等键，
+     *       第一笔的结果会被当成后续每一笔的结果</li>
      * </ol>
      */
     private String routeToTool(IntentEnum intent, String entity, ChatDTO dto, ChatReplyDTO result) {
+        if (intent == IntentEnum.REFUND && !StringUtils.hasText(entity)) {
+            return "请提供需要退款的订单号，我再为您提交核对。";
+        }
         ToolInvokeDTO toolDto = new ToolInvokeDTO();
         toolDto.setSessionId(dto.getSessionId());
         // 工具按「意图绑定」检索：注册表里工具可能只绑了意图而未指定工具名
@@ -433,15 +450,18 @@ public class AiAgentService {
         // 租户编码用于连接器出站白名单校验，避免跨租户调用对方系统
         toolDto.setTenantCode(dto.getTenantCode());
 
-        // 高危操作需用户明确确认
-        boolean risky = intent == IntentEnum.REFUND;
-        boolean confirmed = StringUtils.hasText(dto.getMsg()) && dto.getMsg().contains("确认");
-        toolDto.setConfirmed(!risky || confirmed);
+        // 安全底线：AI 侧永远不声明已确认，需人工确认的工具由开放层挂起
+        toolDto.setConfirmed(Boolean.FALSE);
         try {
             Result<ToolInvokeResultDTO> response = openToolFeign.invoke(toolDto);
             ToolInvokeResultDTO tool = response == null ? null : response.getData();
             if (tool == null) {
                 return PromptConst.TOOL_BUSY_REPLY;
+            }
+            // 高危工具被 open 侧第 4 关挂起：回填确认卡，前端渲染确认入口
+            if (requiresConfirm(tool)) {
+                String summary = StringUtils.hasText(entity) ? "订单号：" + entity : "高危操作待确认";
+                result.setToolConfirm(buildConfirmCard(tool, summary, requestedBy(dto)));
             }
             // 需确认但用户还没确认：返回确认提示，等下一轮
             if (!tool.isSuccess()) {
@@ -552,5 +572,68 @@ public class AiAgentService {
             log.warn("加载行业提示词失败 packCode={}", dto.getPackCode(), e);
             return null;
         }
+    }
+
+    // ==================== AI 主动选工具接入 ====================
+
+    /**
+     * 咨询/未知意图：先尝试 Function Call，未选中工具时返回 null，由上层回退 RAG。
+     *
+     * <p>任何异常都返回 null 交回 RAG：工具链故障不阻断正常问答。</p>
+     */
+    private String routeByFunctionCall(ChatDTO dto, ChatReplyDTO result, String entity) {
+        if (functionCallService == null || dto == null || !StringUtils.hasText(dto.getMsg())) {
+            return null;
+        }
+        try {
+            List<Map<String, Object>> tools = functionCallService.loadRegisteredTools();
+            if (tools == null || tools.isEmpty()) {
+                return null;
+            }
+            String tenantCode = StringUtils.hasText(dto.getTenantCode()) ? dto.getTenantCode() : "default";
+            ToolCallOutcome outcome = functionCallService.autoSelectAndExecute(
+                    dto.getMsg(), result.getIntent(), dto.getSessionId(), tenantCode,
+                    requestedBy(dto), tools);
+            if (outcome == null || !outcome.isSelected()) {
+                return null;
+            }
+            // 需确认时把卡片带回前端，聊天页据此渲染 ToolConfirmCard
+            result.setToolConfirm(outcome.getConfirmCard());
+            return StringUtils.hasText(outcome.getReply())
+                    ? outcome.getReply() : PromptConst.TOOL_BUSY_REPLY;
+        } catch (Exception e) {
+            log.warn("Function Call 接入失败，回退 RAG sessionId={}", dto.getSessionId(), e);
+            return null;
+        }
+    }
+
+    /** 发起方标识：访客 ref 优先，否则视为 AI 发起。 */
+    private String requestedBy(ChatDTO dto) {
+        if (dto != null && StringUtils.hasText(dto.getVisitorRef())) {
+            return "visitor:" + dto.getVisitorRef().trim();
+        }
+        return "ai";
+    }
+
+    /** source=confirm-required 或 (confirmId!=null && !success) 视为待确认。 */
+    private boolean requiresConfirm(ToolInvokeResultDTO tool) {
+        return tool != null && ("confirm-required".equalsIgnoreCase(tool.getSource())
+                || (tool.getConfirmId() != null && !tool.isSuccess()));
+    }
+
+    /**
+     * 把 ToolInvokeResultDTO 的 confirmId/toolName/risk/status/expireAt
+     * 与 summary/requestedBy 填进 ToolConfirmCardDTO，status 空时默认 CONFIRMING。
+     */
+    private ToolConfirmCardDTO buildConfirmCard(ToolInvokeResultDTO tool, String summary, String requestedBy) {
+        ToolConfirmCardDTO card = new ToolConfirmCardDTO();
+        card.setConfirmId(tool.getConfirmId());
+        card.setToolName(tool.getToolName());
+        card.setRisk(tool.getRisk());
+        card.setStatus(StringUtils.hasText(tool.getStatus()) ? tool.getStatus() : "CONFIRMING");
+        card.setExpireAt(tool.getExpireAt());
+        card.setSummary(summary);
+        card.setRequestedBy(requestedBy);
+        return card;
     }
 }

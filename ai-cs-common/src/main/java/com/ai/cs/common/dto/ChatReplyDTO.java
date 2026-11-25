@@ -34,4 +34,6 @@ public class ChatReplyDTO {
     private boolean historySaved = true;
     /** 知识库引用来源（命中时返回，前端可展示"参考资料"） */
     private List<RagCitationDTO> citations = new ArrayList<>();
+    /** 高危工具待确认卡片：confirmId 非空时聊天页渲染 ToolConfirmCard */
+    private ToolConfirmCardDTO toolConfirm;
 }
