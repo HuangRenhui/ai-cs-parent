@@ -22,7 +22,7 @@ public class ToolInvokeDTO {
     private String sessionId;
     /** 工具自定义入参（JSON 串） */
     private String payload;
-    /** 高风险 write/critical 工具必须为 true 才执行 */
+    /** 兼容字段：invoke 不采信；write/critical 走人工确认接口执行 */
     private Boolean confirmed;
     /** 防重复退款/冻卡；相同键返回首次成功结果 */
     private String idempotencyKey;

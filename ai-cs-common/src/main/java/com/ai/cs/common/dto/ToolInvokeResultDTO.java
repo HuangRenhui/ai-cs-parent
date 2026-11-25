@@ -25,4 +25,6 @@ public class ToolInvokeResultDTO {
     private String status;
     /** 确认失效时间：空表示不过期 */
     private LocalDateTime expireAt;
+    /** 工具风险等级快照（source=confirm-required 时回传，供会话卡片着色） */
+    private String risk;
 }

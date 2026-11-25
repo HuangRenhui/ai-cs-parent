@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -42,7 +43,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * WebSocket 聊天端点（消息处理为占位）。
  *
- * <p>握手必须带 token（查询参数），禁止只靠猜 sessionId；连接建立后的鉴权与归属校验已实现。</p>
+ * <p>握手不带 token（避免令牌出现在 URL / 访问日志里）；连接建立后 5 秒内必须发送首帧
+ * {@code {"type":"auth","token":"..."}} 完成鉴权，否则连接被关闭。鉴权与归属校验在首帧完成。</p>
  *
  * <p>TODO 后续实现消息处理链路：取 Redis 历史上下文 → 用户消息落库 → 调 ai-agent 生成回复
  * → 追加并续期上下文 → AI 回复落库 → 推送回复（携带意图、是否转人工、引用来源、接入坐席）。</p>
@@ -53,6 +55,12 @@ import java.util.concurrent.TimeUnit;
 public class ChatWebSocket {
 
     private static final int MAX_ONLINE_SESSIONS = 2000;
+
+    /** 首帧鉴权超时：超时未带 token 的连接直接断开，避免匿名连接占坑 */
+    private static final int AUTH_TIMEOUT_SECONDS = 5;
+
+    /** 单条消息字符上限 */
+    private static final int MAX_MESSAGE_CHARS = 64 * 1024;
 
     /** 在线会话表：sessionId -> WebSocket 连接，用于消息推送与连接管理 */
     private static final Map<String, Session> ONLINE_SESSION = new ConcurrentHashMap<>();
@@ -66,7 +74,8 @@ public class ChatWebSocket {
                 t.setDaemon(true);
                 return t;
             },
-            new ThreadPoolExecutor.CallerRunsPolicy());
+            // 队列满时直接拒绝，避免业务处理回落到 WS IO 线程
+            new ThreadPoolExecutor.AbortPolicy());
 
     private static final ScheduledExecutorService CLEANUP_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "ws-session-cleanup");
@@ -124,58 +133,19 @@ public class ChatWebSocket {
     public void onOpen(@PathParam("sessionId") String sessionId, Session session) {
         if (ONLINE_SESSION.size() >= MAX_ONLINE_SESSIONS) {
             log.warn("WebSocket 连接数已达上限 {}，拒绝新连接 sessionId={}", MAX_ONLINE_SESSIONS, sessionId);
-            try {
-                session.close(new CloseReason(CloseReason.CloseCodes.TRY_AGAIN_LATER, "max connections reached"));
-            } catch (Exception e) {
-                log.debug("关闭超限连接异常 sessionId={}", sessionId, e);
-            }
+            closeQuietly(session, CloseReason.CloseCodes.TRY_AGAIN_LATER, "max connections reached");
             return;
         }
-        // 握手必须带合法 token，防止伪造 sessionId 窃听/冒用他人会话
-        String token = firstQuery(session, "token");
-        if (!JwtUtil.validateToken(token)) {
-            log.warn("WebSocket 拒绝未授权连接 sessionId={}", sessionId);
-            try {
-                session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "unauthorized"));
-            } catch (Exception e) {
-                log.debug("关闭未授权连接异常 sessionId={}", sessionId, e);
+        // 连接先置为未鉴权：token 只允许走首帧，不进 URL（URL 会落在访问日志、Referer、浏览器历史里）
+        session.getUserProperties().put("authed", Boolean.FALSE);
+        session.getUserProperties().put("sessionId", sessionId);
+        CLEANUP_EXECUTOR.schedule(() -> {
+            if (session.isOpen() && !Boolean.TRUE.equals(session.getUserProperties().get("authed"))) {
+                log.warn("WebSocket 鉴权超时，关闭连接 sessionId={}", sessionId);
+                closeQuietly(session, CloseReason.CloseCodes.VIOLATED_POLICY, "auth timeout");
             }
-            return;
-        }
-        // 把用户身份挂到连接属性上，后续收发消息免重复解析 token
-        session.getUserProperties().put("userId", JwtUtil.getUserId(token));
-        session.getUserProperties().put("username", JwtUtil.getUsername(token));
-        session.getUserProperties().put("tokenType", JwtUtil.getTokenType(token));
-        // 访客令牌用户名为 visitor:{visitorRef}，后续落库与鉴权都用这个标识
-        String visitorRef = extractVisitorRef(token);
-        if (StringUtils.hasText(visitorRef)) {
-            session.getUserProperties().put("visitorRef", visitorRef);
-        }
-        // 校验 token 是否有权访问该 sessionId，防止合法令牌窃听他人会话
-        if (!authorizeSession(sessionId, token)) {
-            log.warn("WebSocket 拒绝越权连接 sessionId={} userId={}", sessionId, JwtUtil.getUserId(token));
-            try {
-                session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "session forbidden"));
-            } catch (Exception e) {
-                log.debug("关闭越权连接异常 sessionId={}", sessionId, e);
-            }
-            return;
-        }
-        // 同一会话重复连接时关闭旧连接，保证一个 sessionId 只有一条活跃连接
-        Session previous = ONLINE_SESSION.put(sessionId, session);
-        if (previous != null && previous.isOpen() && previous != session) {
-            try {
-                previous.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "replaced"));
-            } catch (Exception e) {
-                log.debug("关闭旧连接异常 sessionId={}", sessionId, e);
-            }
-        }
-        bindMdc(session, sessionId);
-        try {
-            sendMessage(sessionId, jsonPayload("system", "会话已连接", "", false, null));
-        } finally {
-            MDC.clear();
-        }
+        }, AUTH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        sendDirect(session, jsonPayload("auth-required", "请先完成鉴权", "", false, null));
     }
 
     /**
@@ -185,9 +155,97 @@ public class ChatWebSocket {
      * @param sessionId 路径参数中的会话 ID
      */
     @OnMessage
-    public void onMessage(String payload, @PathParam("sessionId") String sessionId) {
+    public void onMessage(String payload, @PathParam("sessionId") String sessionId, Session session) {
+        // 未鉴权时，首帧必须是 {"type":"auth","token":"..."}；鉴权成功后才会进入消息队列
+        if (!Boolean.TRUE.equals(session.getUserProperties().get("authed"))) {
+            tryAuth(payload, sessionId, session);
+            return;
+        }
+        // 心跳直接回 pong，不走线程池，避免心跳排队
+        if (isHeartbeat(payload)) {
+            deliverLocal(sessionId, "{\"type\":\"pong\"}");
+            return;
+        }
+        if (payload != null && payload.length() > MAX_MESSAGE_CHARS) {
+            log.warn("WebSocket 消息超长，已拒绝 sessionId={} length={}", sessionId, payload.length());
+            sendDirect(session, jsonPayload("error", "消息过长，请分段发送", "", false, null));
+            return;
+        }
         // 入队异步处理，避免阻塞 WS 容器线程
-        MSG_EXECUTOR.execute(() -> handleMessage(payload, sessionId));
+        try {
+            MSG_EXECUTOR.execute(() -> handleMessage(payload, sessionId, session));
+        } catch (RejectedExecutionException e) {
+            // 队列满时返回错误提示
+            log.warn("WebSocket 消息队列已满，拒绝本次消息 sessionId={}", sessionId);
+            sendDirect(session, jsonPayload("error", "当前消息较多，请稍后重试", "", false, null));
+        }
+    }
+
+    /**
+     * 首帧鉴权：校验 token → 会话归属 → 登记在线表 → 提示已连接。
+     */
+    private void tryAuth(String payload, String sessionId, Session session) {
+        String token = parseAuthToken(payload);
+        if (token == null) {
+            log.warn("WebSocket 首帧不是合法鉴权报文 sessionId={}", sessionId);
+            closeQuietly(session, CloseReason.CloseCodes.VIOLATED_POLICY, "auth required");
+            return;
+        }
+        // 握手必须带合法 token，防止伪造 sessionId 窃听/冒用他人会话
+        if (!JwtUtil.validateToken(token)) {
+            log.warn("WebSocket 拒绝未授权连接 sessionId={}", sessionId);
+            closeQuietly(session, CloseReason.CloseCodes.VIOLATED_POLICY, "unauthorized");
+            return;
+        }
+        // 校验 token 是否有权访问该 sessionId，防止合法令牌窃听他人会话
+        if (!authorizeSession(sessionId, token)) {
+            log.warn("WebSocket 拒绝越权连接 sessionId={} userId={}", sessionId, JwtUtil.getUserId(token));
+            closeQuietly(session, CloseReason.CloseCodes.VIOLATED_POLICY, "session forbidden");
+            return;
+        }
+        // 把用户身份挂到连接属性上，后续收发消息免重复解析 token
+        session.getUserProperties().put("authed", Boolean.TRUE);
+        session.getUserProperties().put("userId", JwtUtil.getUserId(token));
+        session.getUserProperties().put("username", JwtUtil.getUsername(token));
+        session.getUserProperties().put("tokenType", JwtUtil.getTokenType(token));
+        // 访客令牌用户名为 visitor:{visitorRef}，后续落库与鉴权都用这个标识
+        String visitorRef = extractVisitorRef(token);
+        if (StringUtils.hasText(visitorRef)) {
+            session.getUserProperties().put("visitorRef", visitorRef);
+        }
+        // 同一会话重复连接时关闭旧连接，保证一个 sessionId 只有一条活跃连接
+        Session previous = ONLINE_SESSION.put(sessionId, session);
+        if (previous != null && previous.isOpen() && previous != session) {
+            closeQuietly(previous, CloseReason.CloseCodes.NORMAL_CLOSURE, "replaced");
+        }
+        bindMdc(session, sessionId);
+        try {
+            sendDirect(session, jsonPayload("system", "会话已连接", "", false, null));
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    /** 解析首帧鉴权报文；格式非法或超长直接返回 null */
+    private static String parseAuthToken(String payload) {
+        if (!StringUtils.hasText(payload) || payload.length() > 4096) {
+            return null;
+        }
+        try {
+            JSONObject json = JSON.parseObject(payload);
+            if (json == null || !"auth".equalsIgnoreCase(json.getString("type"))) {
+                return null;
+            }
+            String token = json.getString("token");
+            return StringUtils.hasText(token) ? token.trim() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 心跳报文：{"type":"ping"}，只做字符串包含判断，避免为心跳解析 JSON */
+    private static boolean isHeartbeat(String payload) {
+        return StringUtils.hasText(payload) && payload.length() <= 128 && payload.contains("\"ping\"");
     }
 
     /**
@@ -197,8 +255,14 @@ public class ChatWebSocket {
      * → 用户消息落库 → 调 {@code aiAgentFeign.chat} 生成回复（失败给兜底文案）
      * → 上下文追加并续期 30 分钟 → AI 回复落库 → 推送回复。当前<b>既不调用 AI、也不落库、也不推送</b>。</p>
      */
-    private void handleMessage(String payload, String sessionId) {
-        log.info("[占位] WebSocket 消息处理（未调用 AI、未落库、未推送）sessionId={}", sessionId);
+    private void handleMessage(String payload, String sessionId, Session session) {
+        // 在线程池线程内重新绑定 MDC，保证日志可串联
+        bindMdc(session, sessionId);
+        try {
+            log.info("[占位] WebSocket 消息处理（未调用 AI、未落库、未推送）sessionId={}", sessionId);
+        } finally {
+            MDC.clear();
+        }
     }
 
     /**
@@ -246,13 +310,32 @@ public class ChatWebSocket {
     public static void deliverLocal(String sessionId, String content) {
         Session session = ONLINE_SESSION.get(sessionId);
         if (session != null && session.isOpen()) {
-            try {
-                synchronized (session) {
-                    session.getBasicRemote().sendText(content);
-                }
-            } catch (Exception e) {
-                log.error("推送消息失败 sessionId={}", sessionId, e);
+            sendDirect(session, content);
+        }
+    }
+
+    /** 直接向连接写文本（不查在线表），用于鉴权与心跳这类注册前的下行 */
+    private static void sendDirect(Session session, String content) {
+        if (session == null || !session.isOpen()) {
+            return;
+        }
+        try {
+            synchronized (session) {
+                session.getBasicRemote().sendText(content);
             }
+        } catch (Exception e) {
+            log.error("推送消息失败", e);
+        }
+    }
+
+    /** 关闭连接：连接已关闭等异常只记 debug，不向上抛 */
+    private static void closeQuietly(Session session, CloseReason.CloseCode code, String reason) {
+        try {
+            if (session != null && session.isOpen()) {
+                session.close(new CloseReason(code, reason));
+            }
+        } catch (Exception e) {
+            log.debug("关闭连接异常 reason={}", reason, e);
         }
     }
 

@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -251,7 +250,7 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         connector.setType(type.toUpperCase());
         // REST 连接器会真实出站请求，保存时先校验地址，防止 SSRF 打内网
         if ("REST".equalsIgnoreCase(connector.getType()) && StringUtils.hasText(connector.getBaseUrl())) {
-            ConnectorUrlGuard.assertSafe(connector.getBaseUrl(), null);
+            ConnectorUrlGuard.assertSafe(connector.getBaseUrl(), JwtContext.getCurrentTenantCode());
         }
         // 鉴权 JSON 落库前加密，回显时仍是密文；invoke 时再解密
         if (StringUtils.hasText(connector.getAuthJson())) {
@@ -402,9 +401,9 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
      *       是为了让「关闭行业包」这个运营动作真正生效，而不是让请求打到对方系统</li>
      *   <li><b>连接器可用性</b>：连接器不存在或停用则无法出站，在风险确认前拦下，
      *       避免用户确认了一大堆却因连接器不可用而失败</li>
-     *   <li><b>风险确认</b>：write/critical 未带 confirmed 时返回提示，等用户下一轮带「确认」再来。
-     *       <b>必须在幂等占位之前</b>——否则每次「未确认」都会占掉一个幂等键，
-     *       用户真正确认时反被判为重复提交</li>
+     *   <li><b>人工确认</b>：write/critical 一律挂起为 CONFIRMING 并返回 confirmId，
+     *       不采信请求体 confirmed；唯一执行入口是坐席确认后的 {@link #executeAfterConfirm}。
+     *       该关卡位于幂等占位之前，挂起请求不占用幂等键</li>
      *   <li><b>幂等控制</b>：最靠内，因为它依赖前面所有校验都通过后才有意义</li>
      * </ol>
      *
@@ -418,11 +417,15 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
      * @param dto 工具调用请求
      * @return 调用结果；各失败分支通过 {@code source} 字段区分原因
      */
-    @Transactional
+    // 刻意不加 @Transactional：内部会做出站 HTTP 调用，长事务会同时占用主事务连接与
+    // REQUIRES_NEW 占位连接的数据库连接，并在网络 IO 期间持有行锁。
+    // 占位行与结果回写各自走独立短事务（ConnectorInvokeRecorder），失败留痕不受主流程影响。
     public ToolInvokeResultDTO invoke(ToolInvokeDTO dto) {
         if (dto == null) {
             throw new BusinessException("工具调用请求不能为空");
         }
+        // 解析当前租户，供幂等控制与出站校验共用
+        String tenantCode = JwtContext.resolveTenantCode(dto.getTenantCode());
         // ========== 关卡 1：工具查找 ==========
         OpenTool tool = findTool(dto);
         if (tool == null) {
@@ -449,9 +452,11 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         }
 
         // ========== 关卡 4：风险确认 ==========
-        if (needConfirm(tool) && !Boolean.TRUE.equals(dto.getConfirmed())) {
-            // 不落幂等占位行：见类注释，未确认的请求不该消耗幂等键
-            log.info("工具需确认但未确认 tool={} risk={}", tool.getName(), tool.getRisk());
+        // write/critical 一律挂起待确认，不采信请求体 confirmed；
+        // 唯一执行入口是坐席确认后的 executeAfterConfirm
+        if (needConfirm(tool)) {
+            // 挂起请求不占用幂等键
+            log.info("工具需人工确认 tool={} risk={}", tool.getName(), tool.getRisk());
             OpenToolInvoke pending = findOrCreatePending(tool, dto);
             ToolInvokeResultDTO result = fail(tool.getName(),
                     "该操作涉及重要变更，请确认后再执行。", "confirm-required");
@@ -459,6 +464,8 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
             result.setConfirmId(pending.getId());
             result.setStatus(pending.getStatus());
             result.setExpireAt(pending.getExpireAt());
+            // 回传风险等级，供确认卡展示
+            result.setRisk(tool.getRisk());
             return result;
         }
 
@@ -467,21 +474,22 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         OpenToolInvoke placeholder = null;
         if (idempotencyKey != null) {
             // 先查是否已成功过：命中则重放首次结果，绝不重复执行（防重复退款/冻卡）
-            OpenToolInvoke done = recorder.findSucceeded(idempotencyKey);
+            OpenToolInvoke done = recorder.findSucceeded(tenantCode, idempotencyKey);
             if (done != null) {
                 log.info("幂等命中，重放首次结果 tool={} key={}", tool.getName(), idempotencyKey);
-                ToolInvokeResultDTO replay = new ToolInvokeResultDTO();
-                replay.setSuccess(true);
-                replay.setToolName(tool.getName());
-                replay.setOutput(done.getResponseJson());
-                replay.setSource("idempotent");
-                return replay;
+                return replaySucceeded(done, tool.getName());
             }
             // 独立事务插入占位行：撞唯一索引时只回滚这一小段，
             // 不会把主链路事务标记为 rollback-only（否则下面正常返回也会抛 UnexpectedRollbackException）
             placeholder = recorder.tryInsertPlaceholder(tool, dto, idempotencyKey);
             if (placeholder == null) {
-                // 撞唯一索引：另一个并发请求已抢占，此时不能再执行
+                // 占位失败时补查成功记录，命中则重放首次结果
+                OpenToolInvoke finished = recorder.findSucceeded(tenantCode, idempotencyKey);
+                if (finished != null) {
+                    log.info("幂等并发收口，重放首次结果 tool={} key={}", tool.getName(), idempotencyKey);
+                    return replaySucceeded(finished, tool.getName());
+                }
+                // 仍占不到执行权：确实有并发请求在执行（或键被有效占用）
                 return fail(tool.getName(), "请求正在处理中，请勿重复提交。", "idempotent");
             }
         }
@@ -677,6 +685,18 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
     }
 
     /**
+     * 重放已成功调用的首次结果，不重复出站。
+     */
+    private ToolInvokeResultDTO replaySucceeded(OpenToolInvoke done, String toolName) {
+        ToolInvokeResultDTO replay = new ToolInvokeResultDTO();
+        replay.setSuccess(true);
+        replay.setToolName(toolName);
+        replay.setOutput(done.getResponseJson());
+        replay.setSource("idempotent");
+        return replay;
+    }
+
+    /**
      * REST 连接器出站执行：真实发起 HTTP 调用并把响应交给调用方。
      *
      * <p><b>为什么不用共享 RestTemplate 单例</b>：每个工具的 {@code timeoutMs} 不同，
@@ -712,8 +732,8 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         //    query 型鉴权参数是 URL 的一部分，漏拼会让「校验的 URL」与「真正请求的 URL」不一致
         String url = buildUrl(connector, tool, headers);
 
-        // 3) SSRF 防护：出站前重校验。connector.getBaseUrl() 作为租户白名单的匹配依据
-        ConnectorUrlGuard.assertSafe(url, connector.getBaseUrl());
+        // 3) SSRF 防护：出站前重校验。第二个参数必须是租户编码（令牌优先，其次入参），而不是 baseUrl
+        ConnectorUrlGuard.assertSafe(url, JwtContext.resolveTenantCode(dto.getTenantCode()));
 
         // 4) 请求体：按连接器字段映射把入参反向转成对方要的结构
         String body = buildRequestBody(tool, dto);
@@ -811,7 +831,8 @@ public class OpenPlatformService extends ServiceImpl<OpenToolMapper, OpenTool> {
         source.put("entityId", dto.getEntityId());
         source.put("entityType", dto.getEntityType());
         source.put("intentBind", dto.getIntentBind());
-        source.put("confirm", dto.getConfirmed());
+        // 出站即表示服务端已放行，固定传 true
+        source.put("confirm", Boolean.TRUE);
         return source;
     }
 

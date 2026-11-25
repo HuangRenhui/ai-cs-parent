@@ -9,6 +9,7 @@ import com.ai.cs.common.dto.ToolRejectDTO;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.result.PageResult;
 import com.ai.cs.common.security.JwtContext;
+import com.ai.cs.open.config.OpenToolProperties;
 import com.ai.cs.open.entity.OpenToolInvoke;
 import com.ai.cs.open.enums.ToolInvokeStatus;
 import com.ai.cs.open.mapper.OpenToolInvokeMapper;
@@ -60,6 +61,10 @@ public class ToolConfirmService {
     private OpenPlatformService openPlatformService;
     @Resource
     private ConnectorInvokeRecorder recorder;
+    @Resource
+    private ToolConfirmNotifier notifier;
+    @Resource
+    private OpenToolProperties openToolProperties;
 
     // ==================== 查询 ====================
 
@@ -133,11 +138,17 @@ public class ToolConfirmService {
         //      不处理这一分支的话，行会永久停在 CONFIRMED，坐席只会看到「已被处理」而无从判断
         if (ToolInvokeStatus.CONFIRMED.name().equals(record.getStatus())) {
             OpenToolInvoke done = StringUtils.hasText(record.getIdempotencyKey())
-                    ? recorder.findSucceeded(record.getIdempotencyKey())
+                    ? recorder.findSucceeded(record.getTenantCode(), record.getIdempotencyKey())
                     : null;
             if (done != null) {
                 finish(record.getId(), ToolInvokeStatus.SUCCEEDED, done.getResponseJson(), 1);
                 return replay(done, "idempotent");
+            }
+            // 长时间停留在 CONFIRMED 视为执行中断，置为 FAILED 并允许重新发起
+            if (isStaleConfirmed(record) && failStaleConfirmed(record)) {
+                log.warn("确认后执行中断，已置为 FAILED confirmId={} tool={}", record.getId(), record.getToolName());
+                notifyStatus(record, ToolInvokeStatus.FAILED, "确认后执行中断，请重新发起");
+                throw new BusinessException("该确认执行中断，已置为失败，请重新发起。");
             }
             throw new BusinessException("该确认正在执行中，请稍后刷新结果");
         }
@@ -162,9 +173,11 @@ public class ToolConfirmService {
         // 让执行链路与落库使用同一个键，避免「记录里是 A、出站/映射里是 B」的错位
         dto.setIdempotencyKey(idempotencyKey);
 
-        // 3) 同键已成功：重放首次结果，同时把本次确认也标成功，保持审计连续
-        OpenToolInvoke done = recorder.findSucceeded(idempotencyKey);
+        // 3) 同键已成功：重放首次结果，同时把本次确认也标成功，保持审计连续。
+        //    幂等键由坐席可填，必须按「租户 + 工具」校验归属，防止拿本租户另一个工具的结果冒充本次执行
+        OpenToolInvoke done = recorder.findSucceeded(tenantCode, idempotencyKey);
         if (done != null) {
+            assertKeyBelongsToSameTool(done, record);
             markConfirmed(record.getId(), operator, idempotencyKey);
             finish(record.getId(), ToolInvokeStatus.SUCCEEDED, done.getResponseJson(), 1);
             log.info("确认命中幂等键，重放首次结果 confirmId={} key={}", record.getId(), idempotencyKey);
@@ -183,11 +196,11 @@ public class ToolConfirmService {
                     .set(OpenToolInvoke::getIdempotencyKey, idempotencyKey)
                     .set(OpenToolInvoke::getUpdateTime, LocalDateTime.now()));
         } catch (DataIntegrityViolationException e) {
-            // 另一条记录已占用同一幂等键（不同 confirmId 的同一笔业务）：
-            // 能成功就重放，不能就提示处理中，绝不重复执行
-            OpenToolInvoke owner = recorder.findByIdempotencyKey(idempotencyKey);
+            // 同一幂等键已被其他记录占用：已成功则重放，否则提示处理中
+            OpenToolInvoke owner = recorder.findByIdempotencyKey(tenantCode, idempotencyKey);
             if (owner != null && ToolInvokeStatus.SUCCEEDED.name().equals(owner.getStatus())
                     && Integer.valueOf(1).equals(owner.getSuccess())) {
+                assertKeyBelongsToSameTool(owner, record);
                 finish(record.getId(), ToolInvokeStatus.SUCCEEDED, owner.getResponseJson(), 1);
                 return replay(owner, "idempotent");
             }
@@ -209,11 +222,13 @@ public class ToolConfirmService {
             result.setStatus(ToolInvokeStatus.SUCCEEDED.name());
             log.info("人工确认后执行成功 confirmId={} tool={} operator={}",
                     record.getId(), record.getToolName(), operator);
+            notifyStatus(record, ToolInvokeStatus.SUCCEEDED, result.getOutput());
             return result;
         } catch (Exception e) {
             // 失败只改状态、不删记录：审计必须能查到「确认了但执行失败」
             log.warn("人工确认后执行失败 confirmId={} tool={}", record.getId(), record.getToolName(), e);
             finish(record.getId(), ToolInvokeStatus.FAILED, e.getMessage(), 0);
+            notifyStatus(record, ToolInvokeStatus.FAILED, e.getMessage());
             throw e;
         }
     }
@@ -246,6 +261,8 @@ public class ToolConfirmService {
         }
         log.info("坐席拒绝高危工具调用 confirmId={} tool={} operator={}",
                 record.getId(), record.getToolName(), operator);
+        notifyStatus(record, ToolInvokeStatus.REJECTED,
+                StringUtils.hasText(req.getReason()) ? "已拒绝：" + req.getReason().trim() : "该操作已被拒绝");
     }
 
     /**
@@ -280,6 +297,8 @@ public class ToolConfirmService {
         }
         log.info("取消高危工具调用 confirmId={} tool={} operator={}",
                 record.getId(), record.getToolName(), operator);
+        notifyStatus(record, ToolInvokeStatus.CANCELLED,
+                StringUtils.hasText(req.getReason()) ? "操作已取消：" + req.getReason().trim() : "操作已取消");
     }
 
     // ==================== 内部方法 ====================
@@ -301,6 +320,7 @@ public class ToolConfirmService {
                 .set(OpenToolInvoke::getUpdateTime, LocalDateTime.now()));
         if (rows > 0) {
             log.info("待确认记录已超时失效 confirmId={} tool={}", record.getId(), record.getToolName());
+            notifyStatus(record, ToolInvokeStatus.EXPIRED, "该操作已超时，请重新发起");
             throw new BusinessException("确认已过期，请重新发起。");
         }
         return require(record.getId());
@@ -310,6 +330,57 @@ public class ToolConfirmService {
         if (!ToolInvokeStatus.CONFIRMING.name().equals(record.getStatus())) {
             throw new BusinessException("该确认已被处理（当前状态：" + record.getStatus() + "）");
         }
+    }
+
+    /**
+     * CONFIRMED 行是否已超过「执行中断」阈值。
+     */
+    private boolean isStaleConfirmed(OpenToolInvoke record) {
+        LocalDateTime lastTouch = record.getUpdateTime() != null ? record.getUpdateTime() : record.getConfirmedAt();
+        if (lastTouch == null) {
+            return true;
+        }
+        int staleMinutes = openToolProperties.getPlaceholderStaleMinutes() > 0
+                ? openToolProperties.getPlaceholderStaleMinutes() : 10;
+        return lastTouch.isBefore(LocalDateTime.now().minusMinutes(staleMinutes));
+    }
+
+    /**
+     * 把执行中断的 CONFIRMED 行置为 FAILED。
+     *
+     * <p>更新条件为 {@code status=CONFIRMED AND success=0}。</p>
+     *
+     * @return true=本次更新生效；false=已被其他线程回写
+     */
+    private boolean failStaleConfirmed(OpenToolInvoke record) {
+        int rows = invokeMapper.update(null, new LambdaUpdateWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getId, record.getId())
+                .eq(OpenToolInvoke::getStatus, ToolInvokeStatus.CONFIRMED.name())
+                .eq(OpenToolInvoke::getSuccess, 0)
+                .set(OpenToolInvoke::getStatus, ToolInvokeStatus.FAILED.name())
+                .set(OpenToolInvoke::getResponseJson, "确认后执行中断，请重新发起")
+                .set(OpenToolInvoke::getUpdateTime, LocalDateTime.now()));
+        return rows > 0;
+    }
+
+    /**
+     * 幂等键归属校验：命中记录必须与当前记录属于同一工具。
+     */
+    private void assertKeyBelongsToSameTool(OpenToolInvoke owner, OpenToolInvoke current) {
+        if (!StringUtils.hasText(owner.getToolName())
+                || !owner.getToolName().equals(current.getToolName())) {
+            throw new BusinessException("幂等键已被其他操作占用，请更换幂等键");
+        }
+    }
+
+    /**
+     * 推送状态变更：前端卡片据此从「待确认」收敛。推送失败不影响主流程。
+     */
+    private void notifyStatus(OpenToolInvoke record, ToolInvokeStatus status, String content) {
+        if (record == null) {
+            return;
+        }
+        notifier.notifyStatus(record.getSessionId(), record.getId(), status.name(), content);
     }
 
     private void markConfirmed(Long id, String operator, String idempotencyKey) {
