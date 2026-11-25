@@ -1,6 +1,7 @@
 package com.ai.cs.base.controller;
 
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,7 +46,9 @@ public class AiToolController {
     @Operation(summary = "查询自定义 AI 工具列表", description = "当前为占位实现，恒返回空列表")
     public Result<List<Map<String, Object>>> list(
             @Parameter(description = "租户编码") @RequestParam(required = false) String tenantCode) {
-        log.info("[占位] 查询自定义 AI 工具: tenantCode={}", tenantCode);
+        // 与其它租户级配置接口同口径：令牌带租户时以令牌为准，平台账号才用入参
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        log.info("[占位] 查询自定义 AI 工具: tenantCode={}", tenant);
         return Result.success(List.of());
     }
 

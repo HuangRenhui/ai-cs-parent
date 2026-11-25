@@ -73,7 +73,8 @@ CREATE TABLE `cs_customer` (
 
 CREATE TABLE `cs_agent` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '坐席ID',
-    `agent_account` VARCHAR(50) NOT NULL COMMENT '坐席账号',
+    `tenant_code` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户编码',
+    `agent_account` VARCHAR(50) NOT NULL COMMENT '坐席账号（租户内唯一）',
     `agent_pwd` VARCHAR(100) NOT NULL COMMENT '坐席密码(加密)',
     `agent_name` VARCHAR(50) NOT NULL COMMENT '坐席姓名',
     `agent_status` TINYINT DEFAULT 0 COMMENT '坐席状态: 0-离线, 1-在线, 2-忙碌',
@@ -81,7 +82,8 @@ CREATE TABLE `cs_agent` (
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_agent_account` (`agent_account`),
+    UNIQUE KEY `uk_tenant_agent_account` (`tenant_code`, `agent_account`),
+    KEY `idx_tenant_code` (`tenant_code`),
     KEY `idx_agent_status` (`agent_status`),
     KEY `idx_del_flag` (`del_flag`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='坐席信息表';
@@ -348,7 +350,7 @@ CREATE TABLE `cs_open_tool_invoke` (
     PRIMARY KEY (`id`),
     KEY `idx_open_invoke_session` (`session_id`),
     KEY `idx_open_invoke_status` (`status`, `tenant_code`),
-    UNIQUE KEY `uk_open_invoke_idem` (`idempotency_key`)
+    UNIQUE KEY `uk_open_invoke_tenant_idem` (`tenant_code`, `idempotency_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具调用审计';
 
 CREATE TABLE `cs_visitor_map` (
@@ -793,10 +795,10 @@ CREATE TABLE `cs_model_usage` (
 -- ============================================
 -- 演示种子（生产勿用明文密码）
 -- ============================================
-INSERT INTO `cs_agent` (`agent_account`, `agent_pwd`, `agent_name`, `agent_status`) VALUES
-('admin', '123456', '管理员', 1),
-('agent001', '123456', '客服小张', 1),
-('agent002', '123456', '客服小李', 0);
+INSERT INTO `cs_agent` (`tenant_code`, `agent_account`, `agent_pwd`, `agent_name`, `agent_status`) VALUES
+('default', 'admin', '123456', '管理员', 1),
+('default', 'agent001', '123456', '客服小张', 1),
+('default', 'agent002', '123456', '客服小李', 0);
 
 INSERT INTO `cs_customer` (`phone`, `nickname`, `customer_tag`) VALUES
 ('13800138001', '测试用户1', 'VIP'),

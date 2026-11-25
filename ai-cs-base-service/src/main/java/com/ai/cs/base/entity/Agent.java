@@ -16,7 +16,13 @@ public class Agent extends BaseEntity {
     /** 主键ID */
     @TableId(type = IdType.AUTO)
     private Long id;
-    /** 坐席登录账号 */
+    /**
+     * 所属租户编码：由服务端按登录令牌写入，客户端传入值不生效。
+     * 更新时固定不参与 SET（NEVER），避免改表把坐席「搬」到别的租户。
+     */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String tenantCode;
+    /** 坐席登录账号（租户内唯一） */
     private String agentAccount;
     /** 坐席登录密码（BCrypt密文；NOT_NULL 策略避免更新时被 null 覆盖） */
     @TableField(updateStrategy = FieldStrategy.NOT_NULL)

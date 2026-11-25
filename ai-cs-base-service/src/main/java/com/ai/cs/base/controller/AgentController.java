@@ -23,10 +23,12 @@ public class AgentController {
 
     /**
      * 坐席列表
+     *
+     * @param tenantCode 租户编码；令牌已绑定租户时忽略此参数（平台级账号才可按参数查）
      */
     @GetMapping("/list")
-    public Result<List<Agent>> list() {
-        return Result.success(agentService.listAgents());
+    public Result<List<Agent>> list(@RequestParam(required = false) String tenantCode) {
+        return Result.success(agentService.listAgents(tenantCode));
     }
 
     /**
@@ -63,14 +65,11 @@ public class AgentController {
     }
 
     /**
-     * 删除坐席（逻辑删除）
+     * 删除坐席（逻辑删除，仅限当前租户）
      */
     @DeleteMapping("/delete/{id}")
     public Result<String> delete(@PathVariable Long id) {
-        if (agentService.getById(id) == null) {
-            throw new BusinessException("坐席不存在");
-        }
-        agentService.removeById(id);
+        agentService.deleteAgent(id);
         return Result.success("删除成功");
     }
 }

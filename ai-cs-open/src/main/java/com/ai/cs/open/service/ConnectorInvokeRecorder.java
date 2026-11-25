@@ -1,5 +1,6 @@
 package com.ai.cs.open.service;
 
+import com.ai.cs.open.config.OpenToolProperties;
 import com.ai.cs.open.entity.OpenTool;
 import com.ai.cs.open.entity.OpenToolInvoke;
 import com.ai.cs.open.enums.ToolInvokeStatus;
@@ -8,6 +9,7 @@ import com.ai.cs.common.dto.ToolInvokeDTO;
 import com.ai.cs.common.security.JwtContext;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
 
 /**
  * 工具调用记录落库组件。
@@ -39,27 +43,30 @@ public class ConnectorInvokeRecorder {
 
     @Resource
     private OpenToolInvokeMapper openToolInvokeMapper;
+    @Resource
+    private OpenToolProperties openToolProperties;
 
     /**
-     * 查找幂等键下已成功的调用记录（success=1）。
+     * 按「租户 + 幂等键」查找已成功的调用记录（success=1）。
      *
-     * <p>只读操作，不新开事务，跟随调用方事务即可。</p>
-     *
+     * @param tenantCode     当前生效租户
      * @param idempotencyKey 幂等键
      * @return 已成功的记录；不存在返回 null
      */
-    public OpenToolInvoke findSucceeded(String idempotencyKey) {
+    public OpenToolInvoke findSucceeded(String tenantCode, String idempotencyKey) {
         return openToolInvokeMapper.selectOne(new LambdaQueryWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getTenantCode, tenantCode)
                 .eq(OpenToolInvoke::getIdempotencyKey, idempotencyKey)
                 .eq(OpenToolInvoke::getSuccess, 1)
                 .last("limit 1"));
     }
 
     /**
-     * 按幂等键查记录（不限定成功状态），用于确认时判断「同键是否正在执行」。
+     * 按「租户 + 幂等键」查记录（不限定成功状态），用于确认时判断「同键是否正在执行」。
      */
-    public OpenToolInvoke findByIdempotencyKey(String idempotencyKey) {
+    public OpenToolInvoke findByIdempotencyKey(String tenantCode, String idempotencyKey) {
         return openToolInvokeMapper.selectOne(new LambdaQueryWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getTenantCode, tenantCode)
                 .eq(OpenToolInvoke::getIdempotencyKey, idempotencyKey)
                 .last("limit 1"));
     }
@@ -81,10 +88,32 @@ public class ConnectorInvokeRecorder {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public OpenToolInvoke tryInsertPlaceholder(OpenTool tool, ToolInvokeDTO dto, String idempotencyKey) {
+        String tenantCode = JwtContext.resolveTenantCode(dto.getTenantCode());
+        OpenToolInvoke invoke = newPlaceholder(tool, dto, tenantCode, idempotencyKey);
+        try {
+            openToolInvokeMapper.insert(invoke);
+            return invoke;
+        } catch (DataIntegrityViolationException e) {
+            // 唯一索引冲突：并发执行中，或存在可重试的失败/中断占位
+            if (releaseRetryablePlaceholder(tenantCode, idempotencyKey, tool.getName())) {
+                try {
+                    openToolInvokeMapper.insert(invoke);
+                    return invoke;
+                } catch (DataIntegrityViolationException retryEx) {
+                    log.info("幂等键释放后仍被占用 tool={} key={}", tool.getName(), idempotencyKey);
+                    return null;
+                }
+            }
+            log.info("幂等键已被占用，判定为重复提交 tool={} key={}", tool.getName(), idempotencyKey);
+            return null;
+        }
+    }
+
+    private OpenToolInvoke newPlaceholder(OpenTool tool, ToolInvokeDTO dto, String tenantCode, String idempotencyKey) {
         OpenToolInvoke invoke = new OpenToolInvoke();
         invoke.setToolName(tool.getName());
         invoke.setSessionId(dto.getSessionId());
-        invoke.setTenantCode(JwtContext.resolveTenantCode(dto.getTenantCode()));
+        invoke.setTenantCode(tenantCode);
         invoke.setStatus(ToolInvokeStatus.CONFIRMED.name());
         invoke.setRisk(tool.getRisk());
         invoke.setRequestedBy(resolveRequestedBy(dto));
@@ -92,14 +121,57 @@ public class ConnectorInvokeRecorder {
         invoke.setRequestJson(JSON.toJSONString(dto));
         // 0 表示「处理中」：占位行存在的意义就是占住幂等键，尚未有结果
         invoke.setSuccess(0);
-        try {
-            openToolInvokeMapper.insert(invoke);
-            return invoke;
-        } catch (DataIntegrityViolationException e) {
-            // 唯一索引冲突 = 已有并发请求在同一幂等键上执行，属正常业务分支而非故障
-            log.info("幂等键已被占用，判定为重复提交 tool={} key={}", tool.getName(), idempotencyKey);
-            return null;
+        return invoke;
+    }
+
+    /**
+     * 释放可重试的占位行。
+     *
+     * <p>返回 true 表示幂等键已释放，可重新插入；false 表示占用仍有效。</p>
+     *
+     * <p>判定规则：</p>
+     * <ul>
+     *   <li>记录已成功 → 不释放，由上层重放结果；</li>
+     *   <li>状态 FAILED → 允许立即重试；</li>
+     *   <li>状态 CONFIRMED 且超过 {@code placeholderStaleMinutes} 未回写 → 按执行中断处理；</li>
+     *   <li>其余（执行中且未超时）→ 不释放。</li>
+     * </ul>
+     */
+    private boolean releaseRetryablePlaceholder(String tenantCode, String idempotencyKey, String toolName) {
+        OpenToolInvoke owner = findByIdempotencyKey(tenantCode, idempotencyKey);
+        if (owner == null) {
+            // 记录已被清理，直接重试插入
+            return true;
         }
+        if (Integer.valueOf(1).equals(owner.getSuccess())) {
+            return false;
+        }
+        boolean failed = ToolInvokeStatus.FAILED.name().equals(owner.getStatus());
+        LocalDateTime lastTouch = owner.getUpdateTime() != null ? owner.getUpdateTime() : owner.getCreateTime();
+        int staleMinutes = openToolProperties.getPlaceholderStaleMinutes() > 0
+                ? openToolProperties.getPlaceholderStaleMinutes() : 10;
+        boolean stale = lastTouch == null || lastTouch.isBefore(LocalDateTime.now().minusMinutes(staleMinutes));
+        if (!failed && !stale) {
+            return false;
+        }
+        LambdaUpdateWrapper<OpenToolInvoke> wrapper = new LambdaUpdateWrapper<OpenToolInvoke>()
+                .eq(OpenToolInvoke::getId, owner.getId())
+                .eq(OpenToolInvoke::getSuccess, 0)
+                .eq(OpenToolInvoke::getIdempotencyKey, idempotencyKey)
+                .set(OpenToolInvoke::getStatus, ToolInvokeStatus.FAILED.name())
+                .set(OpenToolInvoke::getIdempotencyKey, null)
+                .set(OpenToolInvoke::getUpdateTime, LocalDateTime.now());
+        if (!failed) {
+            // 中断占位补写失败原因
+            wrapper.set(OpenToolInvoke::getResponseJson, StringUtils.hasText(owner.getResponseJson())
+                    ? owner.getResponseJson() : "执行超时或进程中断，已释放幂等键");
+        }
+        int rows = openToolInvokeMapper.update(null, wrapper);
+        if (rows > 0) {
+            log.warn("释放可重试的幂等占位 tenant={} tool={} key={} previousStatus={}",
+                    tenantCode, toolName, idempotencyKey, owner.getStatus());
+        }
+        return rows > 0;
     }
 
     /**
@@ -125,10 +197,17 @@ public class ConnectorInvokeRecorder {
                 : ToolInvokeStatus.FAILED.name();
         try {
             if (placeholder != null && placeholder.getId() != null) {
-                placeholder.setResponseJson(payload);
-                placeholder.setSuccess(success);
-                placeholder.setStatus(status);
-                openToolInvokeMapper.updateById(placeholder);
+                LambdaUpdateWrapper<OpenToolInvoke> wrapper = new LambdaUpdateWrapper<OpenToolInvoke>()
+                        .eq(OpenToolInvoke::getId, placeholder.getId())
+                        .set(OpenToolInvoke::getResponseJson, payload)
+                        .set(OpenToolInvoke::getSuccess, success)
+                        .set(OpenToolInvoke::getStatus, status)
+                        .set(OpenToolInvoke::getUpdateTime, LocalDateTime.now());
+                if (success != 1) {
+                    // 失败记录保留审计，同时释放幂等键以便重试
+                    wrapper.set(OpenToolInvoke::getIdempotencyKey, null);
+                }
+                openToolInvokeMapper.update(null, wrapper);
                 return;
             }
             OpenToolInvoke record = new OpenToolInvoke();
