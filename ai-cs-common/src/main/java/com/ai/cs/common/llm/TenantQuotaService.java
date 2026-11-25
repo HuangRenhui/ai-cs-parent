@@ -32,12 +32,18 @@ public class TenantQuotaService {
      * 检查租户是否超过当日配额
      *
      * @param tenantCode 租户编码
-     * @return true=已超限或无法核对配额，调用方应拒绝。未配置上限（limit&lt;=0）视为不限
+     * @return true=已超限；未配置上限（limit&lt;=0）或 Redis 不可用时返回 false（放行）。
+     *         租户编码为空属于调用方错误，按超限拒绝
      */
     public boolean isQuotaExceeded(String tenantCode) {
-        if (tenantCode == null || tenantCode.isBlank() || redisTemplate == null) {
-            log.warn("租户配额无法核对，按超限拒绝 tenant={}", tenantCode);
+        if (tenantCode == null || tenantCode.isBlank()) {
+            log.warn("租户编码为空，按超限拒绝");
             return true;
+        }
+        if (redisTemplate == null) {
+            // 配额是成本保护而非鉴权：Redis 未接入时放行，避免整条对话链路不可用
+            log.warn("Redis 未接入，跳过租户配额检查 tenant={}", tenantCode);
+            return false;
         }
         try {
             String configKey = QUOTA_CONFIG_KEY + tenantCode;
@@ -51,8 +57,9 @@ public class TenantQuotaService {
             long current = currentStr != null ? Long.parseLong(currentStr) : 0;
             return current >= dailyLimit;
         } catch (Exception e) {
-            log.warn("租户配额检查失败，按超限拒绝 tenant={}", tenantCode, e);
-            return true;
+            // 同理：Redis 抖动不能让所有租户都被判定超限，放行并留告警日志
+            log.warn("租户配额检查失败，本次放行 tenant={}", tenantCode, e);
+            return false;
         }
     }
 
@@ -68,8 +75,11 @@ public class TenantQuotaService {
         }
         try {
             String usageKey = QUOTA_KEY_PREFIX + tenantCode + ":" + LocalDate.now().format(DAY);
-            redisTemplate.opsForValue().increment(usageKey, tokens);
-            redisTemplate.expire(usageKey, 50, TimeUnit.HOURS);
+            Long current = redisTemplate.opsForValue().increment(usageKey, tokens);
+            // 只在首次写入时设置 TTL：每次写都 expire 会不断续期，跨天也清不掉
+            if (current != null && current == tokens) {
+                redisTemplate.expire(usageKey, 50, TimeUnit.HOURS);
+            }
         } catch (Exception e) {
             log.warn("记录租户Token消耗失败 tenant={}", tenantCode, e);
         }

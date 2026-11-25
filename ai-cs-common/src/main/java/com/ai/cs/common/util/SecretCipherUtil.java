@@ -33,11 +33,40 @@ public final class SecretCipherUtil {
     private static final int IV_BYTES = 12;
     private static final String TRANSFORM = "AES/GCM/NoPadding";
 
-    /** 内置默认密钥：仅为本机/演示兜底，生产必须通过 AI_MODEL_SECRET 覆盖 */
-    private static final String DEFAULT_SECRET = "AiCsModelSecretKey_2026_Demo_Only_ChangeMe!";
+    /** 内置演示密钥：仅 dev/local/test 允许兜底，生产必须通过 AI_MODEL_SECRET 覆盖 */
+    private static final String DEV_DEFAULT_SECRET = "AiCsModelSecretKey_2026_Demo_Only_ChangeMe!";
+
+    /** 启动时注入的密钥 */
+    private static volatile String configuredSecret;
+    /** 是否允许回退到演示密钥。默认关闭，由 ModelSecretSettings 在 dev/local/test profile 下显式打开 */
+    private static volatile boolean allowDevFallback = false;
 
     /** 工具类禁止实例化 */
     private SecretCipherUtil() {
+    }
+
+    /**
+     * 启动时注入模型密钥。
+     *
+     * @param secret  配置的密钥；为空时回退环境变量 AI_MODEL_SECRET
+     * @param lenient 是否允许 dev/local/test 环境使用内置演示密钥
+     */
+    public static void configure(String secret, boolean lenient) {
+        allowDevFallback = lenient;
+        if (StringUtils.hasText(secret)) {
+            configuredSecret = secret.trim();
+            return;
+        }
+        String env = System.getenv("AI_MODEL_SECRET");
+        if (StringUtils.hasText(env)) {
+            configuredSecret = env.trim();
+            return;
+        }
+        if (!lenient) {
+            throw new IllegalStateException(
+                    "未配置 AI_MODEL_SECRET / ai.model.secret，拒绝使用内置默认密钥加密模型凭据");
+        }
+        log.warn("未配置 AI_MODEL_SECRET，dev/local 环境使用内置演示密钥加密模型凭据。");
     }
 
     /**
@@ -58,13 +87,16 @@ public final class SecretCipherUtil {
             System.arraycopy(cipherBytes, 0, merged, iv.length, cipherBytes.length);
             return PREFIX + Base64.getEncoder().encodeToString(merged);
         } catch (Exception e) {
-            log.warn("字段加密失败，原样存储: {}", e.getMessage());
-            return plain;
+            // 不能静默降级为明文：那会把 apiKey 直接写进数据库
+            log.error("字段加密失败，拒绝明文落库: {}", e.getMessage());
+            throw new IllegalStateException("敏感字段加密失败，请检查 AI_MODEL_SECRET 配置", e);
         }
     }
 
     /**
-     * 解密密文。明文/空串/解密失败(含密钥变更)均原样返回，保证读取不中断。
+     * 解密密文。明文/空串原样返回；带 {@code enc:} 前缀但解密失败（如密钥变更）时抛异常。
+     *
+     * <p>不能把 {@code enc:xxx} 当明文透传，否则上游只会拿到 401，问题会被误判为「模型不可用」。</p>
      */
     public static String decrypt(String cipherText) {
         if (!StringUtils.hasText(cipherText) || !cipherText.startsWith(PREFIX)) {
@@ -79,8 +111,9 @@ public final class SecretCipherUtil {
             byte[] plainBytes = cipher.doFinal(merged, IV_BYTES, merged.length - IV_BYTES);
             return new String(plainBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.warn("字段解密失败，按明文透传: {}", e.getMessage());
-            return cipherText;
+            // 不能把 enc:xxx 当明文透传：上游只会得到 401，问题会被误判为「模型不可用」
+            log.error("字段解密失败，密钥可能与加密时不一致: {}", e.getMessage());
+            throw new IllegalStateException("敏感字段解密失败，请检查 AI_MODEL_SECRET 是否与加密时一致", e);
         }
     }
 
@@ -103,8 +136,11 @@ public final class SecretCipherUtil {
         return out;
     }
 
-    /** 解析密钥：环境变量 AI_MODEL_SECRET → 系统属性 ai.model.secret → 内置默认 */
+    /** 解析密钥：注入值 → 环境变量 AI_MODEL_SECRET → 系统属性 ai.model.secret → 演示密钥/抛错 */
     private static String resolveSecret() {
+        if (StringUtils.hasText(configuredSecret)) {
+            return configuredSecret;
+        }
         String env = System.getenv("AI_MODEL_SECRET");
         if (StringUtils.hasText(env)) {
             return env.trim();
@@ -113,6 +149,9 @@ public final class SecretCipherUtil {
         if (StringUtils.hasText(prop)) {
             return prop.trim();
         }
-        return DEFAULT_SECRET;
+        if (allowDevFallback) {
+            return DEV_DEFAULT_SECRET;
+        }
+        throw new IllegalStateException("未配置 AI_MODEL_SECRET，拒绝使用内置默认密钥加解密模型凭据");
     }
 }

@@ -339,8 +339,22 @@ public class ModelRouter {
         doRefresh(true);
     }
 
+    /** 刷新锁：Redis 抖动时只让一个线程去刷新，其余线程直接用旧候选，避免请求线程被串行阻塞 */
+    private final java.util.concurrent.locks.ReentrantLock refreshLock = new java.util.concurrent.locks.ReentrantLock();
+
     /** 读 Redis 重建候选池；debounced=true 时二次校验防抖窗口 */
-    private synchronized void doRefresh(boolean debounced) {
+    private void doRefresh(boolean debounced) {
+        if (!refreshLock.tryLock()) {
+            return;
+        }
+        try {
+            doRefreshLocked(debounced);
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    private synchronized void doRefreshLocked(boolean debounced) {
         long now = System.currentTimeMillis();
         if (debounced && now - lastRefreshAt < REFRESH_DEBOUNCE_MS) {
             return;
