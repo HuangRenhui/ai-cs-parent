@@ -142,6 +142,9 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             
             log.info("文档版本回退成功: documentId={}, targetVersion={}", documentId, targetVersion);
             return "版本回退成功，当前版本: " + targetVersion;
+        } catch (BusinessException e) {
+            // 404 等业务语义原样抛出，不能被下面的兜底 catch 改写成 500
+            throw e;
         } catch (Exception e) {
             log.error("文档版本回退失败: documentId={}, targetVersion={}", documentId, targetVersion, e);
             throw new BusinessException(500, "版本回退失败");
@@ -186,6 +189,8 @@ public class DocumentVersionService extends ServiceImpl<DocumentVersionMapper, D
             
             log.info("删除文档版本成功: id={}", id);
             return "版本删除成功";
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("删除文档版本失败: id={}", id, e);
             throw new BusinessException(500, "删除版本失败");

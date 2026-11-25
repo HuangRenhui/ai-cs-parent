@@ -58,6 +58,8 @@ import java.util.stream.Collectors;
  * </ul>
  * <p>集合在首次写入时懒建（建集合 + 建 IVF_FLAT / COSINE 索引 + load）。</p>
  *
+ * <p>连接在启动时探测一次；失败不阻断启动，后台每 30 秒重试，Milvus 晚于本服务就绪时可自动恢复。</p>
+ *
  * <p><b>失败语义</b>：连接不可用、向量维度不符、Milvus RPC 失败一律抛异常
  * （{@link IllegalStateException} / {@link IllegalArgumentException}），由上层
  * {@code RagSearchService} 转「服务不可用」三态；<b>集合不存在视为未命中</b>，返回空列表。</p>
@@ -91,8 +93,14 @@ public class MilvusUtil {
     @Value("${milvus.port}")
     private Integer port;
 
-    /** Milvus客户端连接 */
-    private MilvusClient client;
+    /** Milvus客户端连接（后台重连线程会替换，需 volatile） */
+    private volatile MilvusClient client;
+
+    /** 连接不可用时的后台重连线程：Milvus 晚于本服务就绪时无需重启进程 */
+    private java.util.concurrent.ScheduledExecutorService reconnectExecutor;
+
+    /** 重连间隔（秒） */
+    private static final long RECONNECT_INTERVAL_SECONDS = 30L;
 
     /** 集合字段：FAQ主键ID */
     public static final String FIELD_FAQ_ID = "faq_id";
@@ -133,25 +141,63 @@ public class MilvusUtil {
      */
     @PostConstruct
     public void init() {
+        connect();
+        // 守护线程做周期重连：Milvus 比 knowledge 晚就绪时，可自动恢复而不用重启进程
+        reconnectExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "milvus-reconnect");
+            t.setDaemon(true);
+            return t;
+        });
+        reconnectExecutor.scheduleWithFixedDelay(this::reconnectIfNeeded,
+                RECONNECT_INTERVAL_SECONDS, RECONNECT_INTERVAL_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /** 建立连接并探测一次；失败只记录原因，不阻断服务启动 */
+    private synchronized void connect() {
+        if (client != null) {
+            return;
+        }
+        MilvusServiceClient candidate = null;
         try {
-            client = new MilvusServiceClient(ConnectParam.newBuilder()
+            candidate = new MilvusServiceClient(ConnectParam.newBuilder()
                     .withHost(host).withPort(port).build());
-            R<CheckHealthResponse> health = client.checkHealth();
+            R<CheckHealthResponse> health = candidate.checkHealth();
             if (health.getStatus() != R.Status.Success.getCode()) {
                 ready = false;
                 lastError = health.getMessage();
-                client = null;
+                closeQuietly(candidate);
                 log.warn("Milvus 健康检查失败 {}:{} reason={}", host, port, lastError);
                 return;
             }
+            client = candidate;
             ready = true;
             readyCollections.clear();
             log.info("Milvus 连接成功 {}:{}", host, port);
         } catch (Exception e) {
             ready = false;
-            client = null;
             lastError = e.getMessage();
+            closeQuietly(candidate);
             log.warn("Milvus 连接失败 host={}:{} reason={}", host, port, lastError);
+        }
+    }
+
+    /** 后台重连入口：已就绪则跳过，未就绪时尝试重建连接 */
+    private void reconnectIfNeeded() {
+        if (isReady()) {
+            return;
+        }
+        log.info("Milvus 仍未就绪，尝试重连 {}:{}", host, port);
+        connect();
+    }
+
+    private void closeQuietly(MilvusClient target) {
+        if (target == null) {
+            return;
+        }
+        try {
+            target.close();
+        } catch (Exception e) {
+            log.debug("关闭 Milvus 探测连接失败: {}", e.getMessage());
         }
     }
 
@@ -162,6 +208,9 @@ public class MilvusUtil {
     public void destroy() {
         ready = false;
         readyCollections.clear();
+        if (reconnectExecutor != null) {
+            reconnectExecutor.shutdownNow();
+        }
         if (client != null) {
             try {
                 client.close();

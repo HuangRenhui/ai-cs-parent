@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 文档切片向量服务（<b>骨架：只有签名与分步注释，逻辑待实现</b>）
+ * 文档切片向量服务
  *
  * <p>职责：把「文档解析出的切片」落库并向量化，供文档 RAG 检索使用。数据模型是
  * 文本落 {@code cs_kb_chunk}、向量落 Milvus 切片集合（{@code milvus.chunk-collection-name}），

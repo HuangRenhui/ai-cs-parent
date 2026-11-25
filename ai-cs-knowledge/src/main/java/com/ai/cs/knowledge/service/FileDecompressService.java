@@ -77,15 +77,51 @@ public class FileDecompressService {
      * @throws IOException 占位实现
      */
     public DecompressResult decompressFromFile(String archiveFilePath) throws IOException {
-        Path archivePath = Paths.get(archiveFilePath).toAbsolutePath().normalize();
+        Path archivePath = resolveWithinRoots(archiveFilePath);
         File archiveFile = archivePath.toFile();
 
-        if (!archiveFile.exists() || !archiveFile.isFile()) {
-            throw new IOException("压缩文件不存在: " + archiveFilePath);
+        String extension = getFileExtension(archiveFile.getName()).toLowerCase();
+        if (!isAllowedArchiveFormat(extension)) {
+            throw new IOException("不支持的压缩格式: " + extension);
         }
 
         log.warn("[占位] 本地压缩包解压未实现 file={}", archiveFile.getName());
         throw new IOException("压缩包解压为占位实现，后端未接入解压处理");
+    }
+
+    /**
+     * 本接口只接受配置根目录内的文件，避免被用来探测/读取任意系统路径。
+     */
+    private Path resolveWithinRoots(String filePath) throws IOException {
+        if (filePath == null || filePath.isBlank()) {
+            throw new IOException("压缩文件路径不能为空");
+        }
+        Path root = realRoot(fileProperties.getRootPath());
+        Path input = Paths.get(filePath);
+        Path resolved = input.isAbsolute() ? input.normalize() : root.resolve(input).normalize();
+        if (!Files.exists(resolved) || !Files.isRegularFile(resolved)) {
+            throw new IOException("压缩文件不存在: " + filePath);
+        }
+        Path real = resolved.toRealPath();
+        for (Path allowed : Arrays.asList(
+                root,
+                realRoot(fileProperties.getDecompressPath()),
+                realRoot(fileProperties.getPackagePath()))) {
+            if (real.startsWith(allowed)) {
+                return real;
+            }
+        }
+        throw new IOException("非法的文件路径: " + filePath);
+    }
+
+    /** 根目录真实路径：兼容 Linux 挂载点/软链，避免合法文件被误判为越界 */
+    private Path realRoot(String configuredPath) {
+        Path path = Paths.get(configuredPath).toAbsolutePath().normalize();
+        try {
+            return Files.exists(path) ? path.toRealPath() : path;
+        } catch (IOException e) {
+            return path;
+        }
     }
 
     /**

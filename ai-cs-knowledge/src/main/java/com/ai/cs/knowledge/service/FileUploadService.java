@@ -9,6 +9,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -51,13 +54,31 @@ public class FileUploadService {
         FILE_MAGIC_NUMBERS.put("52494646", "wav"); // WAV (RIFF)
     }
 
+    /** 临时目录绝对路径（构造时解析；创建失败在首次上传时重试） */
+    private volatile Path tempDir;
+
     public FileUploadService(UploadProperties uploadProperties) {
         this.uploadProperties = uploadProperties;
-        // 创建临时文件夹
-        File dir = new File(uploadProperties.getTempPath());
-        if (!dir.exists()) {
-            dir.mkdirs();
+        try {
+            prepareTempDir();
+        } catch (IOException e) {
+            log.error("上传临时目录初始化失败，将在首次上传时重试: {}", e.getMessage());
         }
+    }
+
+    /** 懒初始化临时目录；使用绝对路径，避免 transferTo 按容器临时目录解析相对路径 */
+    private Path prepareTempDir() throws IOException {
+        Path path = tempDir;
+        if (path == null) {
+            synchronized (this) {
+                if (tempDir == null) {
+                    tempDir = Paths.get(uploadProperties.getTempPath()).toAbsolutePath().normalize();
+                    Files.createDirectories(tempDir);
+                }
+                path = tempDir;
+            }
+        }
+        return path;
     }
 
     /**
@@ -76,12 +97,17 @@ public class FileUploadService {
         // 验证文件魔数
         validateFileMagicNumber(file);
         
-        String suffix = originalName.substring(originalName.lastIndexOf("."));
+        // 无扩展名时 lastIndexOf 返回 -1，直接 substring(-1) 会抛越界异常
+        int dot = originalName.lastIndexOf('.');
+        String suffix = dot >= 0 ? originalName.substring(dot) : "";
         String newFileName = UUID.randomUUID() + suffix;
 
-        File destFile = new File(uploadProperties.getTempPath() + File.separator + newFileName);
-        file.transferTo(destFile);
-        return destFile.getAbsolutePath();
+        Path target = prepareTempDir().resolve(newFileName).normalize();
+        if (!target.startsWith(tempDir)) {
+            throw new IOException("非法的临时文件路径");
+        }
+        file.transferTo(target.toFile());
+        return target.toAbsolutePath().toString();
     }
 
     /**
@@ -95,7 +121,9 @@ public class FileUploadService {
             throw new IOException("文件名不能为空");
         }
         
-        String extension = originalName.substring(originalName.lastIndexOf(".") + 1).toLowerCase();
+        // 无扩展名时取空串，交给魔数校验判定为不支持的类型，而不是把整个文件名当扩展名
+        int dot = originalName.lastIndexOf('.');
+        String extension = dot >= 0 ? originalName.substring(dot + 1).toLowerCase() : "";
         
         try (InputStream inputStream = file.getInputStream()) {
             byte[] header = new byte[8];

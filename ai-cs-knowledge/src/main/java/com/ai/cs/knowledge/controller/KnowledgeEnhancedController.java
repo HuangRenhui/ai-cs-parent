@@ -371,10 +371,16 @@ public class KnowledgeEnhancedController {
             @RequestParam(required = false) String description,
             @RequestParam(required = false) String validFrom,
             @RequestParam(required = false) String validUntil) {
+        java.time.LocalDateTime validFromTime;
+        java.time.LocalDateTime validUntilTime;
         try {
             // 生效/失效时间为可选的ISO日期时间字符串，未传则为null表示不限
-            var validFromTime = validFrom != null ? java.time.LocalDateTime.parse(validFrom) : null;
-            var validUntilTime = validUntil != null ? java.time.LocalDateTime.parse(validUntil) : null;
+            validFromTime = parseIsoTime(validFrom, "validFrom");
+            validUntilTime = parseIsoTime(validUntil, "validUntil");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(400, e.getMessage());
+        }
+        try {
             temporalService.createTemporalRelation(sourceNodeId, targetNodeId, relationType, description, validFromTime, validUntilTime);
             return Result.success("时序关系创建成功");
         } catch (Exception e) {
@@ -389,8 +395,16 @@ public class KnowledgeEnhancedController {
     @Operation(summary = "获取指定时间点图谱快照")
     public Result<Map<String, Object>> getSnapshot(
             @RequestParam String snapshotTime) {
+        java.time.LocalDateTime time;
         try {
-            var time = java.time.LocalDateTime.parse(snapshotTime);
+            time = parseIsoTime(snapshotTime, "snapshotTime");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(400, e.getMessage());
+        }
+        if (time == null) {
+            return Result.fail(400, "snapshotTime 不能为空");
+        }
+        try {
             return Result.success(temporalService.getSnapshot(time));
         } catch (Exception e) {
             return Result.fail("操作失败，请稍后重试");
@@ -405,12 +419,35 @@ public class KnowledgeEnhancedController {
     public Result<Map<String, Object>> getGraphChanges(
             @RequestParam String from,
             @RequestParam String to) {
+        java.time.LocalDateTime fromTime;
+        java.time.LocalDateTime toTime;
         try {
-            var fromTime = java.time.LocalDateTime.parse(from);
-            var toTime = java.time.LocalDateTime.parse(to);
+            fromTime = parseIsoTime(from, "from");
+            toTime = parseIsoTime(to, "to");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(400, e.getMessage());
+        }
+        if (fromTime == null || toTime == null) {
+            return Result.fail(400, "from 与 to 均不能为空");
+        }
+        try {
             return Result.success(temporalService.getGraphChanges(fromTime, toTime));
         } catch (Exception e) {
             return Result.fail("操作失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 解析 ISO 日期时间入参：空值返回 null，格式非法抛 IllegalArgumentException 由调用方转 400。
+     */
+    private java.time.LocalDateTime parseIsoTime(String value, String field) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.LocalDateTime.parse(value.trim());
+        } catch (Exception e) {
+            throw new IllegalArgumentException(field + " 格式应为 ISO 日期时间，例如 2026-01-01T00:00:00");
         }
     }
 

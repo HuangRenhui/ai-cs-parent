@@ -296,9 +296,9 @@ knowledge-graph:
     max-text-length: 2000
     relation-types: 包含,依赖,属于,等同于,引用,相关,前置,后置
 
-# knife4j文档配置
+# knife4j文档配置（生产必须显式关闭，避免接口清单对外暴露）
 knife4j:
-  enable: true
+  enable: ${KNIFE4J_ENABLE:false}
   openapi:
     title: 私有化RAG知识库系统接口文档
     description: SpringBoot+LangChain4j+Ollama+Chroma

@@ -11,12 +11,12 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * FAQ / 租户 RAG 向量化入口（占位）
+ * FAQ / 租户 RAG 向量化入口
  *
- * <p>TODO 后续实现：底层统一走 {@link ModelRouter}（未登记向量模型时回退历史配置，登记后支持向量模型切换与故障转移）；
- * 需保留 {@link IOException} 异常语义（包装 {@code ModelCallException}），屏蔽上层对具体异常的依赖。</p>
+ * <p>底层统一走 {@link ModelRouter}（未登记向量模型时回退历史配置，登记后支持向量模型切换与故障转移）；
+ * 对外保留 {@link IOException} 异常语义（包装 {@code ModelCallException}），屏蔽上层对具体异常的依赖。</p>
  *
- * <p>当前不调用模型：{@link #getVector} 一律抛 {@link IOException}（占位），向量化相关的上层流程按异常分支降级。</p>
+ * <p>空文本与空向量统一转 {@link IOException}，由上层按服务不可用处理。</p>
  */
 @Slf4j
 @Component

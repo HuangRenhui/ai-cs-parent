@@ -4,11 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.ai.cs.common.exception.BusinessException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -20,8 +22,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class BatchProcessService {
 
-    private final ExecutorService executorService = Executors.newFixedThreadPool(
-            Runtime.getRuntime().availableProcessors());
+    /** 单批次最多文件数：防止一次上传把队列与内存打满 */
+    private static final int MAX_FILES_PER_BATCH = 200;
+    /** 等待队列上限：超限直接拒绝，而不是无限堆积 */
+    private static final int MAX_QUEUE_SIZE = 200;
+    /** 整批处理超时（分钟）：请求线程不能无限期阻塞 */
+    private static final long BATCH_TIMEOUT_MINUTES = 5L;
+    /** 已完成进度的保留时长：便于前端轮询后回收 */
+    private static final long PROGRESS_TTL_MILLIS = 60L * 60 * 1000;
+
+    private final ThreadPoolExecutor executorService = new ThreadPoolExecutor(
+            Math.max(2, Runtime.getRuntime().availableProcessors()),
+            Math.max(2, Runtime.getRuntime().availableProcessors()),
+            60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(MAX_QUEUE_SIZE),
+            r -> {
+                Thread t = new Thread(r, "batch-process");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
+
+    /** 容器关闭时停止接收新任务并中断在途任务 */
+    @jakarta.annotation.PreDestroy
+    public void shutdown() {
+        executorService.shutdownNow();
+        progressStore.clear();
+    }
 
     /**
      * 批量处理结果
@@ -99,7 +126,10 @@ public class BatchProcessService {
         private boolean completed;
         /** 完成百分比（0~100） */
         private double percentage;
+        /** 批次创建时间（毫秒），用于回收过期进度 */
+        private final long createdAt = System.currentTimeMillis();
 
+        public long getCreatedAt() { return createdAt; }
         public String getBatchId() { return batchId; }
         public void setBatchId(String batchId) { this.batchId = batchId; }
         public int getTotal() { return total; }
@@ -130,6 +160,13 @@ public class BatchProcessService {
      * 并发批量处理文件
      */
     public BatchResult processBatch(MultipartFile[] files, FileProcessor processor) {
+        if (files == null || files.length == 0) {
+            throw new BusinessException("请选择要处理的文件");
+        }
+        if (files.length > MAX_FILES_PER_BATCH) {
+            throw new BusinessException("一次最多处理 " + MAX_FILES_PER_BATCH + " 个文件，当前 " + files.length + " 个");
+        }
+        cleanupExpiredProgress();
         String batchId = UUID.randomUUID().toString();
         long startTime = System.currentTimeMillis();
 
@@ -151,36 +188,53 @@ public class BatchProcessService {
         // 创建并发任务
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (MultipartFile file : files) {
-            CompletableFuture<Void> future = CompletableFuture.supplyAsync(() -> {
-                FileResult fr = new FileResult();
-                fr.setOriginalFilename(file.getOriginalFilename());
-                try {
-                    fr = processor.process(file);
-                    fr.setSuccess(true);
-                    successCount.incrementAndGet();
-                } catch (Exception e) {
-                    fr.setSuccess(false);
-                    fr.setErrorMessage("处理失败");
-                    failCount.incrementAndGet();
-                    log.warn("批量处理文件失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
-                }
-                results.add(fr);
+            try {
+                CompletableFuture<Void> future = CompletableFuture.supplyAsync(() -> {
+                    FileResult fr = new FileResult();
+                    fr.setOriginalFilename(file.getOriginalFilename());
+                    try {
+                        fr = processor.process(file);
+                        fr.setSuccess(true);
+                        successCount.incrementAndGet();
+                    } catch (Exception e) {
+                        fr.setSuccess(false);
+                        fr.setErrorMessage("处理失败");
+                        failCount.incrementAndGet();
+                        log.warn("批量处理文件失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
+                    }
+                    results.add(fr);
 
-                // 更新进度
-                int processed = processedCount.incrementAndGet();
-                progress.setProcessed(processed);
-                progress.setSuccess(successCount.get());
+                    // 更新进度
+                    int processed = processedCount.incrementAndGet();
+                    progress.setProcessed(processed);
+                    progress.setSuccess(successCount.get());
+                    progress.setFailed(failCount.get());
+                    progress.setPercentage((double) processed / files.length * 100);
+
+                    return null;
+                }, executorService);
+                futures.add(future);
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                // 队列已满：记录单个文件失败，避免整批直接抛给调用方
+                FileResult rejected = new FileResult();
+                rejected.setOriginalFilename(file.getOriginalFilename());
+                rejected.setSuccess(false);
+                rejected.setErrorMessage("系统繁忙，请稍后重试");
+                results.add(rejected);
+                failCount.incrementAndGet();
                 progress.setFailed(failCount.get());
-                progress.setPercentage((double) processed / files.length * 100);
-
-                return null;
-            }, executorService);
-
-            futures.add(future);
+            }
         }
 
-        // 等待所有任务完成
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        // 等待所有任务完成；超时后中断剩余任务，避免请求线程无限期阻塞
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .orTimeout(BATCH_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                    .join();
+        } catch (Exception e) {
+            futures.forEach(future -> future.cancel(true));
+            log.warn("批量处理超时或中断 batchId={} timeout={}min", batchId, BATCH_TIMEOUT_MINUTES);
+        }
 
         progress.setCompleted(true);
         progress.setPercentage(100.0);
@@ -194,6 +248,13 @@ public class BatchProcessService {
                 batchId, successCount.get(), failCount.get(), result.getDuration());
 
         return result;
+    }
+
+    /** 回收超过保留期且已完成的进度，防止 progressStore 单调增长 */
+    private void cleanupExpiredProgress() {
+        long deadline = System.currentTimeMillis() - PROGRESS_TTL_MILLIS;
+        progressStore.entrySet().removeIf(entry ->
+                entry.getValue().isCompleted() && entry.getValue().getCreatedAt() < deadline);
     }
 
     /**

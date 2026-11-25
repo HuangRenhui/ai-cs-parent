@@ -239,7 +239,12 @@ public class FaqController {
         if (!StringUtils.hasText(tenant)) {
             throw new BusinessException("请指定租户编码 tenantCode");
         }
-        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenant, sessionId, industryPrompt);
+        // industryPrompt 不采信请求参数，行业叠加片段由服务端按 packCode/配置加载
+        if (StringUtils.hasText(industryPrompt)) {
+            log.warn("已忽略请求传入的 industryPrompt（潜在提示词注入），tenant={} length={}",
+                    tenant, industryPrompt.length());
+        }
+        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenant, sessionId, null);
         if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
             return Result.fail(data.getError() == null ? "知识库检索不可用" : data.getError());
         }

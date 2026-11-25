@@ -24,8 +24,8 @@ public class ImageHotlinkService {
     /** 签名密钥 */
     private static final String SIGN_KEY = "image-hotlink-secret-key-change-in-production";
 
-    /** Referer白名单 */
-    private final Set<String> refererWhitelist = new HashSet<>();
+    /** Referer白名单：运行期可增删，必须用并发集合 */
+    private final Set<String> refererWhitelist = ConcurrentHashMap.newKeySet();
 
     /** 生成的访问Token缓存 */
     private final Map<String, TokenInfo> tokenCache = new ConcurrentHashMap<>();
@@ -58,6 +58,10 @@ public class ImageHotlinkService {
         info.setCreateTime(timestamp);
         info.setExpireTime(expireTime);
         tokenCache.put(tokenId, info);
+        // 机会式回收：避免每个签发 token 都永久留在内存里
+        if (tokenCache.size() > 1000) {
+            cleanupExpiredTokens();
+        }
 
         log.debug("生成图片访问Token: fileId={}, 过期时间={}秒", fileId, expireSeconds);
         return token;
@@ -91,11 +95,16 @@ public class ImageHotlinkService {
                 return false;
             }
 
-            // 验证签名
-            String expectedSign = md5(fileId + ":" + currentTime + ":" + expireTime + ":" + SIGN_KEY);
             // 验证缓存的Token信息
             TokenInfo cached = tokenCache.get(tokenId);
             if (cached == null) {
+                return false;
+            }
+
+            // 签名必须用 token 的签发时间参与计算，请求时刻不同不能影响校验结果
+            String expectedSign = md5(fileId + ":" + cached.getCreateTime() + ":" + expireTime + ":" + SIGN_KEY);
+            if (!expectedSign.equals(sign)) {
+                log.warn("Token签名校验失败: fileId={}", fileId);
                 return false;
             }
 
@@ -117,8 +126,20 @@ public class ImageHotlinkService {
             return true;
         }
 
+        // 按主机名精确匹配：`contains` 会让 evil-localhost.com 之类域名绕过白名单
+        String host = referer;
+        try {
+            String parsed = java.net.URI.create(referer).getHost();
+            if (parsed != null) {
+                host = parsed;
+            }
+        } catch (Exception ignored) {
+            // Referer 不是合法 URL 时按原串比较
+        }
+        String hostLower = host.toLowerCase();
         for (String allowed : refererWhitelist) {
-            if (referer.contains(allowed)) {
+            String allowedLower = allowed.toLowerCase();
+            if (hostLower.equals(allowedLower) || hostLower.endsWith("." + allowedLower)) {
                 return true;
             }
         }

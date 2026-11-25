@@ -95,8 +95,12 @@ public class RagSearchService {
             List<MilvusHit> hits = retrieve(tenant, question);
             List<KnowledgeFaq> faqs = loadPublishedFaqs(tenant, hits);
             if (faqs.isEmpty()) {
-                // 未命中：记录问题供运营补知识，topScore 帮助判断「差一点命中」
-                missService.record(tenant, question, sessionId, topScore(hits));
+                // 未命中：记录问题供运营补知识；记录失败不影响检索结果
+                try {
+                    missService.record(tenant, question, sessionId, topScore(hits));
+                } catch (Exception e) {
+                    log.warn("记录知识未命中失败 tenant={}", tenant, e);
+                }
                 log.info("知识库未命中 tenant={} 命中条数={}", tenant, hits.size());
                 return RagSearchResultDTO.miss(MISS_REPLY);
             }

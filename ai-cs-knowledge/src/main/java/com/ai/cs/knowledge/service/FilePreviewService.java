@@ -69,7 +69,8 @@ public class FilePreviewService {
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + 
                         URLEncoder.encode(file.getName(), StandardCharsets.UTF_8) + "\"")
-                .header(HttpHeaders.CACHE_CONTROL, "max-age=3600, public")
+                // 知识库文档可能受租户权限保护，禁止共享缓存/代理缓存
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=600")
                 .body(resource);
     }
 
@@ -215,14 +216,26 @@ public class FilePreviewService {
         if (input.isAbsolute()) {
             throw new IOException("非法的文件路径");
         }
-        Path root = Paths.get(fileProperties.getRootPath()).toAbsolutePath().normalize();
-        Path decompress = Paths.get(fileProperties.getDecompressPath()).toAbsolutePath().normalize();
-        Path pack = Paths.get(fileProperties.getPackagePath()).toAbsolutePath().normalize();
+        Path root = realRoot(fileProperties.getRootPath());
+        Path decompress = realRoot(fileProperties.getDecompressPath());
+        Path pack = realRoot(fileProperties.getPackagePath());
         Path resolved = root.resolve(filePath).toAbsolutePath().normalize();
-        if (resolved.startsWith(root) || resolved.startsWith(decompress) || resolved.startsWith(pack)) {
-            return resolved;
+        // toRealPath 解析符号链接（Linux 挂载点/软链），防止通过上传目录内的软链逃逸
+        Path real = resolved.toRealPath();
+        if (real.startsWith(root) || real.startsWith(decompress) || real.startsWith(pack)) {
+            return real;
         }
         throw new IOException("非法的文件路径: " + filePath);
+    }
+
+    /** 根目录真实路径：Linux 部署常把上传目录挂载为软链，未解析会把合法文件误判为越界 */
+    private Path realRoot(String configuredPath) {
+        Path path = Paths.get(configuredPath).toAbsolutePath().normalize();
+        try {
+            return Files.exists(path) ? path.toRealPath() : path;
+        } catch (IOException e) {
+            return path;
+        }
     }
 
     /**

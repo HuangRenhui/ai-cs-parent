@@ -3,6 +3,7 @@ package com.ai.cs.knowledge.controller;
 import com.ai.cs.common.dto.RagSearchResultDTO;
 import com.ai.cs.common.result.PageResult;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.JwtContext;
 import com.ai.cs.knowledge.entity.KnowledgeFaq;
 import com.ai.cs.knowledge.service.KnowledgeFaqService;
 import com.ai.cs.knowledge.service.RagSearchService;
@@ -33,7 +34,9 @@ public class HelpCenterController {
         if (question == null || question.trim().isEmpty()) {
             return Result.fail("检索问题不能为空");
         }
-        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenantCode, null);
+        // 令牌绑定租户时以令牌为准；未登录时回退请求参数
+        String tenant = JwtContext.resolveTenantCode(tenantCode);
+        RagSearchResultDTO data = ragSearchService.semanticSearch(question.trim(), tenant, null);
         if (RagSearchResultDTO.UNAVAILABLE.equals(data.getStatus())) {
             return Result.fail(data.getError() == null ? "知识库检索不可用" : data.getError());
         }
