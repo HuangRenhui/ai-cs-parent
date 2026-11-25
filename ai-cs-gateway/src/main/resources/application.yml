@@ -63,6 +63,12 @@ spring:
           uri: ${GATEWAY_KNOWLEDGE_URI:http://localhost:8083}
           predicates:
             - Path=/knowledge/**,/help-center/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@ipKeyResolver}"
         # 头像上传属于 base-service（/file/avatar）。浏览器经 /api 前缀时会变成 /api/file/avatar，
         # 若不先拆开，会被下面的 knowledge /api/file/** 吃掉，存到知识库文件目录。
         - id: avatar-upload-route
@@ -97,6 +103,12 @@ spring:
           uri: ${GATEWAY_WORKORDER_URI:http://localhost:8085}
           predicates:
             - Path=/workorder/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@ipKeyResolver}"
         - id: open-route
           uri: ${GATEWAY_OPEN_URI:http://localhost:8086}
           predicates:

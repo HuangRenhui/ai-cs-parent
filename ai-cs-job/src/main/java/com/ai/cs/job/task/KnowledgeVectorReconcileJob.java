@@ -30,12 +30,10 @@ public class KnowledgeVectorReconcileJob {
     private static final String LOCK_KEY = "job:lock:knowledge-vector-reconcile";
 
     /**
-     * 向量对账（骨架：只列步骤，逻辑待实现）
+     * 向量对账：把「数据库里的知识」与「向量库里的向量」对齐，
+     * 缺向量的补录、删不掉的补偿删除。每 10 分钟执行一次，多实例下必须互斥。
      *
-     * <p>目标：把「数据库里的知识」与「向量库里的向量」对齐，两个方向都要做——
-     * 缺向量的补录、删不掉的补偿删除。每 10 分钟执行一次，多实例下必须互斥。</p>
-     *
-     * <p>实现要点（按顺序）：</p>
+     * <p>执行步骤：</p>
      * <ol>
      *   <li><b>取锁</b>：{@code jobLockService} 上锁失败就直接 return（另一实例正在跑），
      *       释放锁必须放在 {@code finally}；</li>
@@ -46,8 +44,6 @@ public class KnowledgeVectorReconcileJob {
      *       否则脏向量会静默累积；</li>
      *   <li><b>释放锁</b>。</li>
      * </ol>
-     *
-     * <p>本例只写注释不写实现；下面每步里的「坑」建议先读完再动手。</p>
      */
     @Scheduled(cron = "0 */10 * * * ?")
     public void reconcile() {
@@ -92,6 +88,6 @@ public class KnowledgeVectorReconcileJob {
         // TODO 放在 finally 中；若 jobLockService 需要校验持有者，务必用"上锁时拿到的标识"释放，
         //      避免误释放别人的锁。
 
-        log.info("[占位] 知识库向量对账任务：已打印骨架步骤，未执行实际逻辑");
+        log.info("[占位] 知识库向量对账任务未执行实际逻辑");
     }
 }

@@ -44,6 +44,13 @@ public class IpAccessFilter implements GlobalFilter, Ordered {
     private boolean blacklistEnabled;
 
     /**
+     * 是否采信 X-Forwarded-For / X-Real-IP。
+     * 只有确认网关前有可信反向代理时才置 true，否则客户端可伪造 IP 绕过黑白名单。
+     */
+    @Value("${security.ip.trust-forwarded-headers:false}")
+    private boolean trustForwardedHeaders;
+
+    /**
      * IP 访问控制：黑名单优先 → 白名单（启用时）→ 放行
      */
     @Override
@@ -73,25 +80,47 @@ public class IpAccessFilter implements GlobalFilter, Ordered {
         return -200;
     }
 
-    /** 获取客户端真实 IP */
+    /**
+     * 获取客户端真实 IP。
+     *
+     * <p>{@code X-Forwarded-For} / {@code X-Real-IP} 可被客户端任意伪造，默认**不采信**；
+     * 只有明确部署在反向代理之后（gateway.trust-forwarded-headers=true）才解析，
+     * 避免直连网关时伪造请求头绕过 IP 黑白名单。</p>
+     */
     private String getClientIp(ServerHttpRequest request) {
-        // 优先从 X-Forwarded-For 获取（经过代理时）
-        String xff = request.getHeaders().getFirst("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            // 取第一个 IP（可能有多个代理）
-            return xff.split(",")[0].trim();
-        }
-
-        // 其次从 X-Real-IP 获取
-        String xri = request.getHeaders().getFirst("X-Real-IP");
-        if (xri != null && !xri.isBlank()) {
-            return xri.trim();
-        }
-
-        // 最后从 RemoteAddress 获取
-        return request.getRemoteAddress() != null
+        String remote = request.getRemoteAddress() != null
                 ? request.getRemoteAddress().getAddress().getHostAddress()
                 : "unknown";
+        if (!trustForwardedHeaders) {
+            return remote;
+        }
+        String xff = request.getHeaders().getFirst("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            // 从右向左取第一个非可信代理地址；最左侧可被客户端伪造，不能直接用
+            String[] chain = xff.split(",");
+            for (int i = chain.length - 1; i >= 0; i--) {
+                String candidate = chain[i].trim();
+                if (!candidate.isEmpty() && !isTrustedProxy(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        String xri = request.getHeaders().getFirst("X-Real-IP");
+        if (xri != null && !xri.isBlank() && !isTrustedProxy(xri.trim())) {
+            return xri.trim();
+        }
+        return remote;
+    }
+
+    /** 代理自身地址（回环/内网容器网段）才允许继续向左追溯 */
+    private boolean isTrustedProxy(String ip) {
+        try {
+            java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+            return addr.isLoopbackAddress() || addr.isSiteLocalAddress()
+                    || (addr.getAddress().length == 16 && (addr.getAddress()[0] & 0xfe) == 0xfc);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** 检查 IP 是否在黑名单中 */

@@ -67,10 +67,16 @@ public class ConnectorUrlGuard {
         if (!"http".equals(scheme) && !"https".equals(scheme)) {
             throw new BusinessException("连接器只允许 http/https");
         }
-        // 主机名黑名单：本机、回环、云元数据及 *.internal 内网域名
+        // 主机名黑名单：本机、回环、云元数据及 *.internal / *.local 内网域名
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-        if (host.isBlank() || BLOCKED_HOSTS.contains(host) || host.endsWith(".internal")) {
+        if (host.isBlank() || BLOCKED_HOSTS.contains(host)
+                || host.endsWith(".internal") || host.endsWith(".local") || host.endsWith(".localhost")) {
             throw new BusinessException("连接器地址不允许指向内网或元数据地址");
+        }
+        // 纯数字/IP 进制变体（2852039166、0x7f000001、0177.0.0.1）一律拒绝：
+        // 这类写法可绕过按字符串匹配的黑名单，正常连接器没有使用它们的理由
+        if (host.matches("^\\d+$") || host.startsWith("0x") || host.matches("^0[0-7.]+$")) {
+            throw new BusinessException("连接器地址不允许使用数字/进制变体 IP");
         }
         // 租户白名单检查：配置了白名单则必须命中其一
         if (StringUtils.hasText(tenantCode) && whitelistMapper != null) {
@@ -80,13 +86,19 @@ public class ConnectorUrlGuard {
             // DNS 解析后逐 IP 检查：防止用公网域名绕过黑名单、实际解析到内网 IP
             for (InetAddress addr : InetAddress.getAllByName(host)) {
                 if (addr.isAnyLocalAddress() || addr.isLoopbackAddress() || addr.isLinkLocalAddress()
-                        || addr.isSiteLocalAddress() || addr.isMulticastAddress()) {
+                        || addr.isSiteLocalAddress() || addr.isMulticastAddress() || isUniqueLocalIpv6(addr)) {
                     throw new BusinessException("连接器地址不允许指向内网或元数据地址");
                 }
             }
         } catch (UnknownHostException e) {
             throw new BusinessException("连接器地址无法解析");
         }
+    }
+
+    /** IPv6 ULA（fc00::/7）：Java 的 isSiteLocalAddress 只覆盖已废弃的 fec0::/10，这里显式拦截 */
+    private static boolean isUniqueLocalIpv6(InetAddress addr) {
+        byte[] raw = addr.getAddress();
+        return raw.length == 16 && (raw[0] & 0xfe) == 0xfc;
     }
 
     /**
