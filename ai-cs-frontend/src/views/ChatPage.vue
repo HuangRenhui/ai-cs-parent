@@ -66,6 +66,20 @@
           </div>
           <div class="time">{{ msg.time }}</div>
         </div>
+        <!-- 高危工具确认卡：同样是系统卡，不做成 AI 气泡 -->
+        <div v-else-if="msg.kind === 'tool-confirm'" class="tool-confirm-wrap">
+          <ToolConfirmCard
+            :confirm-id="msg.confirmId"
+            :tool-name="msg.toolName"
+            :risk="msg.risk"
+            :status="msg.status"
+            :expire-at="msg.expireAt"
+            :summary="msg.summary"
+            :requested-by="msg.requestedBy"
+            readonly
+          />
+          <div class="time">{{ msg.time }}</div>
+        </div>
         <div v-else :class="['message', msg.isAI ? 'ai-message' : 'user-message']">
           <div class="avatar">
             <el-icon v-if="msg.isAI"><ChatDotRound /></el-icon>
@@ -177,10 +191,12 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { ChatDotRound, Headset, Reading, User, Loading, Document, Paperclip, Clock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
+import { getItem, sessionGetItem } from '../utils/safeStorage'
 import { createWorkOrder, ensureSession, interruptChat, listCustomers, listOpenPacks, transferSession } from '../api'
 import { isMockEnabled } from '../mock'
 import { openHelpCenter } from '../composables/useHelpCenter'
 import WorkOrderDialog from '../components/WorkOrderDialog.vue'
+import ToolConfirmCard from '../components/ToolConfirmCard.vue'
 
 const HISTORY_FIRST = 10
 const HISTORY_MORE = 20
@@ -264,9 +280,19 @@ const orderSessions = computed(() => [{ sessionId: sessionId.value, sessionStatu
 let socket = null
 let closedByUser = false
 let reconnectTimer = null
+let hbTimer = null
+let lastPongAt = 0
+let reconnectAttempts = 0
 let replyTimer = null
 let streamAbort = null
 const REPLY_TIMEOUT_MS = 35000
+/** 断线重连：指数退避，封顶 30s；连续失败超过上限后停止并提示 */
+const RECONNECT_BASE_MS = 2000
+const RECONNECT_MAX_MS = 30000
+const RECONNECT_MAX_ATTEMPTS = 10
+/** 心跳：每 30s 发一次 ping，超过 75s 没收到 pong 判定连接已死 */
+const HEARTBEAT_MS = 30000
+const HEARTBEAT_TIMEOUT_MS = 75000
 
 /** 顶栏接待状态文案：已接入坐席 / 排队中 / 智能接待 */
 const statusText = computed(() => {
@@ -425,10 +451,26 @@ const scrollToBottom = () => {
 
 /** 追加一条到完整记录，并保证新消息落在当前可见窗口里 */
 const appendMessage = (msg) => {
+  // 服务端重推 / WS 重连补发时按 id 去重，避免同一条消息出现两次
+  if (msg.id != null) {
+    const existed = archive.value.find((m) => String(m.id) === String(msg.id))
+    if (existed) return existed
+  }
   const row = { ...msg, id: msg.id || nextMsgId() }
   archive.value.push(row)
   shown.value += 1
   return row
+}
+
+/** 按 confirmId 原地更新已渲染的确认卡状态（同意/拒绝/超时后卡片不应停在待确认） */
+const updateConfirmCard = (confirmId, status) => {
+  if (confirmId == null || !status) return false
+  const row = archive.value.find(
+    (m) => m.kind === 'tool-confirm' && String(m.confirmId) === String(confirmId)
+  )
+  if (!row) return false
+  row.status = status
+  return true
 }
 
 /** 滚到顶部时再取出 20 条更早的记录，并稳住当前视口 */
@@ -485,9 +527,30 @@ const applyTransferQueued = () => {
 
 const wsUrl = () => {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = localStorage.getItem('token') || ''
-  const requestId = sessionStorage.getItem('lastRequestId') || ''
-  return `${proto}//${location.host}/ws/${sessionId.value}?token=${encodeURIComponent(token)}&requestId=${encodeURIComponent(requestId)}`
+  // token 不再拼进 URL：会落进网关/代理访问日志、Referer 与浏览器历史，改由连接后首帧发送
+  const requestId = sessionGetItem('lastRequestId') || ''
+  return `${proto}//${location.host}/ws/${sessionId.value}?requestId=${encodeURIComponent(requestId)}`
+}
+
+/** 心跳：定时 ping；长时间收不到 pong 主动断开，交给 onclose 走退避重连 */
+const startHeartbeat = () => {
+  stopHeartbeat()
+  lastPongAt = Date.now()
+  hbTimer = setInterval(() => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+      socket.close()
+      return
+    }
+    socket.send(JSON.stringify({ type: 'ping' }))
+  }, HEARTBEAT_MS)
+}
+
+const stopHeartbeat = () => {
+  if (hbTimer) {
+    clearInterval(hbTimer)
+    hbTimer = null
+  }
 }
 
 const stopReplyTimer = () => {
@@ -516,17 +579,34 @@ const connectWs = () => {
     return
   }
   try {
+    const token = getItem('token') || ''
+    if (!token) return
     socket = new WebSocket(wsUrl())
-    socket.onopen = () => {}
+    socket.onopen = () => {
+      // 首帧鉴权：后端要求 5 秒内收到 {"type":"auth","token":"..."}，否则断开
+      reconnectAttempts = 0
+      socket.send(JSON.stringify({ type: 'auth', token }))
+      startHeartbeat()
+    }
     socket.onclose = () => {
+      stopHeartbeat()
       stopReplyTimer()
       if (isLoading.value) {
         isLoading.value = false
       }
       socket = null
-      if (!closedByUser) {
-        reconnectTimer = setTimeout(connectWs, 2000)
+      if (closedByUser) return
+      if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+        appendMessage({
+          content: '连接已断开，请刷新页面重试',
+          isAI: true,
+          time: new Date().toLocaleTimeString()
+        })
+        return
       }
+      reconnectAttempts += 1
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** (reconnectAttempts - 1), RECONNECT_MAX_MS)
+      reconnectTimer = setTimeout(connectWs, delay)
     }
     socket.onerror = () => {
       stopReplyTimer()
@@ -538,6 +618,48 @@ const connectWs = () => {
         data = JSON.parse(ev.data)
       } catch {
         data = { type: 'ai', content: ev.data }
+      }
+      if (data.type === 'pong') {
+        lastPongAt = Date.now()
+        return
+      }
+      if (data.type === 'auth-required') {
+        // 连接建立后的握手提示，鉴权帧已在 onopen 发出，这里无需处理
+        return
+      }
+      if (data.type === 'tool-confirm') {
+        appendMessage({
+          kind: 'tool-confirm',
+          confirmId: data.confirmId,
+          toolName: data.toolName,
+          risk: data.risk,
+          status: data.status || 'CONFIRMING',
+          expireAt: data.expireAt,
+          summary: data.summary || '',
+          requestedBy: data.requestedBy || '',
+          isAI: true,
+          time: new Date().toLocaleTimeString()
+        })
+        scrollToBottom()
+        return
+      }
+      if (data.type === 'tool-confirm-expired') {
+        // 后端超时任务判定过期后推送：卡片原地置为 EXPIRED，避免一直显示"待确认"
+        updateConfirmCard(data.confirmId, 'EXPIRED')
+        appendMessage({
+          content: data.content || '该操作已超时，如需继续请重新发起',
+          isAI: true,
+          time: new Date().toLocaleTimeString()
+        })
+        scrollToBottom()
+        return
+      }
+      if (data.type === 'tool-confirm-result') {
+        // 有 confirmId/status 时同步卡片状态；缺字段时按"已处理"兜底
+        updateConfirmCard(data.confirmId, data.status || 'SUCCEEDED')
+        appendMessage({ content: data.content || '操作已处理', isAI: true, time: new Date().toLocaleTimeString() })
+        scrollToBottom()
+        return
       }
       if (data.type === 'system') {
         return
@@ -596,6 +718,7 @@ onMounted(async () => {
 onUnmounted(() => {
   closedByUser = true
   stopReplyTimer()
+  stopHeartbeat()
   if (streamAbort) streamAbort.abort()
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (socket) {
@@ -686,7 +809,7 @@ const sendStream = async (msg, attachments) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + (localStorage.getItem('token') || '')
+        Authorization: 'Bearer ' + (getItem('token') || '')
       },
       body: JSON.stringify({
         sessionId: sessionId.value,
@@ -1220,6 +1343,7 @@ const createOrder = async () => {
   background: #f79009;
   font-size: 18px;
 }
+.tool-confirm-wrap { display: flex; flex-direction: column; align-items: center; margin: 8px 0 18px; }
 .agent-join-wrap {
   display: flex;
   flex-direction: column;

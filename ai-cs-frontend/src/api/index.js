@@ -84,6 +84,13 @@ export const saveOpenTool = (data) => request.post('/open/tool/save', data)
 export const updateOpenTool = (data) => request.put('/open/tool/update', data)
 export const deleteOpenTool = (id) => request.delete(`/open/tool/delete/${id}`)
 export const invokeOpenTool = (data) => request.post('/open/tool/invoke', data)
+// ===== 高危工具人工确认（B2）=====
+export const pageToolPending = (params) => request.get('/open/tool/pending', { params })
+export const getToolPending = (id, tenantCode) =>
+  request.get(`/open/tool/pending/${id}`, { params: { tenantCode } })
+export const confirmOpenTool = (data) => request.post('/open/tool/confirm', data)
+export const rejectOpenTool = (data) => request.post('/open/tool/reject', data)
+export const cancelOpenTool = (data) => request.post('/open/tool/cancel', data)
 export const listOpenPacks = () => request.get('/open/pack/list')
 export const saveOpenPack = (data) => request.post('/open/pack/save', data)
 export const updateOpenPack = (data) => request.put('/open/pack/update', data)

@@ -24,7 +24,12 @@
             </el-sub-menu>
             <el-menu-item v-else :index="m.path">
               <el-icon><component :is="MENU_ICONS[m.icon]" /></el-icon>
-              <span>{{ m.label }}</span>
+              <span>
+                {{ m.label }}
+                <i v-if="m.path === '/workspace/pending' && pendingBadge" class="menu-badge">
+                  {{ pendingBadge > 99 ? '99+' : pendingBadge }}
+                </i>
+              </span>
             </el-menu-item>
           </template>
         </el-menu>
@@ -85,7 +90,12 @@
               </el-sub-menu>
               <el-menu-item v-else :index="m.path">
                 <el-icon><component :is="MENU_ICONS[m.icon]" /></el-icon>
-                <span>{{ m.label }}</span>
+                <span>
+                  {{ m.label }}
+                  <i v-if="m.path === '/workspace/pending' && pendingBadge" class="menu-badge">
+                    {{ pendingBadge > 99 ? '99+' : pendingBadge }}
+                  </i>
+                </span>
               </el-menu-item>
             </template>
           </el-menu>
@@ -115,6 +125,7 @@ import { isMockEnabled } from './mock'
 import { ROLE, clearSession, getRole, getRoleCodes, getRoleText } from './utils/auth'
 import { MENU_ICONS, menusOfRoles } from './config/menus'
 import { openHelpCenter } from './composables/useHelpCenter'
+import { getItem } from './utils/safeStorage'
 import TextPeekDialog from './components/TextPeekDialog.vue'
 import HelpCenterDialog from './components/HelpCenterDialog.vue'
 
@@ -125,7 +136,7 @@ const demoMode = isMockEnabled()
 const isBlank = computed(() => !!route.meta.blank)
 const isLoginRoute = computed(() => route.path === '/login' || route.path.startsWith('/login/'))
 const isLoggedIn = computed(() => {
-  return !isBlank.value && !isLoginRoute.value && route.path !== '/' && !!localStorage.getItem('token')
+  return !isBlank.value && !isLoginRoute.value && route.path !== '/' && !!getItem('token')
 })
 const userInfo = ref(null)
 /** 当前角色档位：登录 / 退出 / 换账号后由 loadUserInfo 重新求值 */
@@ -145,6 +156,9 @@ const menuActive = computed(() => {
   return p
 })
 const mobileMenuVisible = ref(false)
+/** 高危工具待确认红点：由待确认页轮询时写入 localStorage 并广播 */
+const pendingBadge = ref(Number(getItem('toolConfirmBadge') || 0))
+window.addEventListener('tool-confirm-count', (e) => { pendingBadge.value = Number(e.detail) || 0 })
 /** 顶栏头像取姓名首字，没有姓名再用账号 */
 const userInitial = computed(() => {
   const n = userInfo.value?.realName || userInfo.value?.username || '用'
@@ -163,7 +177,7 @@ const userGreeting = computed(() => {
 
 const loadUserInfo = () => {
   try {
-    const info = localStorage.getItem('userInfo')
+    const info = getItem('userInfo')
     userInfo.value = info ? JSON.parse(info) : null
   } catch {
     userInfo.value = null
@@ -232,6 +246,7 @@ html, body {
 .logo-text {
   color: #fff;
 }
+.menu-badge { display: inline-block; margin-left: 6px; min-width: 16px; height: 16px; line-height: 16px; padding: 0 4px; border-radius: 8px; background: #f04438; color: #fff; font-size: 11px; font-style: normal; text-align: center; }
 .sidebar {
   background-color: #1c2b4a;
   overflow-y: auto;

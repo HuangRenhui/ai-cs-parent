@@ -33,10 +33,20 @@
         <el-button size="small" text @click="endCurrent" :disabled="!activeId">结束会话</el-button>
       </div>
       <div class="ws-msgs" v-loading="loadingMsgs">
-        <div v-for="m in messages" :key="m.id" class="ws-msg" :class="{ mine: m.msgType === 2 }">
-          <div class="ws-bubble">{{ m.msgContent }}</div>
-          <div class="ws-time">{{ m.createTime }}</div>
-        </div>
+        <template v-for="m in messages" :key="m.id">
+          <div v-if="m.kind === 'tool-confirm'" class="ws-confirm">
+            <ToolConfirmCard
+              :confirm-id="m.confirmId" :tool-name="m.toolName" :risk="m.risk"
+              :status="m.status" :expire-at="m.expireAt" :summary="m.summary"
+              :requested-by="m.requestedBy" :busy="busyId === m.confirmId"
+              @confirm="doConfirm" @reject="doReject" @cancel="doCancel"
+            />
+          </div>
+          <div v-else class="ws-msg" :class="{ mine: m.msgType === 2 }">
+            <div class="ws-bubble">{{ m.msgContent }}</div>
+            <div class="ws-time">{{ m.createTime }}</div>
+          </div>
+        </template>
         <el-empty v-if="!messages.length" description="选择左侧会话查看消息" :image-size="60" />
       </div>
       <div class="ws-input">
@@ -70,8 +80,9 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { listSessions, listSessionMessages, endSession } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { listSessions, listSessionMessages, endSession, confirmOpenTool, rejectOpenTool, cancelOpenTool } from '../api'
+import ToolConfirmCard from '../components/ToolConfirmCard.vue'
 
 const sessions = ref([])
 const messages = ref([])
@@ -114,6 +125,30 @@ const endCurrent = async () => {
   load()
 }
 
+const busyId = ref(null)
+const doConfirm = async (id) => {
+  busyId.value = id
+  try {
+    const res = await confirmOpenTool({ confirmId: id })
+    const out = res.data || {}
+    ElMessage.success(out.success ? '已执行' : (out.output || '已提交'))
+    messages.value.push({ id: Date.now(), msgType: 3, msgContent: `确认结果：${out.output || '已处理'}`, createTime: '刚刚' })
+  } catch { /* 拦截器已提示 */ } finally { busyId.value = null }
+}
+const doReject = async (id) => {
+  try {
+    const { value } = await ElMessageBox.prompt('拒绝理由会写入审计', '拒绝操作', {
+      inputPlaceholder: '如：金额不符', inputValidator: (v) => (v && v.trim() ? true : '请填写拒绝理由')
+    })
+    await rejectOpenTool({ confirmId: id, reason: value.trim() })
+    ElMessage.success('已拒绝')
+  } catch { /* 取消或失败 */ }
+}
+const doCancel = async (id) => {
+  try { await ElMessageBox.confirm('取消后不再执行，需重新发起。', '取消确认', { type: 'warning' }) } catch { return }
+  try { await cancelOpenTool({ confirmId: id, reason: '坐席取消' }); ElMessage.success('已取消') } catch { /* 拦截器已提示 */ }
+}
+
 onMounted(load)
 </script>
 
@@ -142,4 +177,5 @@ onMounted(load)
 .ws-card { padding: 10px 12px; border-radius: 8px; background: #f8fafc; margin-bottom: 10px; }
 .ws-card-title { font-size: 13px; font-weight: 650; color: #1c2b4a; margin-bottom: 6px; }
 .ws-card-line { font-size: 12px; color: #64748b; line-height: 1.7; }
+.ws-confirm { display: flex; justify-content: center; }
 </style>

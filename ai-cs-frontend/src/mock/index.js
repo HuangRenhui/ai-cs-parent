@@ -205,6 +205,13 @@ const db = {
   tools: [
     { id: 1, name: '查询物流', description: '查询物流', intentBind: 'QUERY_LOGISTICS', packCode: 'ecommerce', risk: 'low', connectorId: 1 }
   ],
+  toolConfirms: [
+    { id: 901, toolName: 'apply_refund', sessionId: 'sess_demo_1001', status: 'CONFIRMING', risk: 'critical', requestedBy: '访客 visitor_01', entityId: 'ORD-20261123-001', entityType: 'order', expireAt: nowPlus(8 * 60), createTime: nowPlus(-180), payload: '{"amount":"1980.00"}', requestJson: '{"toolName":"apply_refund","entityId":"ORD-20261123-001","amount":"1980.00","reason":"质量问题"}' },
+    { id: 902, toolName: 'issue_coupon', sessionId: 'sess_demo_1002', status: 'CONFIRMING', risk: 'write', requestedBy: 'AI', entityId: 'CUST-1002', entityType: 'customer', expireAt: nowPlus(25 * 60), createTime: nowPlus(-300), payload: '{"couponNo":"CPN-2026-88"}', requestJson: '{"toolName":"issue_coupon","couponNo":"CPN-2026-88","amount":"50.00"}' },
+    { id: 903, toolName: 'apply_refund', sessionId: 'sess_demo_1003', status: 'CONFIRMING', risk: 'critical', requestedBy: '访客 visitor_03', entityId: 'ORD-20261123-009', entityType: 'order', expireAt: nowPlus(90), createTime: nowPlus(-60), payload: '{"amount":"99.00"}', requestJson: '{"toolName":"apply_refund","entityId":"ORD-20261123-009","amount":"99.00"}' },
+    { id: 904, toolName: 'apply_refund', sessionId: 'sess_demo_1004', status: 'SUCCEEDED', risk: 'critical', requestedBy: '坐席 admin', entityId: 'ORD-20261122-001', entityType: 'order', confirmedBy: 'admin', confirmedAt: nowPlus(-3600), expireAt: nowPlus(1200), createTime: nowPlus(-4200), payload: '{"amount":"299.00"}', requestJson: '{"toolName":"apply_refund","entityId":"ORD-20261122-001","amount":"299.00"}' },
+    { id: 905, toolName: 'apply_refund', sessionId: 'sess_demo_1005', status: 'REJECTED', risk: 'critical', requestedBy: 'AI', entityId: 'ORD-20261122-008', entityType: 'order', rejectedReason: '金额与订单不符', createTime: nowPlus(-7200), payload: '{"amount":"520.00"}', requestJson: '{"toolName":"apply_refund","entityId":"ORD-20261122-008","amount":"520.00"}' }
+  ],
   scenes: [
     { id: 1, scene: 'ORDER', sceneName: '订单入口', greeting: '看到您正在查看订单 {entityId}，需要查物流还是申请售后？', greetingEmpty: '您好，请问要咨询哪笔订单？', quickActions: '[{"label":"查物流","send":"帮我查一下物流"}]', sortNum: 1, enabled: 1 }
   ],
@@ -1523,6 +1530,68 @@ const handle = (method, path, config) => {
   if (path === '/open/tool/list') return ok(db.tools)
   if (path === '/open/tool/save' || path === '/open/tool/update') { upsert(db.tools, body); return ok('保存成功') }
   if (path === '/open/tool/invoke') return ok({ result: '演示测通成功', echo: body })
+  // ===== 高危工具人工确认（B2）=====
+  const confirmExpire = (r) => {
+    if (r.status === 'CONFIRMING' && r.expireAt && new Date(String(r.expireAt).replace(/-/g, '/')).getTime() <= Date.now()) {
+      r.status = 'EXPIRED'
+    }
+    return r
+  }
+  const confirmView = (r, detailMode = false) => {
+    const base = {
+      id: r.id, toolName: r.toolName, sessionId: r.sessionId, status: r.status,
+      risk: r.risk, requestedBy: r.requestedBy, confirmedBy: r.confirmedBy || null,
+      confirmedAt: r.confirmedAt || null, rejectedReason: r.rejectedReason || null,
+      expireAt: r.expireAt || null, createTime: r.createTime,
+      entityId: r.entityId || null, entityType: r.entityType || null,
+      payload: r.payload || null
+    }
+    return detailMode ? { ...base, requestJson: r.requestJson || null } : base
+  }
+  if (path === '/open/tool/pending' && method === 'get') {
+    const pn = Math.max(Number(p.pageNum) || 1, 1)
+    const ps = Math.min(Math.max(Number(p.pageSize) || 10, 1), 100)
+    let list = db.toolConfirms.map(confirmExpire)
+    if (p.status) list = list.filter((x) => x.status === p.status)
+    if (p.sessionId) list = list.filter((x) => String(x.sessionId).includes(String(p.sessionId)))
+    list.sort((a, b) => {
+      const at = a.expireAt ? new Date(String(a.expireAt).replace(/-/g, '/')).getTime() : Infinity
+      const bt = b.expireAt ? new Date(String(b.expireAt).replace(/-/g, '/')).getTime() : Infinity
+      return at === bt ? b.id - a.id : at - bt
+    })
+    return ok({ records: list.slice((pn - 1) * ps, pn * ps).map((r) => confirmView(r)), total: list.length, page: pn, size: ps })
+  }
+  if (path.startsWith('/open/tool/pending/') && method === 'get') {
+    const id = Number(idFrom(path, /pending\/(\d+)$/))
+    const row = db.toolConfirms.find((x) => Number(x.id) === id)
+    if (!row) return fail('记录不存在', 404)
+    return ok(confirmView(confirmExpire(row), true))
+  }
+  if (path === '/open/tool/confirm' && method === 'post') {
+    const row = db.toolConfirms.find((x) => Number(x.id) === Number(body.confirmId))
+    if (!row) return fail('记录不存在', 404)
+    confirmExpire(row)
+    if (row.status !== 'CONFIRMING') return fail(`该确认已被处理（当前状态：${row.status}）`, 400)
+    row.status = 'SUCCEEDED'
+    row.confirmedBy = currentOperator().username
+    row.confirmedAt = now()
+    return ok({ success: true, toolName: row.toolName, output: '演示执行成功', source: 'mock', confirmId: row.id, status: row.status, expireAt: row.expireAt || null })
+  }
+  if (path === '/open/tool/reject' && method === 'post') {
+    const row = db.toolConfirms.find((x) => Number(x.id) === Number(body.confirmId))
+    if (!row) return fail('记录不存在', 404)
+    confirmExpire(row)
+    if (row.status !== 'CONFIRMING') return fail(`该确认已被处理（当前状态：${row.status}）`, 400)
+    row.status = 'REJECTED'
+    row.rejectedReason = String(body.reason || '').slice(0, 255)
+    return ok()
+  }
+  if (path === '/open/tool/cancel' && method === 'post') {
+    const row = db.toolConfirms.find((x) => Number(x.id) === Number(body.confirmId))
+    if (!row) return fail('记录不存在', 404)
+    row.status = 'CANCELLED'
+    return ok()
+  }
   if (path.startsWith('/open/tool/delete/')) { removeById(db.tools, idFrom(path, /\/(\d+)$/)); return ok('删除成功') }
   if (path === '/open/scene-config/list') return ok(db.scenes)
   if (path === '/open/scene-config/save' || path === '/open/scene-config/update') { upsert(db.scenes, body); return ok('保存成功') }

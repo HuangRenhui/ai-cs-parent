@@ -71,6 +71,7 @@ export const AUTH_TYPE_TEXT = { none: '无', token: '令牌', signature: '签名
 export const IMPORT_STATUS_TEXT = { success: '成功', failed: '失败', pending: '待处理' }
 export const CONNECTOR_TYPE_TEXT = { MOCK: '演示', REST: '接口' }
 export const RISK_TEXT = { read: '只读', write: '写入', critical: '高风险', low: '低' }
+export const CONFIRM_STATUS_TEXT = { CONFIRMING: '待确认', CONFIRMED: '执行中', SUCCEEDED: '已执行', FAILED: '执行失败', REJECTED: '已拒绝', EXPIRED: '已过期', CANCELLED: '已取消' }
 export const HEALTH_UP_TEXT = { UP: '正常', DOWN: '异常' }
 export const ALERT_STATUS_TEXT = { open: '未恢复', closed: '已恢复', resolved: '已恢复' }
 export const FIELD_TYPE_TEXT = { string: '文本', number: '数字', date: '日期', json: '对象' }

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { checkAccess, getRoleCodes, homeAfterLogin, isAdminSession, isSuperAdmin, isSuperOnlyPath } from '../utils/auth'
 import { canVisitPath } from '../config/menus'
+import { getItem } from '../utils/safeStorage'
 import { openHelpCenter } from '../composables/useHelpCenter'
 import UserLoginPage from '../views/UserLoginPage.vue'
 import AdminLoginPage from '../views/AdminLoginPage.vue'
@@ -52,6 +53,7 @@ import TrafficAnalysisPage from '../views/system/TrafficAnalysisPage.vue'
 import AiToolsPage from '../views/ai-tools/AiToolsPage.vue'
 import AiToolWorkspacePage from '../views/ai-tools/AiToolWorkspacePage.vue'
 import WorkspacePage from '../views/WorkspacePage.vue'
+import ToolPendingPage from '../views/workspace/ToolPendingPage.vue'
 import QueuePage from '../views/QueuePage.vue'
 import WorkOrderFieldPage from '../views/WorkOrderFieldPage.vue'
 import OpenWidgetConfigPage from '../views/OpenWidgetConfigPage.vue'
@@ -79,6 +81,7 @@ const routes = [
   { path: '/workorder/field', name: 'WorkOrderField', component: WorkOrderFieldPage, meta: { requiresAuth: true, title: '工单字段' } },
   { path: '/workorder/flow', name: 'WorkOrderFlow', component: WorkOrderFlowPage, meta: { requiresAuth: true, title: '工单流程' } },
   { path: '/workspace', name: 'Workspace', component: WorkspacePage, meta: { requiresAuth: true, title: '坐席工作台' } },
+  { path: '/workspace/pending', name: 'ToolPending', component: ToolPendingPage, meta: { requiresAuth: true, title: '待确认' } },
   { path: '/queue', name: 'Queue', component: QueuePage, meta: { requiresAuth: true, title: '排队监控' } },
   {
     path: '/knowledge',
@@ -186,7 +189,7 @@ router.beforeEach((to, from, next) => {
     next(false)
     return
   }
-  const token = localStorage.getItem('token')
+  const token = getItem('token')
   if (to.meta.blank) {
     next()
     return

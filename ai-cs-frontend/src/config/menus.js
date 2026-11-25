@@ -63,6 +63,7 @@ export const MENUS = [
   // 坐席看得到工作台与会话工单；排队调度与客户档案是主管的活
   { path: '/queue', label: '排队监控', icon: 'Clock', roles: SUPERVISOR_UP },
   { path: '/workspace', label: '坐席工作台', icon: 'Monitor', roles: AGENT_UP },
+  { path: '/workspace/pending', label: '待确认', icon: 'Timer', roles: AGENT_UP },
   { path: '/session', label: '会话记录', icon: 'Tickets', roles: AGENT_UP },
   { path: '/customer', label: '客户管理', icon: 'User', roles: SUPERVISOR_UP },
   { path: '/workorder', label: '工单管理', icon: 'Document', roles: AGENT_UP },
