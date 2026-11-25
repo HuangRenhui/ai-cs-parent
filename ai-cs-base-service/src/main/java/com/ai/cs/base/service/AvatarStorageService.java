@@ -2,6 +2,7 @@ package com.ai.cs.base.service;
 
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.util.FileMagicValidator;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +22,7 @@ import java.util.UUID;
  *
  * @author huangrenhui
  */
+@Slf4j
 @Service
 public class AvatarStorageService {
 
@@ -29,6 +31,7 @@ public class AvatarStorageService {
     /** MIME 类型到文件扩展名的映射 */
     private static final Map<String, String> EXT_MAP = Map.of(
             "image/jpeg", ".jpg",
+            "image/jpg", ".jpg",
             "image/png", ".png",
             "image/gif", ".gif",
             "image/webp", ".webp"
@@ -40,16 +43,34 @@ public class AvatarStorageService {
     @Value("${app.upload-dir:uploads/avatars}")
     private String uploadDir;
 
-    /** 上传目录的绝对路径（启动时解析并缓存） */
-    private Path storagePath;
+    /** 上传目录的绝对路径（懒初始化，需 volatile 保证可见性） */
+    private volatile Path storagePath;
 
     /**
-     * 启动初始化：解析上传目录为绝对路径并确保目录存在
+     * 启动初始化：目录不可创建时不阻断服务启动，首次上传时重试
      */
     @PostConstruct
-    public void init() throws IOException {
-        storagePath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(storagePath);
+    public void init() {
+        try {
+            prepareStorage();
+        } catch (Exception e) {
+            log.error("头像目录初始化失败，将在首次上传时重试: {}", e.getMessage());
+        }
+    }
+
+    /** 懒初始化上传目录 */
+    private Path prepareStorage() throws IOException {
+        Path path = storagePath;
+        if (path == null) {
+            synchronized (this) {
+                if (storagePath == null) {
+                    storagePath = Paths.get(uploadDir).toAbsolutePath().normalize();
+                    Files.createDirectories(storagePath);
+                }
+                path = storagePath;
+            }
+        }
+        return path;
     }
 
     /**
@@ -68,16 +89,23 @@ public class AvatarStorageService {
         }
         // 魔数校验：不以 Content-Type 为准，防止伪造 MIME 上传可执行文件
         FileMagicValidator.assertAllowed(file, "jpg", "jpeg", "png", "gif", "webp");
-        String original = file.getOriginalFilename();
-        String ext = original.substring(original.lastIndexOf('.')).toLowerCase(Locale.ROOT);
-        if (".jpeg".equals(ext)) {
-            ext = ".jpg";
+        // 扩展名只从 MIME 白名单推导，绝不采信原始文件名：
+        // 否则「PNG 魔数 + .html 后缀」会被同源静态托管成存储型 XSS
+        String ext = EXT_MAP.get(file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT));
+        if (ext == null) {
+            throw new BusinessException("头像格式不支持，仅支持 jpg/png/gif/webp");
         }
         // UUID 生成随机文件名，避免文件名冲突与路径注入
         String filename = UUID.randomUUID().toString().replace("-", "") + ext;
-        Path target = storagePath.resolve(filename).normalize();
+        Path storage;
+        try {
+            storage = prepareStorage();
+        } catch (IOException e) {
+            throw new BusinessException("头像目录不可用，请检查挂载与权限");
+        }
+        Path target = storage.resolve(filename).normalize();
         // 防御目录穿越：解析后的路径必须仍位于存储目录内
-        if (!target.startsWith(storagePath)) {
+        if (!target.startsWith(storage)) {
             throw new BusinessException("非法文件路径");
         }
         try {
