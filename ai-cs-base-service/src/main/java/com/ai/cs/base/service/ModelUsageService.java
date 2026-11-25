@@ -45,10 +45,10 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
             wrapper.eq(ModelUsageRecord::getSuccess, success);
         }
         if (StringUtils.hasText(startTime)) {
-            wrapper.ge(ModelUsageRecord::getCreateTime, LocalDateTime.parse(startTime, FMT));
+            wrapper.ge(ModelUsageRecord::getCreateTime, parseTime(startTime, "startTime"));
         }
         if (StringUtils.hasText(endTime)) {
-            wrapper.le(ModelUsageRecord::getCreateTime, LocalDateTime.parse(endTime, FMT));
+            wrapper.le(ModelUsageRecord::getCreateTime, parseTime(endTime, "endTime"));
         }
         wrapper.orderByDesc(ModelUsageRecord::getId);
         return this.page(new Page<>(page, size), wrapper);
@@ -63,10 +63,10 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
             wrapper.eq(ModelUsageRecord::getModelType, modelType);
         }
         if (StringUtils.hasText(startTime)) {
-            wrapper.ge(ModelUsageRecord::getCreateTime, LocalDateTime.parse(startTime, FMT));
+            wrapper.ge(ModelUsageRecord::getCreateTime, parseTime(startTime, "startTime"));
         }
         if (StringUtils.hasText(endTime)) {
-            wrapper.le(ModelUsageRecord::getCreateTime, LocalDateTime.parse(endTime, FMT));
+            wrapper.le(ModelUsageRecord::getCreateTime, parseTime(endTime, "endTime"));
         }
         List<ModelUsageRecord> list = this.list(wrapper);
         Map<String, Object> result = new HashMap<>();
@@ -101,5 +101,16 @@ public class ModelUsageService extends ServiceImpl<ModelUsageRecordMapper, Model
         return this.count(new LambdaQueryWrapper<ModelUsageRecord>()
                 .eq(ModelUsageRecord::getSuccess, 0)
                 .ge(ModelUsageRecord::getCreateTime, since));
+    }
+
+    /**
+     * 解析入参时间；格式非法时抛 IllegalArgumentException（由全局处理器转 400），避免直接 500。
+     */
+    private LocalDateTime parseTime(String text, String field) {
+        try {
+            return LocalDateTime.parse(text.trim(), FMT);
+        } catch (Exception e) {
+            throw new IllegalArgumentException(field + " 格式应为 yyyy-MM-dd HH:mm:ss");
+        }
     }
 }

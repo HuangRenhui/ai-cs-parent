@@ -2,6 +2,7 @@ package com.ai.cs.workorder.controller;
 
 import com.ai.cs.common.dto.WorkOrderDTO;
 import com.ai.cs.common.result.Result;
+import com.ai.cs.common.security.RequirePermission;
 import com.ai.cs.workorder.entity.WorkOrder;
 import com.ai.cs.workorder.service.WorkOrderService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -46,11 +47,14 @@ public class WorkOrderController {
     /** 获取工单详情 */
     @GetMapping("/info/{id}")
     public Result<WorkOrder> info(@PathVariable Long id) {
-        return Result.success(workOrderService.getById(id));
+        WorkOrder order = workOrderService.getById(id);
+        // 查不到要明确 404，避免前端拿到 success(null) 后白屏
+        return order != null ? Result.success(order) : Result.fail(404, "工单不存在");
     }
 
     /** 更新工单 */
     @PutMapping("/update")
+    @RequirePermission("workorder:list")
     public Result<String> update(@RequestBody WorkOrder order) {
         workOrderService.updateById(order);
         return Result.success("更新成功");
@@ -58,6 +62,7 @@ public class WorkOrderController {
 
     /** 分配工单给坐席 */
     @PutMapping("/assign/{id}")
+    @RequirePermission("workorder:list")
     public Result<String> assign(@PathVariable Long id, @RequestParam Long agentId) {
         workOrderService.assignOrder(id, agentId);
         return Result.success("分配成功");
@@ -65,6 +70,7 @@ public class WorkOrderController {
 
     /** 更新工单状态 */
     @PutMapping("/status/{id}")
+    @RequirePermission("workorder:list")
     public Result<String> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
         workOrderService.updateStatus(id, status);
         return Result.success("状态更新成功");
@@ -72,6 +78,7 @@ public class WorkOrderController {
 
     /** 完成工单（状态置为 3-已完成） */
     @PutMapping("/complete/{id}")
+    @RequirePermission("workorder:list")
     public Result<String> complete(@PathVariable Long id) {
         workOrderService.updateStatus(id, 3);
         return Result.success("工单已完成");
@@ -79,6 +86,7 @@ public class WorkOrderController {
 
     /** 关闭工单（状态置为 4-已关闭，关闭为终态不再流转） */
     @PutMapping("/close/{id}")
+    @RequirePermission("workorder:list")
     public Result<String> close(@PathVariable Long id) {
         workOrderService.updateStatus(id, 4);
         return Result.success("工单已关闭");
@@ -86,6 +94,7 @@ public class WorkOrderController {
 
     /** 删除工单 */
     @DeleteMapping("/delete/{id}")
+    @RequirePermission("workorder:list")
     public Result<String> delete(@PathVariable Long id) {
         workOrderService.removeById(id);
         return Result.success("删除成功");

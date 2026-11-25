@@ -69,10 +69,19 @@ public class WorkOrderService extends ServiceImpl<WorkOrderMapper, WorkOrder> {
                                       Integer orderStatus, Long agentId, String keyword) {
         pageNum = ValidateUtil.pageNum(pageNum);
         pageSize = ValidateUtil.pageSize(pageSize);
+        // 状态取值见实体注释 0-已取消 1-待处理 2-处理中 3-已完成 4-已关闭，
+        // 越界值直接拒绝，避免非法参数静默返回空结果、排查时无法区分
+        if (orderStatus != null && (orderStatus < 0 || orderStatus > 4)) {
+            throw new IllegalArgumentException("orderStatus 取值应为 0-4");
+        }
         // 动态拼装查询条件：仅拼接非空条件
         LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
         if (orderType != null && !orderType.isBlank()) {
-            wrapper.eq(WorkOrder::getOrderType, orderType);
+            String type = orderType.trim();
+            if (type.length() > 32) {
+                throw new IllegalArgumentException("orderType 长度不能超过 32");
+            }
+            wrapper.eq(WorkOrder::getOrderType, type);
         }
         if (orderStatus != null) {
             wrapper.eq(WorkOrder::getOrderStatus, orderStatus);

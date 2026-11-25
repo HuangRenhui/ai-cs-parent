@@ -55,7 +55,12 @@ public class AuditLogFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(wrapped, response);
         } finally {
-            publish(wrapped, response, start);
+            // 审计失败不能覆盖业务链路的原始异常：这里单独吞掉并记错误日志
+            try {
+                publish(wrapped, response, start);
+            } catch (Exception e) {
+                log.error("审计事件发布失败 uri={}", uri, e);
+            }
         }
     }
 

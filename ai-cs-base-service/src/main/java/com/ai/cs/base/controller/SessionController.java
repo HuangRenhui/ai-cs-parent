@@ -90,6 +90,8 @@ public class SessionController {
      */
     @GetMapping("/{sessionId}/messages")
     public Result<List<ChatMsg>> messages(@PathVariable String sessionId) {
+        // 访客只能读取自己的会话，避免遍历 sessionId 拉取他人聊天记录
+        chatSessionService.assertReadableByCurrentUser(sessionId);
         return Result.success(chatSessionService.listMessages(sessionId));
     }
 
@@ -115,6 +117,7 @@ public class SessionController {
      * 必须带 visitorRef，禁止按 customerId=0 全表合并。
      */
     @PostMapping("/merge-anonymous")
+    @com.ai.cs.common.security.RequirePermission("customer:list")
     public Result<Integer> mergeAnonymous(@RequestBody SessionDTO dto) {
         if (dto == null) {
             return Result.fail("参数不能为空");

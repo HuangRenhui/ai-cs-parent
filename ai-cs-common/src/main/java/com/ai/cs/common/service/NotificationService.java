@@ -31,6 +31,11 @@ public class NotificationService {
         dto.setId(idGenerator.getAndIncrement());
         dto.setIsRead(false);
         dto.setStatus("PENDING");
+        // 内存存储兜底容量：避免长期运行后无界增长；真实实现应落库
+        if (store.size() >= 1000) {
+            log.warn("通知内存存储达到上限，清空历史记录");
+            store.clear();
+        }
         store.put(dto.getId(), dto);
 
         // 异步发送（实际应使用 @Async + 线程池）

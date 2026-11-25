@@ -16,6 +16,7 @@ import com.ai.cs.common.enums.MsgTypeEnum;
 import com.ai.cs.common.enums.SessionStatusEnum;
 import com.ai.cs.common.exception.BusinessException;
 import com.ai.cs.common.result.PageResult;
+import com.ai.cs.common.security.JwtContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -67,13 +68,25 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
         if (dto == null || !StringUtils.hasText(dto.getSessionId())) {
             throw new BusinessException("会话ID不能为空");
         }
+        // 匿名访客身份只认令牌，请求体里的 visitorRef 不可信
+        String tokenVisitorRef = currentVisitorRef();
         // 幂等处理：同一 sessionId 重复进入直接复用旧会话
         ChatSession existing = this.getOne(new LambdaQueryWrapper<ChatSession>()
                 .eq(ChatSession::getSessionId, dto.getSessionId())
                 .last("limit 1"));
         if (existing != null) {
-            // 旧会话缺少 visitorRef 时补写，保证后续匿名合并能定位到本访客
-            if (!StringUtils.hasText(existing.getVisitorRef()) && StringUtils.hasText(dto.getVisitorRef())) {
+            if (tokenVisitorRef != null) {
+                // 访客只能进入自己的会话，防跨访客读写
+                if (StringUtils.hasText(existing.getVisitorRef())
+                        && !tokenVisitorRef.equals(existing.getVisitorRef())) {
+                    throw new BusinessException(403, "无权访问该会话");
+                }
+                if (!StringUtils.hasText(existing.getVisitorRef())) {
+                    existing.setVisitorRef(tokenVisitorRef);
+                    this.updateById(existing);
+                }
+            } else if (!StringUtils.hasText(existing.getVisitorRef()) && StringUtils.hasText(dto.getVisitorRef())) {
+                // 旧会话缺少 visitorRef 时补写，保证后续匿名合并能定位到本访客
                 existing.setVisitorRef(dto.getVisitorRef().trim());
                 this.updateById(existing);
             }
@@ -81,10 +94,16 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
         }
         ChatSession session = new ChatSession();
         session.setSessionId(dto.getSessionId());
-        // 未登录访客没有客户ID，用 0 占位
-        session.setCustomerId(dto.getCustomerId() == null ? 0L : dto.getCustomerId());
+        if (tokenVisitorRef != null) {
+            // 访客不能指定 customerId，避免把匿名会话挂到他人客户档案
+            session.setCustomerId(0L);
+        } else {
+            // 未登录访客没有客户ID，用 0 占位
+            session.setCustomerId(dto.getCustomerId() == null ? 0L : dto.getCustomerId());
+        }
         // 记录访客标识，登录后才能精确合并本访客的匿名会话
-        session.setVisitorRef(StringUtils.hasText(dto.getVisitorRef()) ? dto.getVisitorRef().trim() : null);
+        session.setVisitorRef(tokenVisitorRef != null ? tokenVisitorRef
+                : (StringUtils.hasText(dto.getVisitorRef()) ? dto.getVisitorRef().trim() : null));
         session.setAgentId(dto.getAgentId());
         // 默认 AI 会话
         session.setSessionType(dto.getSessionType() == null ? 1 : dto.getSessionType());
@@ -116,6 +135,41 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
     }
 
     /**
+     * 当前请求的匿名访客标识（仅访客令牌有值）。
+     * 令牌里的 username 形如 {@code visitor:<visitorRef>}，以此作为归属判断依据。
+     */
+    private String currentVisitorRef() {
+        if (!JwtContext.isVisitor()) {
+            return null;
+        }
+        String username = JwtContext.getCurrentUsername();
+        if (!StringUtils.hasText(username)) {
+            return null;
+        }
+        String prefix = "visitor:";
+        return username.startsWith(prefix) ? username.substring(prefix.length()) : username;
+    }
+
+    /**
+     * 校验当前用户是否有权读取该会话的消息。
+     *
+     * <p>访客只能读自己 visitorRef 的会话；坐席放行（租户维度的隔离依赖 customer 归属，
+     * 后续补 tenant_code 后在此处一并收口）。会话不存在时按空结果处理。</p>
+     */
+    public void assertReadableByCurrentUser(String sessionId) {
+        ChatSession session = getBySessionId(sessionId);
+        if (session == null) {
+            return;
+        }
+        if (JwtContext.isVisitor()) {
+            String visitorRef = currentVisitorRef();
+            if (!StringUtils.hasText(visitorRef) || !visitorRef.equals(session.getVisitorRef())) {
+                throw new BusinessException(403, "无权访问该会话");
+            }
+        }
+    }
+
+    /**
      * 组装跨服务会话快照
      */
     public SessionSnapshotDTO toSnapshot(ChatSession session) {
@@ -139,6 +193,11 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
     public void saveMessage(SessionDTO dto) {
         if (dto == null || !StringUtils.hasText(dto.getSessionId())) {
             throw new BusinessException("会话ID不能为空");
+        }
+        // 访客只能提交用户消息，禁止伪造「坐席/AI 已回复」的聊天记录
+        if (JwtContext.isVisitor() && dto.getSenderType() != null
+                && !MsgTypeEnum.USER.getCode().equals(dto.getSenderType())) {
+            throw new BusinessException(403, "访客只能提交用户消息");
         }
         // 允许「纯附件消息」：文本与附件至少有一项即可
         boolean hasAttachment = dto.getAttachments() != null && !dto.getAttachments().isEmpty();
@@ -292,12 +351,11 @@ public class ChatSessionService extends ServiceImpl<ChatSessionMapper, ChatSessi
         if (!StringUtils.hasText(visitorRef) || customerId == null || customerId <= 0L) {
             throw new BusinessException("访客标识和客户ID不能为空");
         }
-        boolean ok = this.update(new LambdaUpdateWrapper<ChatSession>()
+        int rows = this.getBaseMapper().update(null, new LambdaUpdateWrapper<ChatSession>()
                 .eq(ChatSession::getVisitorRef, visitorRef.trim())
                 .and(w -> w.eq(ChatSession::getCustomerId, 0L).or().isNull(ChatSession::getCustomerId))
                 .set(ChatSession::getCustomerId, customerId));
-        int rows = ok ? 1 : 0;
-        log.info("匿名会话合并 visitorRef={} customerId={} updated={}", visitorRef, customerId, ok);
+        log.info("匿名会话合并 visitorRef={} customerId={} updated={}", visitorRef, customerId, rows);
         return rows;
     }
 

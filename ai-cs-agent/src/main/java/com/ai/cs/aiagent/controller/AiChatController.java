@@ -140,10 +140,15 @@ public class AiChatController {
         if (!StringUtils.hasText(dto.getSessionId())) {
             dto.setSessionId("sess_" + UUID.randomUUID().toString(true));
         }
+        // 单实例并发流上限：防止异常客户端只建连不结束，emitters 无限增长
+        if (emitters.size() >= 500) {
+            throw new com.ai.cs.common.exception.BusinessException(429, "当前流式会话过多，请稍后重试");
+        }
         SseEmitter emitter = new SseEmitter(120_000L);
         emitters.put(dto.getSessionId(), emitter);
         emitter.onCompletion(() -> emitters.remove(dto.getSessionId()));
         emitter.onTimeout(() -> emitters.remove(dto.getSessionId()));
+        emitter.onError(e -> emitters.remove(dto.getSessionId()));
         // 纯附件消息时内容为空，用占位文案表达「用户发来了附件」，避免空 content 让模型无从回应
         String content = dto.getMsg();
         List<AttachmentDTO> attachments = dto.getAttachments();
