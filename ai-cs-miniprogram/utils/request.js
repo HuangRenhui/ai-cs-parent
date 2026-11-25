@@ -5,6 +5,17 @@
 const config = require('./config')
 const mock = require('./mock')
 
+/** 401 跳转互斥：并发请求同时过期时只跳一次，避免页面栈堆叠 */
+let redirectingToLogin = false
+function redirectToLogin() {
+  if (redirectingToLogin) return
+  redirectingToLogin = true
+  wx.reLaunch({
+    url: '/pages/login/login',
+    complete: () => setTimeout(() => { redirectingToLogin = false }, 1000)
+  })
+}
+
 function request(options) {
   const method = String(options.method || 'GET').toUpperCase()
   const url = options.url
@@ -23,6 +34,7 @@ function request(options) {
       url: config.BASE_URL + url,
       method,
       data,
+      timeout: config.TIMEOUT_MS || 15000,
       header: {
         'Content-Type': 'application/json',
         'Authorization': token ? 'Bearer ' + token : ''
@@ -33,7 +45,7 @@ function request(options) {
           const a = getApp()
           if (a && a.logout) a.logout()
           if (!silent) wx.showToast({ title: '登录已过期', icon: 'none' })
-          setTimeout(() => wx.navigateTo({ url: '/pages/login/login' }), 400)
+          setTimeout(redirectToLogin, 300)
           reject(body)
           return
         }
@@ -45,7 +57,11 @@ function request(options) {
         resolve(body)
       },
       fail(err) {
-        if (!silent) wx.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+        // 超时与断网分开提示，便于用户判断是网络问题还是服务问题
+        const timedOut = err && String(err.errMsg || '').indexOf('timeout') >= 0
+        if (!silent) {
+          wx.showToast({ title: timedOut ? '请求超时，请稍后重试' : '网络异常，请稍后重试', icon: 'none' })
+        }
         reject(err)
       }
     })

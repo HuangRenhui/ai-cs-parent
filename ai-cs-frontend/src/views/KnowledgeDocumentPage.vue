@@ -513,6 +513,7 @@ import TablePager from '../components/TablePager.vue'
 import TbBtn from '../components/TbBtn.vue'
 import SectionSwitch from '../components/SectionSwitch.vue'
 import { useClientPager } from '../composables/useClientPager'
+import { getItem } from '../utils/safeStorage'
 
 const ACCEPT = '.pdf,.txt,.docx,.md,.html,.csv'
 const STRATEGY_TEXT = { hierarchical: '分层切片', semantic: '语义切片', recursive: '递归定长' }
@@ -618,7 +619,7 @@ const onFileExceed = () => {
 /** 当前登录人信息，作为文档上传人 */
 const currentUser = () => {
   try {
-    const u = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    const u = JSON.parse(getItem('userInfo') || '{}')
     return { id: u.id, name: u.realName || u.username || '' }
   } catch {
     return { id: null, name: '' }
@@ -628,6 +629,11 @@ const currentUser = () => {
 const submitUpload = async () => {
   if (!selectedFile.value) {
     ElMessage.warning('请先选择要上传的文档')
+    return
+  }
+  // 与后端 knowledge.max-file-size(10MB) 对齐，避免传完才拿到错误
+  if (selectedFile.value.size > 10 * 1024 * 1024) {
+    ElMessage.warning('单个文件不能超过 10MB')
     return
   }
   if (!form.documentName.trim()) {

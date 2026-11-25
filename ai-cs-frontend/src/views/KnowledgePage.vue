@@ -714,12 +714,21 @@ const goDocument = () => router.push('/knowledge/document')
 
 const uploadFaqFile = async ({ file }) => {
   const name = (file.name || '').toLowerCase()
+  // 先拦大小再读文件：file.text() 会把整个文件读进内存，超大文件会卡死主线程
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('文件不能超过 10MB')
+    return
+  }
   try {
     const text = await file.text()
     if (name.endsWith('.json')) {
       const payload = JSON.parse(text)
       if (!Array.isArray(payload)) {
         ElMessage.error('文件必须是问答数组')
+        return
+      }
+      if (payload.length > 5000) {
+        ElMessage.error('单次最多导入 5000 条，请拆分文件')
         return
       }
       const rows = payload.map(item => ({ ...item, tenantCode: item.tenantCode || tenantCode.value }))
