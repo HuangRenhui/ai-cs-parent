@@ -7,6 +7,8 @@
  *
  * 角色来源：登录返回的 roles 编码；种子账号 admin 直接视为超级管理员。
  */
+import { getItem, setItem, removeItem } from './safeStorage'
+
 export const LOGIN_TYPE_ADMIN = 'admin'
 export const LOGIN_TYPE_PLATFORM = 'platform'
 
@@ -56,23 +58,23 @@ const SEED_SUPER_USERNAME = 'admin'
 
 /** 写入登录结果，并记下入口类型供菜单与退出跳转使用 */
 export const saveSession = (data) => {
-  localStorage.setItem(TOKEN_KEY, data.token)
-  localStorage.setItem(USER_KEY, JSON.stringify(data))
-  localStorage.setItem(TYPE_KEY, data.loginType === LOGIN_TYPE_PLATFORM ? LOGIN_TYPE_PLATFORM : LOGIN_TYPE_ADMIN)
+  setItem(TOKEN_KEY, data.token)
+  setItem(USER_KEY, JSON.stringify(data))
+  setItem(TYPE_KEY, data.loginType === LOGIN_TYPE_PLATFORM ? LOGIN_TYPE_PLATFORM : LOGIN_TYPE_ADMIN)
 }
 
 /** 退出时清掉令牌与入口标记 */
 export const clearSession = () => {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
-  localStorage.removeItem(TYPE_KEY)
+  removeItem(TOKEN_KEY)
+  removeItem(USER_KEY)
+  removeItem(TYPE_KEY)
 }
 
-export const getLoginType = () => localStorage.getItem(TYPE_KEY) || ''
+export const getLoginType = () => getItem(TYPE_KEY) || ''
 
 export const getUserInfo = () => {
   try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || 'null')
+    return JSON.parse(getItem(USER_KEY) || 'null')
   } catch {
     return null
   }
@@ -88,7 +90,8 @@ export const getRoleCodes = () => {
   // 种子超管账号兜底：演示数据里可能没有它的角色行
   if (String(u?.username || '').toLowerCase() === SEED_SUPER_USERNAME) return [ROLE_CODE.SUPER_ADMIN]
   const codes = (Array.isArray(u?.roles) ? u.roles : []).map((r) => String(r).toUpperCase())
-  return codes.length ? codes : [ROLE_CODE.ADMIN]
+  // 角色信息缺失时按最小权限兜底，避免把「未知」当成管理员放行菜单
+  return codes.length ? codes : [ROLE_CODE.AGENT]
 }
 
 /**

@@ -1,6 +1,8 @@
 import axios from 'axios'
 import { ElLoading, ElMessage } from 'element-plus'
 import { isMockEnabled, mockAdapter } from '../mock'
+import { clearSession } from './auth'
+import { getItem, sessionGetItem, sessionSetItem } from './safeStorage'
 
 const axiosOptions = { baseURL: '/api', timeout: 35000 }
 if (isMockEnabled()) {
@@ -17,12 +19,53 @@ const newRequestId = () => {
 
 const isWidgetPage = () => typeof location !== 'undefined' && location.pathname.startsWith('/widget')
 
+/** 业务错误统一成 Error：调用方用 e.message / e.code 都能读，不再抛裸对象 */
+const toBizError = (data) => Object.assign(new Error((data && data.msg) || '请求失败'), {
+  code: data && data.code,
+  payload: data
+})
+
+/**
+ * 同一 GET 的并发请求复用同一个 Promise：
+ * 不取消任何调用方，避免组件收到「取消异常」后误报错误；也不会让旧响应覆盖新结果。
+ */
+const inflightGets = new Map()
+
+/** 超时/断网/网关错误统一中文文案，不把 axios 英文原文抛给用户 */
+const friendlyMessage = (error) => {
+  const status = error.response?.status
+  const body = error.response?.data
+  if (body && body.msg) return body.msg
+  if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
+    return '请求超时，请稍后重试'
+  }
+  if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+    return '网络连接失败，请检查网络后重试'
+  }
+  if (status === 500) return '服务开小差了，请稍后重试'
+  if (status === 502 || status === 503 || status === 504) return '服务暂不可用，请稍后重试'
+  return '请求失败，请稍后重试'
+}
+
 const redirectLogin = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('userInfo')
-  localStorage.removeItem('loginType')
+  // 统一走 clearSession，避免以后新增会话字段时这里漏清
+  clearSession()
   if (!isWidgetPage()) {
     window.location.href = '/login'
+  }
+}
+
+/** 记录请求 ID：保留最近 10 个，避免并发请求互相覆盖导致排障时拿不到链路 */
+const rememberRequestId = (rid) => {
+  if (!rid) return
+  sessionSetItem('lastRequestId', rid)
+  try {
+    const prev = JSON.parse(sessionGetItem('recentRequestIds') || '[]')
+    const list = Array.isArray(prev) ? prev : []
+    const next = [rid, ...list.filter(item => item !== rid)].slice(0, 10)
+    sessionSetItem('recentRequestIds', JSON.stringify(next))
+  } catch {
+    sessionSetItem('recentRequestIds', JSON.stringify([rid]))
   }
 }
 
@@ -77,13 +120,14 @@ const endSlowHint = (config) => {
 
 request.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('token')
+    const token = getItem('token')
     if (token && !config.headers.Authorization && !config.headers.authorization) {
       config.headers['Authorization'] = 'Bearer ' + token
     }
     const requestId = newRequestId()
     config.headers['X-Request-Id'] = requestId
-    sessionStorage.setItem('lastRequestId', requestId)
+    rememberRequestId(requestId)
+
     beginSlowHint(config)
     return config
   },
@@ -95,39 +139,63 @@ request.interceptors.response.use(
     endSlowHint(response.config)
     const rid = response.headers?.['x-request-id']
     if (rid) {
-      sessionStorage.setItem('lastRequestId', rid)
+      rememberRequestId(rid)
     }
     const data = response.data
     if (data && data.code === 401) {
       redirectLogin()
-      return Promise.reject(new Error(data.msg || '未授权'))
+      return Promise.reject(toBizError(data))
     }
     if (data && typeof data.code === 'number' && data.code !== 200) {
       ElMessage.error(data.msg || '请求失败')
-      return Promise.reject(data)
+      return Promise.reject(toBizError(data))
     }
     return data
   },
   error => {
     endSlowHint(error.config)
+    // 被去重逻辑主动取消的请求：不提示、不当作失败上报
+    if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+      error.__canceled = true
+      return Promise.reject(error)
+    }
     const status = error.response?.status
-    const body = error.response?.data
     if (status === 401) {
       redirectLogin()
     } else if (status === 403) {
       // 无权限（如岗位角色不匹配）单独提示，避免落到泛化的「请求失败」
       if (!error.config?.silent) {
-        ElMessage.error(body && body.msg ? body.msg : '没有权限执行该操作')
+        ElMessage.error(error.response?.data?.msg || '没有权限执行该操作')
       }
     } else if (!error.config?.silent) {
-      if (body && body.msg) {
-        ElMessage.error(body.msg)
-      } else {
-        ElMessage.error('请求失败：' + (error.message || '网络错误'))
-      }
+      ElMessage.error(friendlyMessage(error))
     }
     return Promise.reject(error)
   }
 )
+
+/**
+ * GET 去重：相同 url + params 的并发请求共享同一个 Promise。
+ * 需要各自独立请求时传 `{ allowDuplicate: true }`。
+ */
+const rawGet = request.get.bind(request)
+request.get = (url, config) => {
+  const options = config || {}
+  if (options.allowDuplicate === true) {
+    return rawGet(url, options)
+  }
+  const key = `${url}?${JSON.stringify(options.params || {})}|${options.responseType || ''}`
+  const existing = inflightGets.get(key)
+  if (existing) {
+    return existing
+  }
+  const pending = rawGet(url, options).finally(() => {
+    if (inflightGets.get(key) === pending) {
+      inflightGets.delete(key)
+    }
+  })
+  inflightGets.set(key, pending)
+  return pending
+}
 
 export default request
